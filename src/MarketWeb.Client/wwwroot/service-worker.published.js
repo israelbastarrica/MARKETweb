@@ -31,11 +31,14 @@ async function onActivate(event) {
 async function onFetch(event) {
     let cachedResponse = null;
     if (event.request.method === 'GET') {
-        // Solo servimos index.html desde caché para navegaciones DENTRO de la app.
-        // El login de Google (/signin-google, /api/auth/...) y cualquier llamada a la
-        // API tienen que ir a la red sí o sí, nunca al caché.
+        // Solo servimos index.html desde caché para la navegación PRINCIPAL de la app
+        // (destination 'document'). OJO: un iframe también es mode 'navigate' pero su
+        // destination es 'iframe' → si le devolviéramos index.html, el iframe cargaría
+        // la app de nuevo adentro (los dashboards son iframes a *.html). El login de
+        // Google y la API van siempre a la red, nunca al caché.
         const url = event.request.url;
         const esNavegacionApp = event.request.mode === 'navigate'
+            && event.request.destination === 'document'
             && !url.includes('/api/')
             && !url.includes('/signin-google')
             && !url.includes('/signout');
