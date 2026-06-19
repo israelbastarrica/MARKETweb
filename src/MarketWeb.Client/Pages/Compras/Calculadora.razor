@@ -1,0 +1,361 @@
+@page "/compras/calculadora"
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+<PageTitle>Calculadora</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Compras" Titulo="Calculadora" Icono="fa-solid fa-calculator" />
+
+    <div class="calc-wrap">
+
+        <div class="field">
+            <input type="text" inputmode="decimal" id="calcPesos" placeholder=" "
+                   value="@_pesos" @oninput="@(e => OnInput("ARS", e.Value?.ToString()))" />
+            <label for="calcPesos">Importe ARS</label>
+        </div>
+
+        <div class="field">
+            <input type="text" inputmode="decimal" id="calcDolares" placeholder=" "
+                   value="@_dolares" @oninput="@(e => OnInput("USD", e.Value?.ToString()))" />
+            <label for="calcDolares">Importe USD</label>
+        </div>
+
+        <div class="field">
+            <input type="text" inputmode="decimal" id="calcYuanes" placeholder=" "
+                   value="@_yuanes" @oninput="@(e => OnInput("CNY", e.Value?.ToString()))" />
+            <label for="calcYuanes">Importe CNY</label>
+        </div>
+
+        <div class="field">
+            <select id="calcTipo" class="calc-select" value="@_tipoDolar" @onchange="OnCambioTipo">
+                <option value="Oficial">Tipo de Cambio: Oficial</option>
+                <option value="Blue">Tipo de Cambio: Blue</option>
+                <option value="Manual">Tipo de Cambio: Manual</option>
+            </select>
+        </div>
+
+        <div class="row">
+            <div class="field">
+                <input type="text" inputmode="decimal" id="calcCoti" placeholder=" "
+                       value="@_cotizacion" @oninput="@(e => OnInput("COTI", e.Value?.ToString()))"
+                       disabled="@(_tipoDolar != "Manual")" />
+                <label for="calcCoti">Coti. USD</label>
+            </div>
+            <div class="field">
+                <input type="text" inputmode="decimal" id="calcTasa" placeholder=" "
+                       value="@_tasaCny" @oninput="@(e => OnInput("TASA", e.Value?.ToString()))" />
+                <label for="calcTasa">Tasa CNY</label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="field">
+                <input type="text" inputmode="decimal" id="calcDesc" placeholder=" "
+                       value="@_descuento" @oninput="@(e => OnInput("DESC", e.Value?.ToString()))" />
+                <label for="calcDesc">% Off</label>
+            </div>
+            <div class="field">
+                <input type="text" inputmode="decimal" id="calcNac" placeholder=" "
+                       value="@_nacionalizacion" @oninput="@(e => OnInput("NAC", e.Value?.ToString()))" />
+                <label for="calcNac">% Nac.</label>
+            </div>
+        </div>
+
+        <div class="segmented" role="tablist">
+            <button type="button" class="seg @(_modo == "Unidad" ? "active" : "")" @onclick='() => SetModo("Unidad")'>Unidad</button>
+            <button type="button" class="seg @(_modo == "Docena" ? "active" : "")" @onclick='() => SetModo("Docena")'>Docena</button>
+        </div>
+
+        <section class="resumen">
+            <div class="resumen-label">RESUMEN</div>
+            <div class="resumen-line">Total Bruto: $ @Miles(_bruto)</div>
+            <div class="resumen-line nac">Nacionalización: + $ @Miles(_recargoNac)</div>
+            <div class="resumen-line desc">Descuento: - $ @Miles(_ahorro)</div>
+            <hr />
+            <div class="resumen-label">TOTAL NETO</div>
+            <div class="resumen-neto">$ @Miles(_neto)</div>
+            @if (_modo == "Docena")
+            {
+                <div class="resumen-unitario">
+                    <div class="resumen-label">PRECIO UNITARIO</div>
+                    <div class="resumen-unitario-valor">$ @Miles(_neto / 12m)</div>
+                </div>
+            }
+        </section>
+
+        @if (_combo is not null)
+        {
+            <section class="combo">
+                <div class="resumen-label">COMBO</div>
+                <div class="combo-valor">@_combo.Nombre</div>
+                <div class="combo-bar">
+                    <div class="combo-bar-track"></div>
+                    <div class="combo-bar-indicator" style="left:@(_comboPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                </div>
+                <div class="combo-rango-labels">
+                    <span>@_combo.Desde</span>
+                    <span>@_combo.Hasta</span>
+                </div>
+                <div class="combo-valor-actual">
+                    <span class="combo-bar-valor" style="left:@(_comboPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%">@_combo.Actual</span>
+                </div>
+            </section>
+        }
+
+        <button type="button" class="limpiar-button" @onclick="Limpiar">Limpiar campos</button>
+    </div>
+</div>
+
+@code {
+    // --- Entradas (texto, como en la app original) ---
+    private string _pesos = "";
+    private string _dolares = "";
+    private string _yuanes = "";
+    private string _cotizacion = "0";
+    private string _tasaCny = "7.24";
+    private string _descuento = "0";
+    private string _nacionalizacion = "0";
+
+    private string _tipoDolar = "Oficial";
+    private string _modo = "Unidad";       // Unidad / Docena
+    private string _monedaActiva = "ARS";  // ARS / USD / CNY (última usada)
+
+    // --- Resultados ---
+    private decimal _bruto, _recargoNac, _ahorro, _neto;
+    private ComboVista? _combo;
+    private double _comboPct;
+
+    private sealed record ComboTramo(decimal Desde, decimal Hasta, string Nombre);
+    private sealed record ComboVista(string Nombre, string Desde, string Hasta, string Actual);
+
+    // Mismos tramos que la app de escritorio / PWA.
+    private static readonly ComboTramo[] Combos =
+    {
+        new(1,     2100,  "2x6000"),
+        new(2101,  2800,  "2x8000"),
+        new(2801,  3500,  "2x10000"),
+        new(3501,  5250,  "2x15000"),
+        new(5251,  7000,  "2x20000"),
+        new(7001,  8750,  "2x25000"),
+        new(8751,  10500, "2x30000"),
+        new(10501, 14000, "2x40000"),
+        new(14001, 17500, "2x50000"),
+        new(17501, 21000, "2x60000"),
+        new(21001, 28000, "2x80000"),
+        new(28001, 35000, "2x100000"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SeleccionarTipo("Oficial");
+        await BuscarTasaCny();
+        Recalcular();
+    }
+
+    // ---------- Entrada de campos ----------
+    private void OnInput(string campo, string? valor)
+    {
+        valor ??= "";
+        switch (campo)
+        {
+            case "ARS": _pesos = valor; _monedaActiva = "ARS"; break;
+            case "USD": _dolares = valor; _monedaActiva = "USD"; break;
+            case "CNY": _yuanes = valor; _monedaActiva = "CNY"; break;
+            case "COTI": _cotizacion = valor; break;
+            case "TASA": _tasaCny = valor; break;
+            case "DESC": _descuento = SinCeroInicial(valor); break;
+            case "NAC": _nacionalizacion = SinCeroInicial(valor); break;
+        }
+        Recalcular();
+    }
+
+    // % Off / % Nac.: si arranca con "0" seguido de dígito (no decimal), saca el 0.
+    private static string SinCeroInicial(string v)
+        => (v.Length > 1 && v.StartsWith("0") && !v.StartsWith("0.") && !v.StartsWith("0,"))
+            ? v.TrimStart('0') is { Length: > 0 } t ? t : "0"
+            : v;
+
+    private void SetModo(string modo) { _modo = modo; Recalcular(); }
+
+    // ---------- Cálculo ----------
+    private void Recalcular()
+    {
+        var pesos = Num(_pesos);
+        var dolares = Num(_dolares);
+        var yuanes = Num(_yuanes);
+        var coti = Num(_cotizacion); if (coti == 0) coti = 1;
+        var tasa = Num(_tasaCny); if (tasa == 0) tasa = 1;
+        var desc = Num(_descuento);
+        var nac = Num(_nacionalizacion);
+
+        // Solo cuenta la moneda activa; ARS se autocompleta al convertir desde USD/CNY.
+        if (_monedaActiva == "USD")
+        {
+            _bruto = dolares * coti;
+            _pesos = _bruto > 0 ? Math.Round(_bruto).ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
+        }
+        else if (_monedaActiva == "CNY")
+        {
+            _bruto = yuanes / tasa * coti;
+            _pesos = _bruto > 0 ? Math.Round(_bruto).ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
+        }
+        else
+        {
+            _bruto = pesos;
+        }
+
+        _recargoNac = _bruto * (nac / 100m);
+        _ahorro = _bruto * (desc / 100m);
+        _neto = _bruto + _recargoNac - _ahorro;
+
+        var precioUnitario = _modo == "Docena" ? _neto / 12m : _neto;
+        ActualizarCombo(precioUnitario);
+    }
+
+    private void ActualizarCombo(decimal precio)
+    {
+        var ult = Combos[^1];
+        if (precio < 1 || precio > ult.Hasta) { _combo = null; return; }
+
+        var c = Array.Find(Combos, x => precio >= x.Desde && precio <= x.Hasta);
+        if (c is null) { _combo = null; return; }
+
+        // Mostrar el rango en la moneda activa (USD / CNY / ARS).
+        var coti = Num(_cotizacion); if (coti == 0) coti = 1;
+        var tasa = Num(_tasaCny); if (tasa == 0) tasa = 1;
+        decimal factor = 1; string simbolo = "$"; int dec = 0;
+        if (_monedaActiva == "USD" && coti > 0) { factor = 1 / coti; simbolo = "U$D"; dec = 2; }
+        else if (_monedaActiva == "CNY" && coti > 0) { factor = tasa / coti; simbolo = "¥"; dec = 2; }
+
+        _combo = new ComboVista(
+            c.Nombre,
+            $"{simbolo} {Moneda(c.Desde * factor, dec)}",
+            $"{simbolo} {Moneda(c.Hasta * factor, dec)}",
+            $"{simbolo} {Moneda(precio * factor, dec)}");
+
+        var pct = (double)((precio - c.Desde) / (c.Hasta - c.Desde)) * 100;
+        _comboPct = Math.Max(0, Math.Min(100, pct));
+    }
+
+    // ---------- Tipo de cambio ----------
+    private async Task OnCambioTipo(ChangeEventArgs e)
+        => await SeleccionarTipo(e.Value?.ToString() ?? "Oficial");
+
+    private async Task SeleccionarTipo(string tipo)
+    {
+        _tipoDolar = tipo;
+        if (tipo == "Manual") return; // la cotización se edita a mano
+
+        var valor = await BuscarDolar(tipo.ToLowerInvariant());
+        _cotizacion = valor;
+        Recalcular();
+    }
+
+    private async Task<string> BuscarDolar(string tipo)
+    {
+        var cacheKey = $"cotiUsd_{tipo}";
+        try
+        {
+            var data = await Http.GetFromJsonAsync<DolarResp>($"https://dolarapi.com/v1/dolares/{tipo}");
+            if (data is not null && data.Venta > 0)
+            {
+                var valor = ((long)Math.Truncate(data.Venta)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                await SetLs(cacheKey, valor);
+                return valor;
+            }
+        }
+        catch { /* sin red: caemos al último guardado */ }
+        return await GetLs(cacheKey) ?? "0";
+    }
+
+    private async Task BuscarTasaCny()
+    {
+        try
+        {
+            var data = await Http.GetFromJsonAsync<ErResp>("https://open.er-api.com/v6/latest/USD");
+            if (data?.Rates is not null && data.Rates.TryGetValue("CNY", out var cny) && cny > 0)
+            {
+                var valor = cny.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                _tasaCny = valor;
+                await SetLs("tasaCny", valor);
+                Recalcular();
+                return;
+            }
+        }
+        catch { /* sin red */ }
+        var guardado = await GetLs("tasaCny");
+        if (!string.IsNullOrEmpty(guardado)) { _tasaCny = guardado; Recalcular(); }
+    }
+
+    private sealed record DolarResp(decimal Venta);
+    private sealed record ErResp(Dictionary<string, decimal> Rates);
+
+    // ---------- Limpiar ----------
+    private async Task Limpiar()
+    {
+        _pesos = _dolares = _yuanes = "";
+        _descuento = "0";
+        _nacionalizacion = "0";
+        _modo = "Unidad";
+        _monedaActiva = "ARS";
+        Recalcular();
+        await SeleccionarTipo("Oficial");
+        await BuscarTasaCny();
+    }
+
+    // ---------- localStorage ----------
+    private async Task<string?> GetLs(string k)
+    {
+        try { return await JS.InvokeAsync<string>("localStorage.getItem", k); } catch { return null; }
+    }
+    private async Task SetLs(string k, string v)
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", k, v); } catch { }
+    }
+
+    // ---------- Parseo / formato (sin depender de cultura del navegador) ----------
+    private static decimal Num(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return 0;
+        return decimal.TryParse(s.Replace(',', '.'), System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : 0;
+    }
+
+    private static string Agrupar(string entero)
+    {
+        if (entero.Length <= 3) return entero;
+        var chars = entero.ToCharArray();
+        Array.Reverse(chars);
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < chars.Length; i++)
+        {
+            if (i > 0 && i % 3 == 0) sb.Append('.');
+            sb.Append(chars[i]);
+        }
+        var r = sb.ToString().ToCharArray();
+        Array.Reverse(r);
+        return new string(r);
+    }
+
+    // Entero con separador de miles "." (como formatearMil).
+    private static string Miles(decimal n)
+    {
+        var neg = n < 0;
+        var e = ((long)Math.Truncate(Math.Abs(n))).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return (neg ? "-" : "") + Agrupar(e);
+    }
+
+    // Con N decimales y coma decimal (como formatearMoneda).
+    private static string Moneda(decimal n, int dec)
+    {
+        if (dec <= 0) return Miles(n);
+        var neg = n < 0;
+        var abs = Math.Round(Math.Abs(n), dec);
+        var ent = (long)Math.Truncate(abs);
+        var frac = abs - ent;
+        var escala = (decimal)Math.Pow(10, dec);
+        var fracStr = ((long)Math.Round(frac * escala)).ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(dec, '0');
+        return (neg ? "-" : "") + Agrupar(ent.ToString(System.Globalization.CultureInfo.InvariantCulture)) + "," + fracStr;
+    }
+}

@@ -85,8 +85,7 @@
         ["LOGISTICA"] = new[] { "Configuración", "Logística" },
         ["DISEÑO"] = new[] { "Diseño", "Producción" },
         ["DISENO"] = new[] { "Diseño", "Producción" },
-        ["ADMINISTRACION"] = new[] { "Administración", "Compras", "Producción" },
-        ["COMPRAS"] = new[] { "Compras" },
+        ["ADMINISTRACION"] = new[] { "Administración", "Producción" },
     };
 
     private bool VeModulo(Modulo m)
@@ -149,7 +148,7 @@
         }),
         new("Compras", "fa-solid fa-cart-shopping", new[]
         {
-            new Item("Calculadora", "fa-solid fa-calculator", "/wip/compras/calculadora"),
+            new Item("Calculadora", "fa-solid fa-calculator", "/compras/calculadora", Implementado: true),
         }),
         new("Locales", "fa-solid fa-store", new[]
         {

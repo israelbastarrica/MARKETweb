@@ -1,0 +1,268 @@
+/* Calculadora de Compras — port de la PWA, adaptada al tema claro de MarketWeb.
+   Acento naranja de la marca en lugar del violeta original. */
+.calc-wrap {
+    --primario: #f59e0b;
+    --tarjeta: #ffffff;
+    --texto: #1f2430;
+    --texto-secundario: #777;
+    --borde: #d8d5cc;
+    --fondo: #f8f7f3;
+    --rojo: #d32f2f;
+    --verde: #2e7d32;
+
+    max-width: 600px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* ---------- Campos (Outlined Text Field) ---------- */
+.field {
+    position: relative;
+    flex: 1;
+}
+
+.field input {
+    width: 100%;
+    height: 56px;
+    padding: 18px 14px 6px 14px;
+    background: var(--tarjeta);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    font-size: 16px;
+    outline: none;
+    transition: border-color .15s;
+}
+
+.field input:focus {
+    border-color: var(--primario);
+    border-width: 2px;
+    padding: 17px 13px 5px 13px;
+}
+
+.field input:disabled {
+    color: var(--texto);
+    opacity: .7;
+    cursor: not-allowed;
+    background: #f3f1ec;
+}
+
+.field label {
+    position: absolute;
+    left: 12px;
+    top: 18px;
+    color: var(--texto-secundario);
+    font-size: 16px;
+    pointer-events: none;
+    background: var(--fondo);
+    padding: 0 4px;
+    transition: .15s ease all;
+}
+
+.field input:focus + label,
+.field input:not(:placeholder-shown) + label {
+    top: -8px;
+    font-size: 12px;
+    color: var(--primario);
+}
+
+.field input:not(:focus):not(:placeholder-shown) + label {
+    color: var(--texto-secundario);
+}
+
+/* ---------- Select tipo de cambio ---------- */
+.calc-select {
+    width: 100%;
+    height: 48px;
+    background: var(--tarjeta);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0 16px;
+    cursor: pointer;
+    outline: none;
+}
+
+.calc-select:focus { border-color: var(--primario); }
+
+/* ---------- Fila de 2 ---------- */
+.row {
+    display: flex;
+    gap: 8px;
+}
+
+/* ---------- Segmented (Unidad / Docena) ---------- */
+.segmented {
+    display: flex;
+    width: 100%;
+    border: 1px solid var(--borde);
+    border-radius: 24px;
+    overflow: hidden;
+    background: var(--tarjeta);
+}
+
+.segmented .seg {
+    flex: 1;
+    height: 44px;
+    background: transparent;
+    color: var(--texto);
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color .15s, color .15s;
+}
+
+.segmented .seg.active {
+    background-color: var(--primario);
+    color: #fff;
+}
+
+/* ---------- Resumen ---------- */
+.resumen {
+    background-color: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.resumen-label {
+    color: var(--texto-secundario);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .5px;
+}
+
+.resumen-line {
+    font-size: 16px;
+    color: var(--texto);
+}
+
+.resumen-line.nac { color: var(--rojo); }
+.resumen-line.desc { color: var(--verde); }
+
+.resumen hr {
+    border: none;
+    border-top: 1px solid var(--borde);
+    margin: 12px 0;
+}
+
+.resumen-neto {
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--primario);
+    margin-top: 4px;
+}
+
+.resumen-unitario {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--borde);
+}
+
+.resumen-unitario-valor {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--texto);
+    margin-top: 2px;
+}
+
+/* ---------- Combo ---------- */
+.combo {
+    background-color: var(--tarjeta);
+    border-radius: 10px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+    box-shadow: 0 4px 16px rgba(245, 158, 11, .15);
+    border: 1px solid var(--primario);
+}
+
+.combo-valor {
+    font-size: 44px;
+    font-weight: 900;
+    color: var(--primario);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    line-height: 1;
+}
+
+.combo-bar {
+    position: relative;
+    width: 100%;
+    height: 12px;
+    margin-top: 8px;
+}
+
+.combo-bar-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    background: linear-gradient(to right, #2e7d32 0%, #f9a825 50%, #d32f2f 100%);
+    opacity: .8;
+}
+
+.combo-bar-indicator {
+    position: absolute;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--texto);
+    border: 3px solid var(--tarjeta);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 2px var(--texto);
+    transition: left .2s ease;
+}
+
+.combo-rango-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--texto-secundario);
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+.combo-valor-actual {
+    position: relative;
+    height: 20px;
+    margin-top: 2px;
+}
+
+.combo-bar-valor {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primario);
+    white-space: nowrap;
+    transition: left .2s ease;
+}
+
+/* ---------- Botón limpiar ---------- */
+.limpiar-button {
+    width: 100%;
+    height: 48px;
+    background-color: var(--tarjeta);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+.limpiar-button:hover { background: #f3f1ec; }
