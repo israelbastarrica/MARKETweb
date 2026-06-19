@@ -403,10 +403,9 @@ code {
     .market-table tbody td {
         border: 0;
         border-bottom: 1px solid var(--mk-border-soft);
-        padding: .6rem 1.1rem;
+        padding: .72rem 1.1rem;
         vertical-align: middle;
         color: var(--mk-text);
-        font-size: .9rem;
     }
 
     .market-table tbody tr:last-child td {
