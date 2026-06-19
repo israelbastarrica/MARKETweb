@@ -1,7 +1,12 @@
+using MarketWeb.Shared.Dashboard;
+
 namespace MarketWeb.Application.Dashboard;
 
 public interface IDashboardService
 {
+    /// <summary>Resumen tipado de ventas del día para la vista mobile (KPIs + top productos + cajeros).</summary>
+    Task<DashboardVentasMobileDto> GetResumenMobileAsync(string fecha, string rol, string? local, CancellationToken ct = default);
+
     /// <summary>Datos de ventas del día para el dashboard (forma JSON que consume el HTML).</summary>
     /// <param name="fecha">YYYYMMDD.</param>
     /// <param name="rol">"admin" (ve LURO+PERALTA) o "cajero" (un local).</param>

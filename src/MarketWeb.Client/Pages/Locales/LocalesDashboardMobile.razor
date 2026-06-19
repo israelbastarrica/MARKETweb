@@ -1,0 +1,135 @@
+@implements IDisposable
+@using MarketWeb.Shared.Dashboard
+@inject DashboardApi Api
+
+@* Vista mobile del dashboard de Locales (ventas): KPIs clave en tarjetas
+   verticales, con el tema de la app. Reusa el cálculo del dashboard de TV. *@
+
+<div class="vm">
+    <div class="vm-head">
+        <div>
+            <div class="vm-eyebrow">Locales</div>
+            <div class="vm-title">Ventas hoy</div>
+        </div>
+        <button class="vm-refresh" @onclick="Refrescar" disabled="@_cargando" title="Actualizar">
+            <i class="fa-solid @(_cargando ? "fa-spinner fa-spin" : "fa-rotate")"></i>
+        </button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="vm-error"><i class="fa-solid fa-triangle-exclamation me-2"></i>@_error</div>
+    }
+
+    @if (_data is not null)
+    {
+        @foreach (var l in _data.Locales)
+        {
+            <div class="vm-card">
+                <div class="vm-card-head">
+                    <span class="vm-local">@l.Local</span>
+                    <span class="vm-monto">$ @Miles(l.Monto)</span>
+                </div>
+                <div class="vm-kpis">
+                    <div><span class="n">@l.Tickets</span><span class="t">Tickets</span></div>
+                    <div><span class="n">@Miles(l.Prendas)</span><span class="t">Prendas</span></div>
+                    <div><span class="n">$ @Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
+                </div>
+
+                @if (l.TopArticulos.Count > 0)
+                {
+                    <div class="vm-sub">Top productos</div>
+                    <div class="vm-list">
+                        @foreach (var a in l.TopArticulos)
+                        {
+                            <div class="vm-row">
+                                <span class="d">@a.Descripcion</span>
+                                <span class="q">@Miles(a.Cantidad)</span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (l.Cajeros.Count > 0)
+                {
+                    <div class="vm-sub">Cajeros</div>
+                    <div class="vm-chips">
+                        @foreach (var c in l.Cajeros)
+                        {
+                            <span>@c.Nombre <b>@c.Tickets</b></span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @if (_cargando && _data is null)
+    {
+        <div class="vm-loading"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando ventas...</div>
+    }
+
+    <div class="vm-foot">Actualizado @(_data?.Actualizado ?? "—") · se refresca solo cada 60s</div>
+</div>
+
+@code {
+    private DashboardVentasMobileDto? _data;
+    private bool _cargando = true;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refrescar();
+        _cts = new CancellationTokenSource();
+        _ = AutoRefrescar(_cts.Token);
+    }
+
+    private async Task AutoRefrescar(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(60000, ct);
+                await Refrescar();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task Refrescar()
+    {
+        _cargando = true; _error = null;
+        try { _data = await Api.ResumenMobile(); }
+        catch (Exception ex) { _error = "No se pudieron cargar las ventas."; Console.Error.WriteLine(ex); }
+        finally { _cargando = false; }
+    }
+
+    private static decimal TicketProm(VentaLocalResumenDto l) => l.Tickets > 0 ? l.Monto / l.Tickets : 0;
+
+    // Entero con separador de miles "." sin depender de la cultura del navegador.
+    private static string Miles(decimal n)
+    {
+        var neg = n < 0;
+        var e = ((long)Math.Truncate(Math.Abs(n))).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (e.Length > 3)
+        {
+            var chars = e.ToCharArray();
+            Array.Reverse(chars);
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < chars.Length; i++) { if (i > 0 && i % 3 == 0) sb.Append('.'); sb.Append(chars[i]); }
+            var r = sb.ToString().ToCharArray();
+            Array.Reverse(r);
+            e = new string(r);
+        }
+        return (neg ? "-" : "") + e;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

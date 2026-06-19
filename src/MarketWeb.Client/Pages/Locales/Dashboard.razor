@@ -1,12 +1,22 @@
 @page "/locales/dashboard"
+@inject IJSRuntime JS
 
 <PageTitle>Dashboard</PageTitle>
 
-@* El dashboard (port de NoblexTV) es una vista con su propia rotación y auto-refresh.
-   Lo servimos como HTML estático y lo embebemos en un iframe que llena el área de
-   contenido (las medidas vw/vh del dashboard escalan al tamaño del iframe).
-   La API que consume está protegida por la misma cookie de Google SSO. *@
-<iframe src="dashboard.html" class="dashboard-frame" title="Dashboard Market" allow="fullscreen" allowfullscreen></iframe>
+@* En celular (pantalla angosta) mostramos una vista nativa con los KPIs de ventas;
+   en pantalla grande, el dashboard de TV (NoblexTV) embebido en iframe. *@
+@if (_mobile == true)
+{
+    <LocalesDashboardMobile />
+}
+else if (_mobile == false)
+{
+    <iframe src="dashboard.html" class="dashboard-frame" title="Dashboard Market" allow="fullscreen" allowfullscreen></iframe>
+}
+else
+{
+    <p class="text-muted p-3"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+}
 
 <style>
     .dashboard-frame {
@@ -21,4 +31,15 @@
 </style>
 
 @code {
+    private bool? _mobile;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { _mobile = await JS.InvokeAsync<bool>("esMobile"); }
+            catch { _mobile = false; }   // ante la duda, TV
+            StateHasChanged();
+        }
+    }
 }

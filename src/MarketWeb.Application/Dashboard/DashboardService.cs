@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Dapper;
 using MarketWeb.Application.Data;
+using MarketWeb.Shared.Dashboard;
 using Microsoft.Data.SqlClient;
 
 namespace MarketWeb.Application.Dashboard;
@@ -136,6 +137,52 @@ public sealed class DashboardService : IDashboardService
             GROUP BY OpDay, TipoCod";
 
         return (await cn.QueryAsync<RepoRow>(new CommandDefinition(sql, commandTimeout: 120, cancellationToken: ct))).ToList();
+    }
+
+    public async Task<DashboardVentasMobileDto> GetResumenMobileAsync(string fecha, string rol, string? local, CancellationToken ct = default)
+    {
+        var hoy = Fecha8(fecha);
+        var dt = DateTime.ParseExact(hoy, "yyyyMMdd", null);
+        var inicio = dt.AddDays(-6).ToString("yyyyMMdd");
+
+        using var cn = _db.Create();
+
+        var locales = new List<VentaLocalResumenDto>();
+        if (rol == "cajero" && !string.IsNullOrEmpty(local))
+            locales.Add(await ResumenLocalAsync(cn, local, hoy, inicio, ct));
+        else
+        {
+            locales.Add(await ResumenLocalAsync(cn, "LURO", hoy, inicio, ct));
+            locales.Add(await ResumenLocalAsync(cn, "PERALTA", hoy, inicio, ct));
+        }
+
+        return new DashboardVentasMobileDto
+        {
+            Role = rol,
+            Locales = locales,
+            Actualizado = DateTime.Now.ToString("HH:mm")
+        };
+    }
+
+    private async Task<VentaLocalResumenDto> ResumenLocalAsync(SqlConnection cn, string local, string hoy, string inicio, CancellationToken ct)
+    {
+        var v = await VentaLocalAsync(cn, local, hoy, inicio, ct);
+        return new VentaLocalResumenDto
+        {
+            Local = local,
+            Monto = (decimal)v.Totales["monto"],
+            Tickets = (int)v.Totales["tickets"],
+            Prendas = (decimal)v.Totales["prendas"],
+            TopArticulos = v.Articulos.Values.OrderByDescending(a => a.Monto).Take(5)
+                .Select(a => new TopArticuloDto
+                {
+                    Descripcion = string.IsNullOrWhiteSpace(a.Descripcion) ? a.Codigo : a.Descripcion.Trim(),
+                    Cantidad = a.Cantidad,
+                    Monto = a.Monto
+                }).ToList(),
+            Cajeros = v.PorCajero.OrderByDescending(c => c.Value)
+                .Select(c => new CajeroTicketsDto { Nombre = c.Key, Tickets = c.Value }).ToList()
+        };
     }
 
     public async Task<object> GetVentasAsync(string fecha, string rol, string? local, CancellationToken ct = default)
