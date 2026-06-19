@@ -4,6 +4,7 @@ using MarketWeb.Application;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.WebUtilities;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,6 +14,17 @@ builder.Services.AddMarketApplication();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+
+// Detrás de un reverse proxy (Caddy, que termina el HTTPS). Respetamos los headers
+// X-Forwarded-* para que el esquema (https) y el host públicos se reflejen en la app
+// → los redirect de Google se arman bien. La app solo escucha en 127.0.0.1, así que
+// el único que le habla es Caddy: limpiamos KnownProxies/Networks para confiar en él.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 // ---- Autenticación: cookie + Google (Workspace marketarg.com) ----
 var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
@@ -87,14 +99,15 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+// PRIMERO en el pipeline: aplica X-Forwarded-* antes de auth/redirecciones.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
-else
-{
-    app.UseHttpsRedirection();
-}
+// Nota: no usamos UseHttpsRedirection — el HTTPS lo termina Caddy adelante; la app
+// solo escucha http en 127.0.0.1:8000.
 
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
