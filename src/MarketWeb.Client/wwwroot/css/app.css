@@ -403,9 +403,10 @@ code {
     .market-table tbody td {
         border: 0;
         border-bottom: 1px solid var(--mk-border-soft);
-        padding: .72rem 1.1rem;
+        padding: .6rem 1.1rem;
         vertical-align: middle;
         color: var(--mk-text);
+        font-size: .9rem;
     }
 
     .market-table tbody tr:last-child td {
@@ -527,6 +528,35 @@ html[data-theme="dark"] .market-table tbody tr.texto-rojo td {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+/* En celular los listados se compactan: fuente y renglones más chicos para que
+   entre más en pantalla. Aplica a TODAS las tablas .market-table de la app. */
+@media (max-width: 768px) {
+    .market-table thead th {
+        padding: .45rem .55rem;
+        font-size: .58rem;
+        letter-spacing: .03em;
+    }
+
+    .market-table tbody td {
+        padding: .42rem .55rem;
+        font-size: .8rem;
+    }
+
+    .market-user .sub {
+        font-size: .68rem;
+    }
+
+    .badge-perfil {
+        font-size: .66rem;
+        padding: .15rem .5rem;
+    }
+
+    .market-table .acciones .btn {
+        width: 28px;
+        height: 28px;
+    }
 }
 
 /* ===== Impresión (reutilizable por cualquier listado) =====
