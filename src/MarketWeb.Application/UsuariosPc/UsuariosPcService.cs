@@ -17,12 +17,14 @@ public sealed class UsuariosPcService : IUsuariosPcService
 
     public async Task<IReadOnlyList<UsuarioPcDto>> ListarAsync(string? filtro, CancellationToken ct = default)
     {
+        // Los pendientes de aprobación (mail cargado + no aprobado) van PRIMERO, así no
+        // hay que buscarlos a ojo entre todos los registros. El resto, ordenado por PC.
         const string sql = """
             SELECT ID AS Id, PC AS Pc, PERFIL AS Perfil, Mail, MailAprobado
             FROM   UsuariosPC
             WHERE  Eliminado = 0
               AND  (@filtro IS NULL OR PC LIKE '%' + @filtro + '%' OR PERFIL LIKE '%' + @filtro + '%' OR Mail LIKE '%' + @filtro + '%')
-            ORDER BY PC;
+            ORDER BY CASE WHEN Mail IS NOT NULL AND MailAprobado = 0 THEN 0 ELSE 1 END, PC;
             """;
         using var cn = _db.Create();
         var f = string.IsNullOrWhiteSpace(filtro) ? null : filtro.Trim();
