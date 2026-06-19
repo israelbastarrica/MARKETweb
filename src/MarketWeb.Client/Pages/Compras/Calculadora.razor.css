@@ -1,12 +1,13 @@
-/* Calculadora de Compras — port de la PWA, adaptada al tema claro de MarketWeb.
+/* Calculadora de Compras — port de la PWA. Las variables se mapean a los tokens
+   globales del tema (--mk-*), así sigue claro/oscuro automáticamente.
    Acento naranja de la marca en lugar del violeta original. */
 .calc-wrap {
     --primario: #f59e0b;
-    --tarjeta: #ffffff;
-    --texto: #1f2430;
-    --texto-secundario: #777;
-    --borde: #d8d5cc;
-    --fondo: #f8f7f3;
+    --tarjeta: var(--mk-surface);
+    --texto: var(--mk-text);
+    --texto-secundario: var(--mk-text-muted);
+    --borde: var(--mk-border);
+    --fondo: var(--mk-bg);
     --rojo: #d32f2f;
     --verde: #2e7d32;
 
@@ -27,7 +28,7 @@
     width: 100%;
     height: 56px;
     padding: 18px 14px 6px 14px;
-    background: var(--tarjeta);
+    background: transparent;
     color: var(--texto);
     border: 1px solid var(--borde);
     border-radius: 6px;
@@ -46,7 +47,7 @@
     color: var(--texto);
     opacity: .7;
     cursor: not-allowed;
-    background: #f3f1ec;
+    background: var(--mk-surface-2);
 }
 
 .field label {
@@ -265,16 +266,4 @@
     letter-spacing: .5px;
 }
 
-.limpiar-button:hover { background: #f3f1ec; }
-
-/* ---------- Tema oscuro ---------- */
-:global(html[data-theme="dark"]) .calc-wrap {
-    --tarjeta: #1e1e24;
-    --texto: #e3e3e7;
-    --texto-secundario: #9a9aa3;
-    --borde: #33333b;
-    --fondo: #151519;
-}
-
-:global(html[data-theme="dark"]) .field input:disabled { background: #26262d; }
-:global(html[data-theme="dark"]) .limpiar-button:hover { background: #26262d; }
+.limpiar-button:hover { background: var(--mk-surface-2); }
