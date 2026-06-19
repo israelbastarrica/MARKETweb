@@ -1,0 +1,38 @@
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <Authorized>
+            @{
+                var estado = context.User.FindFirst("estado")?.Value;
+            }
+            @if (estado == "onboarding")
+            {
+                <OnboardingScreen />
+            }
+            else if (estado == "pendiente")
+            {
+                <PendienteScreen />
+            }
+            else
+            {
+                <Router AppAssembly="@typeof(App).Assembly">
+                    <Found Context="routeData">
+                        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+                        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+                    </Found>
+                    <NotFound>
+                        <PageTitle>No encontrado</PageTitle>
+                        <LayoutView Layout="@typeof(MainLayout)">
+                            <p role="alert">No hay nada en esta dirección.</p>
+                        </LayoutView>
+                    </NotFound>
+                </Router>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <LoginScreen />
+        </NotAuthorized>
+        <Authorizing>
+            <div class="login-splash">Cargando…</div>
+        </Authorizing>
+    </AuthorizeView>
+</CascadingAuthenticationState>

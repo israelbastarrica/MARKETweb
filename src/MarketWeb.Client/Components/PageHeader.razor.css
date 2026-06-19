@@ -1,0 +1,42 @@
+.header {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    margin-bottom: 1.4rem;
+}
+
+.icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: rgba(245, 158, 11, .13);
+    color: #c27803;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+
+.texts {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.eyebrow {
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #d08700;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: #1f2430;
+    margin: 0;
+    line-height: 1.15;
+}

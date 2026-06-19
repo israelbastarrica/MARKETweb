@@ -1,0 +1,27 @@
+@* Código de artículo con un acceso directo a la Consulta de Artículo.
+   Usar en cualquier grilla que muestre un ARTCOD (menos en la propia Consulta). *@
+
+<span class="art-cod-link">
+    @if (Badge)
+    {
+        <span class="badge-perfil">@Codigo</span>
+    }
+    else
+    {
+        <span>@Codigo</span>
+    }
+    @if (!string.IsNullOrWhiteSpace(Codigo))
+    {
+        <a class="art-cod-ir" href="@Url" title="Ver en Consulta de Artículo">
+            <i class="fa-solid fa-up-right-from-square"></i>
+        </a>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string? Codigo { get; set; }
+    [Parameter] public bool Badge { get; set; } = true;
+
+    // ref=1 marca que se llega desde otra pantalla → la Consulta muestra "← Volver".
+    private string Url => $"/consulta-articulo?codigo={Uri.EscapeDataString((Codigo ?? "").Trim())}&ref=1";
+}

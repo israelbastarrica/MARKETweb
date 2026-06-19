@@ -1,0 +1,203 @@
+@implements IDisposable
+@inject NavigationManager Nav
+
+<div class="market-sidebar">
+    <div class="market-brand">
+        <NavLink href="" Match="NavLinkMatch.All">
+            <span class="txt">
+                <span class="name">MARKET</span>
+                <span class="sub">WEB</span>
+            </span>
+        </NavLink>
+    </div>
+
+    <nav class="market-nav">
+        @foreach (var modulo in Modulos.Where(VeModulo))
+        {
+            var abierto = _abierto == modulo.Titulo;
+            <div class="market-module @(abierto ? "open" : "")">
+                <button type="button" class="market-module-header" @onclick="() => Toggle(modulo.Titulo)">
+                    <i class="@modulo.Icono ico"></i>
+                    <span>@modulo.Titulo</span>
+                    <i class="fa-solid fa-chevron-down market-caret"></i>
+                </button>
+                <div class="market-submenu">
+                    @foreach (var item in modulo.Items)
+                    {
+                        <NavLink class="market-link" href="@item.Href">
+                            <i class="@item.Icono ico"></i>
+                            <span>@item.Etiqueta</span>
+                            @if (!item.Implementado)
+                            {
+                                <span class="market-wip" title="Pendiente de migrar"></span>
+                            }
+                        </NavLink>
+                    }
+                </div>
+            </div>
+        }
+    </nav>
+
+    <div class="market-userbox">
+        <AuthorizeView>
+            <Authorized>
+                <div class="avatar">@Iniciales(context.User.Identity?.Name)</div>
+                <div class="info">
+                    <span class="n">@context.User.Identity?.Name</span>
+                    <span class="p">@Perfil(context.User)</span>
+                </div>
+                <button class="logout" title="Salir" @onclick="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </Authorized>
+            <NotAuthorized>
+                <button class="btn-google" @onclick="Login">
+                    <i class="fa-brands fa-google"></i> Entrar con Google
+                </button>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? _abierto;
+    private string _perfil = "";
+
+    private void Toggle(string titulo)
+        => _abierto = _abierto == titulo ? null : titulo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            _perfil = state.User.FindFirst("perfil")?.Value ?? "";
+        }
+        AbrirModuloDeRutaActual();
+    }
+
+    // Módulos visibles por perfil (espejo de frmPrincipal). ADMIN ve todo; perfil desconocido, nada.
+    private static readonly Dictionary<string, string[]> ModulosPorPerfil = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["LURO"] = new[] { "Locales" },
+        ["PERALTA"] = new[] { "Locales" },
+        ["LOGISTICA"] = new[] { "Configuración", "Logística" },
+        ["DISEÑO"] = new[] { "Diseño", "Producción" },
+        ["DISENO"] = new[] { "Diseño", "Producción" },
+        ["ADMINISTRACION"] = new[] { "Administración", "Producción" },
+    };
+
+    private bool VeModulo(Modulo m)
+    {
+        if (string.Equals(_perfil, "ADMIN", StringComparison.OrdinalIgnoreCase)) return true;
+        return ModulosPorPerfil.TryGetValue(_perfil, out var mods) && mods.Contains(m.Titulo);
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        AbrirModuloDeRutaActual();
+        StateHasChanged();
+    }
+
+    // Deja abierto el módulo cuya ruta coincide con la URL actual.
+    private void AbrirModuloDeRutaActual()
+    {
+        var ruta = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+        var modulo = Modulos.FirstOrDefault(m => m.Items.Any(i => ruta.StartsWith(i.Href, StringComparison.OrdinalIgnoreCase)));
+        if (modulo is not null) _abierto = modulo.Titulo;
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+
+    // Login/Logout: navegación de página completa (OAuth necesita redirección real).
+    private void Login() => Nav.NavigateTo("api/auth/login", forceLoad: true);
+    private void Logout() => Nav.NavigateTo("api/auth/logout", forceLoad: true);
+
+    private static string Iniciales(string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return "?";
+        var partes = nombre.Split(new[] { ' ', '.', '@' }, StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length == 0) return "?";
+        var ini = partes[0][..1];
+        if (partes.Length > 1) ini += partes[1][..1];
+        return ini.ToUpperInvariant();
+    }
+
+    private static string Perfil(System.Security.Claims.ClaimsPrincipal user)
+        => user.FindFirst("perfil")?.Value ?? "Sin perfil";
+
+    private sealed record Item(string Etiqueta, string Icono, string Href, bool Implementado = false);
+    private sealed record Modulo(string Titulo, string Icono, Item[] Items);
+
+    // Espejo del menú de frmPrincipal (íconos heredados del desktop). RRHH queda afuera.
+    private static readonly Modulo[] Modulos =
+    {
+        new("Configuración", "fa-solid fa-gear", new[]
+        {
+            new Item("Locales", "fa-solid fa-shop", "/configuracion/locales", Implementado: true),
+            new Item("Tipos de Locales", "fa-solid fa-warehouse", "/configuracion/tipos-locales", Implementado: true),
+            new Item("Usuarios", "fa-solid fa-users", "/configuracion/usuarios", Implementado: true),
+        }),
+        // Compras quitado: Calculadora de Pedidos oculta y Órdenes de Pedido movida a Diseño.
+        new("Administración", "fa-solid fa-money-bill", new[]
+        {
+            new Item("Insumos", "fa-solid fa-boxes-stacked", "/administracion/insumos", Implementado: true),
+            new Item("Costos", "fa-solid fa-money-bill", "/administracion/costos", Implementado: true),
+            new Item("Ventas", "fa-solid fa-cash-register", "/administracion/ventas", Implementado: true),
+        }),
+        new("Locales", "fa-solid fa-store", new[]
+        {
+            new Item("Dashboard", "fa-solid fa-gauge-high", "/locales/dashboard", Implementado: true),
+            new Item("Mapeo", "fa-solid fa-map", "/locales/mapeo", Implementado: true),
+            new Item("Consulta Artículo", "fa-solid fa-barcode", "/consulta-articulo", Implementado: true),
+            new Item("Insumos", "fa-solid fa-boxes-stacked", "/insumos/pedidos", Implementado: true),
+            new Item("Despachos", "fa-solid fa-qrcode", "/locales/despachos", Implementado: true),
+            new Item("Remito Impresión", "fa-solid fa-print", "/locales/remito-impresion", Implementado: true),
+        }),
+        new("Logística", "fa-solid fa-truck", new[]
+        {
+            new Item("Dashboard", "fa-solid fa-gauge-high", "/logistica/dashboard", Implementado: true),
+            new Item("Palets", "fa-solid fa-pallet", "/logistica/palets", Implementado: true),
+            new Item("Consulta Artículo", "fa-solid fa-barcode", "/consulta-articulo", Implementado: true),
+            new Item("Reporte Artículos", "fa-solid fa-shirt", "/wip/logistica/reporte-articulos"),
+            new Item("Mapeo", "fa-solid fa-map", "/logistica/mapeo", Implementado: true),
+            new Item("Mapa", "fa-solid fa-location-dot", "/wip/logistica/mapa"),
+            new Item("Remitos Packs", "fa-solid fa-truck-ramp-box", "/wip/logistica/remitos-packs"),
+            new Item("Reposición", "fa-solid fa-clipboard-check", "/wip/logistica/reposicion"),
+            new Item("Despachos", "fa-solid fa-qrcode", "/logistica/despachos", Implementado: true),
+            new Item("Insumos", "fa-solid fa-boxes-stacked", "/insumos/pedidos", Implementado: true),
+            new Item("Reemplazos", "fa-solid fa-retweet", "/wip/logistica/reemplazos"),
+            new Item("Remito Impresión", "fa-solid fa-print", "/logistica/remito-impresion", Implementado: true),
+        }),
+        new("Diseño", "fa-solid fa-shirt", new[]
+        {
+            new Item("Órdenes de Pedido", "fa-solid fa-bag-shopping", "/wip/diseno/ordenes-pedido"),
+            new Item("Artículos", "fa-solid fa-shirt", "/wip/diseno/articulos"),
+            new Item("Catálogos", "fa-solid fa-book-open", "/wip/diseno/catalogos"),
+            new Item("Config Canva", "fa-solid fa-table-list", "/wip/diseno/config-canva"),
+            new Item("Config Imágenes", "fa-solid fa-image-portrait", "/wip/diseno/config-imagenes"),
+            new Item("Mapa", "fa-solid fa-location-dot", "/wip/diseno/mapa"),
+        }),
+        new("Informes", "fa-solid fa-chart-line", new[]
+        {
+            new Item("Ventas Tableau", "fa-solid fa-cash-register", "/wip/informes/ventas-tableau"),
+            new Item("Consultor Comercial", "fa-solid fa-comment-dollar", "/wip/informes/consultor-comercial"),
+        }),
+        new("Producción", "fa-solid fa-boxes-stacked", new[]
+        {
+            new Item("Packs", "fa-solid fa-boxes-stacked", "/wip/produccion/packs"),
+            new Item("Órdenes Textiles", "fa-solid fa-clipboard-list", "/wip/produccion/ordenes-textiles"),
+            new Item("Impresión Etiquetas", "fa-solid fa-tags", "/wip/produccion/etiquetas"),
+            new Item("Reporte Artículos", "fa-solid fa-shirt", "/wip/produccion/reporte-articulos"),
+            new Item("Importado", "fa-solid fa-file-import", "/wip/produccion/importado"),
+        }),
+        new("Sistemas", "fa-solid fa-laptop-code", new[]
+        {
+            new Item("Proyectos", "fa-solid fa-diagram-project", "/wip/sistemas/proyectos"),
+            new Item("Config Programas", "fa-solid fa-laptop-code", "/wip/sistemas/programas"),
+            new Item("Config Áreas", "fa-solid fa-diagram-predecessor", "/wip/sistemas/areas"),
+            new Item("Config Estados", "fa-solid fa-bars-progress", "/wip/sistemas/estados"),
+        }),
+    };
+}

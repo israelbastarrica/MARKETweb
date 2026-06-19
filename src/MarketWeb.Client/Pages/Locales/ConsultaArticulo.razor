@@ -1,0 +1,265 @@
+@page "/consulta-articulo"
+@page "/locales/consulta-articulo"
+@inject ArticulosApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Consulta de Artículo</PageTitle>
+
+<div class="market-page">
+    @if (_mostrarVolver)
+    {
+        <button class="btn-volver" @onclick="Volver">
+            <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+            <span>Volver</span>
+        </button>
+    }
+    <PageHeader Titulo="Consulta de Artículo" Icono="fa-solid fa-barcode" />
+
+    <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Ubicación</label>
+            <select class="form-select" style="min-width: 160px" @bind="_ubicacion" @bind:after="OnCambioUbicacion">
+                @foreach (var u in _ubicaciones)
+                {
+                    <option value="@u.Descripcion">@u.Descripcion</option>
+                }
+            </select>
+        </div>
+        <div class="flex-grow-1" style="min-width: 240px; max-width: 380px">
+            <label class="form-label small text-muted mb-1">Código / código de barras</label>
+            <input @ref="_input" class="form-control" placeholder="Escaneá o escribí el código..."
+                   @bind="_codigo" @bind:event="oninput" @onkeyup="OnKey" autofocus />
+        </div>
+        <button class="btn btn-primary" @onclick="Consultar" disabled="@_cargando">
+            @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+        </button>
+    </div>
+
+    @if (_noEncontrado)
+    {
+        <div class="alert alert-warning"><i class="fa-solid fa-circle-exclamation me-2"></i>No se encontró el artículo "@_codigo".</div>
+    }
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger"><i class="fa-solid fa-triangle-exclamation me-2"></i>@_error</div>
+    }
+
+    @if (_art is not null)
+    {
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="market-card p-2 text-center h-100 d-flex flex-column justify-content-center">
+                    @* Una sola foto: primero la IA (más presentable); si no está, la real (FotoDrive); si tampoco, placeholder. *@
+                    <div class="art-foto-wrap">
+                        <div class="art-foto-ph"><i class="fa-solid fa-image"></i><span>Sin foto</span></div>
+                        <img @key="_art.ArtCod" src="@FotoUrl(true)" class="art-foto" alt="Foto del artículo"
+                             data-fb="@FotoUrl(false)"
+                             onerror="if(this.dataset.fb){var u=this.dataset.fb;this.removeAttribute('data-fb');this.src=u;}else{this.style.display='none';}" />
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="market-card p-3 mb-3">
+                    <div class="art-cod">@_art.ArtCod</div>
+                    <div class="art-desc mb-3">@_art.Descripcion</div>
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <span class="art-precio">@_art.Precio</span>
+                        <span class="art-pack">CANT. PACK: <strong>@_art.CantPack</strong></span>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-4"><div class="stat-card stat-local"><div class="t">Local</div><div class="v">@Fmt.Miles(_art.StockLocal)</div></div></div>
+                    <div class="col-4"><div class="stat-card stat-transito"><div class="t">En tránsito</div><div class="v">@Fmt.Miles(_art.EnTransito)</div></div></div>
+                    <div class="col-4"><div class="stat-card stat-deposito"><div class="t">Depósito</div><div class="v">@Fmt.Miles(_art.StockDeposito)</div></div></div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="market-subtitle mt-4">Ubicaciones (mapeo)</h2>
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead><tr><th>Ubicación</th><th>Sector</th><th>Fila</th><th>Posición</th><th>Palet</th></tr></thead>
+                <tbody>
+                    @foreach (var u in _art.Ubicaciones.Concat(_palets))
+                    {
+                        <tr class="@(u.EsDeposito ? "fila-verde" : null)">
+                            <td><span class="badge-perfil">@u.Ubicacion</span></td>
+                            <td>@u.Sector</td>
+                            <td>@u.Fila</td>
+                            <td>@u.Posicion</td>
+                            <td>
+                                @if (u.Palet is not null)
+                                {
+                                    <span class="badge bg-warning-subtle text-dark"><i class="fa-solid fa-pallet me-1"></i>@u.Palet</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (_buscandoPalets)
+                    {
+                        <tr>
+                            <td colspan="5" class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Buscando en palets del depósito...</td>
+                        </tr>
+                    }
+                    @if (!_art.EnDeposito && !_buscandoPalets)
+                    {
+                        <tr class="fila-roja">
+                            <td><span class="badge-perfil">DEPÓSITO</span></td>
+                            <td colspan="4"><i class="fa-solid fa-circle-xmark me-1"></i>No está en depósito</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .btn-volver {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: #fff; border: 1px solid #e6e4dd; border-radius: 999px;
+        padding: 6px 16px 6px 8px; margin-bottom: .5rem;
+        color: #555; font-weight: 600; font-size: .9rem; cursor: pointer;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+        transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+    }
+    .btn-volver .ico {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 50%;
+        background: #fff3e0; color: #e8820c; transition: transform .12s ease;
+    }
+    .btn-volver:hover {
+        background: #faf9f6; color: #1f2430; transform: translateX(-2px);
+        box-shadow: 0 3px 10px rgba(16, 24, 40, .12);
+    }
+    .btn-volver:hover .ico { transform: translateX(-2px); }
+</style>
+
+@code {
+    // Permite abrir la pantalla ya buscando un código: /consulta-articulo?codigo=XXX
+    [Parameter, SupplyParameterFromQuery(Name = "codigo")] public string? CodigoQuery { get; set; }
+    // ref=1 → se llegó desde otra pantalla, mostramos "← Volver".
+    [Parameter, SupplyParameterFromQuery(Name = "ref")] public string? Ref { get; set; }
+    private bool _mostrarVolver;
+
+    private List<UbicacionDto> _ubicaciones = new();
+    private ConsultaArticuloDto? _art;
+    private string _codigo = "";
+    private string _ubicacion = "";
+    private string? _ultimoQuery;
+    private ElementReference _input;
+    private bool _cargando;
+    private bool _noEncontrado;
+    private string? _error;
+    private List<UbicacionArtDto> _palets = new();
+    private bool _buscandoPalets;
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _ubicaciones = await Api.ListarUbicacionesAsync(); }
+        catch { _ubicaciones = new(); }
+
+        // Default por perfil: un local arranca en SU local; el resto en DEPÓSITO.
+        string? perfil = null;
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            perfil = state.User.FindFirst("perfil")?.Value;
+        }
+        var propio = _ubicaciones.FirstOrDefault(u => string.Equals(u.Descripcion, perfil, StringComparison.OrdinalIgnoreCase));
+        _ubicacion = propio?.Descripcion
+                     ?? _ubicaciones.FirstOrDefault(u => u.Descripcion.StartsWith("DEP", StringComparison.OrdinalIgnoreCase))?.Descripcion
+                     ?? _ubicaciones.FirstOrDefault()?.Descripcion ?? "";
+    }
+
+    // Si llega ?codigo= en la URL (incluida la navegación desde otra pantalla), busca solo.
+    protected override async Task OnParametersSetAsync()
+    {
+        _mostrarVolver = Ref == "1";
+        if (!string.IsNullOrWhiteSpace(CodigoQuery) && CodigoQuery != _ultimoQuery)
+        {
+            _ultimoQuery = CodigoQuery;
+            _codigo = CodigoQuery;
+            await Consultar();
+        }
+    }
+
+    private string FotoUrl(bool ia)
+        => $"api/articulos/foto?codigo={Uri.EscapeDataString(_art!.ArtCod)}&ia={(ia ? "true" : "false")}";
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Consultar();
+    }
+
+    // Vuelve a la pantalla anterior exactamente como estaba (historial del navegador).
+    private async Task Volver() => await JS.InvokeVoidAsync("history.back");
+
+    // Al cambiar de ubicación, si ya hay un artículo buscado, re-disparar con la nueva.
+    private async Task OnCambioUbicacion()
+    {
+        if (!string.IsNullOrWhiteSpace(_codigo)) await Consultar();
+    }
+
+    private async Task Consultar()
+    {
+        if (string.IsNullOrWhiteSpace(_codigo)) return;
+        _cargando = true;
+        _noEncontrado = false;
+        _error = null;
+        _palets = new();
+        _buscandoPalets = false;
+        try
+        {
+            _art = await Api.ConsultarAsync(_codigo, _ubicacion);
+            _noEncontrado = _art is null;
+        }
+        catch (Exception ex)
+        {
+            _art = null;
+            _error = "Error al consultar el artículo.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+            // Vuelve el foco al campo y selecciona el texto → listo para el próximo escaneo.
+            await JS.InvokeVoidAsync("focusSelect", _input);
+        }
+
+        // Si la ubicación es el depósito, buscar el artículo dentro de palets EN SEGUNDO PLANO
+        // (es lento). La ficha ya se muestra; los palets se agregan al terminar.
+        if (_art is not null && EsDeposito(_ubicacion))
+        {
+            _buscandoPalets = true;
+            _ = CargarPaletsAsync(_art.ArtCod);
+        }
+    }
+
+    private static bool EsDeposito(string ubic)
+        => ubic.StartsWith("DEP", StringComparison.OrdinalIgnoreCase) || ubic.Equals("CENTRAL", StringComparison.OrdinalIgnoreCase);
+
+    private async Task CargarPaletsAsync(string artCod)
+    {
+        try
+        {
+            var palets = await Api.BuscarEnPaletsAsync(artCod);
+            // Solo aplicar si seguimos en el mismo artículo (el usuario pudo escanear otro).
+            if (_art is not null && _art.ArtCod == artCod)
+            {
+                _palets = palets;
+                if (palets.Count > 0) _art.EnDeposito = true;
+            }
+        }
+        catch (Exception ex) { Console.Error.WriteLine(ex); }
+        finally
+        {
+            _buscandoPalets = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

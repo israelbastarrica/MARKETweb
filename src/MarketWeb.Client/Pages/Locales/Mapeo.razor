@@ -1,0 +1,575 @@
+@page "/locales/mapeo"
+@implements IDisposable
+@inject MapeoApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject PageStateService State
+
+<PageTitle>Mapeo</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Locales" Titulo="Mapeo" Icono="fa-solid fa-map" />
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Ubicación</label>
+                <select class="form-select form-select-sm" @bind="_idUbicacion" @bind:after="Buscar" disabled="@_ubicacionFija">
+                    @foreach (var u in _ubicaciones)
+                    {
+                        <option value="@u.IdUbicacion">@u.Ubicacion</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Sector</label>
+                <select class="form-select form-select-sm" @bind="_fSector">
+                    <option value="">Todos</option>
+                    @foreach (var s in SectoresEnUso) { <option value="@s">@s</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Mobiliario</label>
+                <select class="form-select form-select-sm" @bind="_fMobiliario">
+                    <option value="">Todos</option>
+                    @foreach (var m in MobiliariosEnUso) { <option value="@m">@m</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Módulo</label>
+                <input class="form-control form-control-sm" placeholder="Módulo..." @bind="_fModulo" @onkeyup="OnFiltroKey" />
+            </div>
+            <div class="col-3 col-md-1">
+                <label class="form-label small text-muted mb-1">Fila</label>
+                <input class="form-control form-control-sm" @bind="_fFila" @onkeyup="OnFiltroKey" />
+            </div>
+            <div class="col-3 col-md-1">
+                <label class="form-label small text-muted mb-1">Pos.</label>
+                <input class="form-control form-control-sm" @bind="_fPosicion" @onkeyup="OnFiltroKey" />
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label small text-muted mb-1">Artículo</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="fa-solid fa-barcode"></i></span>
+                    <input class="form-control" placeholder="Código..." @bind="_fArticulo" @onkeyup="OnFiltroKey" />
+                </div>
+            </div>
+            <div class="col-12 d-flex gap-2 mt-2">
+                <button class="btn btn-primary btn-sm" @onclick="Buscar">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="Limpiar">
+                    <i class="fa-solid fa-eraser me-1"></i> Limpiar
+                </button>
+                @if (!_ubicacionFija)
+                {
+                    <button class="btn btn-primary btn-sm ms-auto" @onclick="AbrirAltaPos" disabled="@(_idUbicacion == 0)">
+                        <i class="fa-solid fa-plus me-1"></i> Agregar posición
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (_mensaje is not null)
+    {
+        <div class="alert alert-success alert-dismissible d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i> @_mensaje
+            <button type="button" class="btn-close" @onclick="() => _mensaje = null"></button>
+        </div>
+    }
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Buscar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_todas.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-table-cells"></i><p>Esta ubicación no tiene posiciones cargadas.</p></div>
+    }
+    else if (_resultado.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-filter-circle-xmark"></i><p>Ninguna posición coincide con los filtros.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Sector</th>
+                        <th>Módulo</th>
+                        <th>Mobiliario</th>
+                        <th class="text-center">Fila</th>
+                        <th class="text-center">Posición</th>
+                        <th>Artículos</th>
+                        <th style="width: 150px" class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _resultado)
+                    {
+                        <tr @ondblclick="() => AbrirModPos(p)">
+                            <td>@p.Sector</td>
+                            <td class="fw-semibold">@p.Modulo</td>
+                            <td>@p.Mobiliario</td>
+                            <td class="text-center">@p.Fila</td>
+                            <td class="text-center">@p.Posicion</td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(p.ArtCods))
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                                        @foreach (var cod in p.ArtCods.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                                        {
+                                            <ArticuloLink Codigo="@cod" Badge="false" />
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-center text-nowrap acciones">
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Gestionar artículos" @onclick="() => AbrirArticulos(p)">
+                                    <i class="fa-solid fa-boxes-stacked"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar posición" @onclick="() => AbrirModPos(p)">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarPos(p)">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_resultado.Count de @_todas.Count posición(es).</p>
+    }
+</div>
+
+@* ---------- Modal ABM posición ---------- *@
+@if (_modalPos)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <EditForm Model="_pos" OnValidSubmit="GuardarPos">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_esAltaPos ? "Nueva posición" : "Modificar posición")</h5>
+                        <button type="button" class="btn-close" @onclick="() => _modalPos = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_errorModal is not null)
+                        {
+                            <div class="alert alert-danger py-2">@_errorModal</div>
+                        }
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Sector *</label>
+                                <input class="form-control" list="dl-sectores" @bind="_pos.Sector" />
+                                <datalist id="dl-sectores">@foreach (var s in SectoresEnUso) { <option value="@s" /> }</datalist>
+                                <ValidationMessage For="() => _pos.Sector" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Módulo *</label>
+                                <InputText class="form-control" @bind-Value="_pos.Modulo" />
+                                <ValidationMessage For="() => _pos.Modulo" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Mobiliario</label>
+                                <input class="form-control" list="dl-mobiliarios" @bind="_pos.Mobiliario" />
+                                <datalist id="dl-mobiliarios">@foreach (var m in MobiliariosEnUso) { <option value="@m" /> }</datalist>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Fila</label>
+                                <InputNumber class="form-control" @bind-Value="_pos.Fila" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Posición</label>
+                                <InputNumber class="form-control" @bind-Value="_pos.Posicion" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Orden pasillo</label>
+                                <InputNumber class="form-control" @bind-Value="_pos.OrdenPasillo" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Orden fila</label>
+                                <InputNumber class="form-control" @bind-Value="_pos.FilaOrden" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Panel</label>
+                                <InputText class="form-control" @bind-Value="_pos.Panel" />
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <div class="form-check">
+                                    <InputCheckbox class="form-check-input" id="chkNoRepo" @bind-Value="_pos.NoReposicion" />
+                                    <label class="form-check-label" for="chkNoRepo">No entra en reposición</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-link p-0 mt-3" @onclick="() => _verCoords = !_verCoords">
+                            <i class="fa-solid @(_verCoords ? "fa-chevron-down" : "fa-chevron-right") me-1"></i>
+                            Coordenadas del mapa (avanzado)
+                        </button>
+                        @if (_verCoords)
+                        {
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-3"><label class="form-label small">Coord X</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordX" /></div>
+                                <div class="col-md-3"><label class="form-label small">Coord Y</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordY" /></div>
+                                <div class="col-md-3"><label class="form-label small">X lencería</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordXLenceria" /></div>
+                                <div class="col-md-3"><label class="form-label small">Y lencería</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordYLenceria" /></div>
+                                <div class="col-md-3"><label class="form-label small">X código</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordXCodigo" /></div>
+                                <div class="col-md-3"><label class="form-label small">Y código</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordYCodigo" /></div>
+                                <div class="col-md-3"><label class="form-label small">X desc.</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordXDesc" /></div>
+                                <div class="col-md-3"><label class="form-label small">Y desc.</label><InputNumber class="form-control form-control-sm" @bind-Value="_pos.CoordYDesc" /></div>
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="() => _modalPos = false">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_guardando">
+                            @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                            Guardar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---------- Modal artículos de una posición ---------- *@
+@if (_modalArt && _posSel is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        Artículos · <span class="text-muted">@_posSel.Sector / @_posSel.Modulo</span>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalArt = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_errorArt is not null)
+                    {
+                        <div class="alert alert-danger py-2">@_errorArt</div>
+                    }
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="fa-solid fa-barcode"></i></span>
+                        <input class="form-control" placeholder="Código de artículo..." @bind="_nuevoArt"
+                               @bind:event="oninput" @onkeyup="OnArtKey" />
+                        <button class="btn btn-primary" @onclick="AgregarArt" disabled="@_guardandoArt">
+                            @if (_guardandoArt) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                            <i class="fa-solid fa-plus me-1"></i> Agregar
+                        </button>
+                    </div>
+
+                    @if (_cargandoArt)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+                    }
+                    else if (_articulos.Count == 0)
+                    {
+                        <p class="text-muted">No hay artículos en esta posición.</p>
+                    }
+                    else
+                    {
+                        <table class="market-table align-middle">
+                            <thead><tr><th style="width: 160px">Código</th><th>Descripción</th><th style="width: 60px"></th></tr></thead>
+                            <tbody>
+                                @foreach (var a in _articulos)
+                                {
+                                    <tr>
+                                        <td><ArticuloLink Codigo="@a.ArtCod" /></td>
+                                        <td>@(string.IsNullOrWhiteSpace(a.Descripcion) ? "(sin descripción)" : a.Descripcion)</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-outline-danger" title="Quitar" @onclick="() => QuitarArt(a)">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarArticulos">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<MapeoUbicacionDto> _ubicaciones = new();
+    private int _idUbicacion;
+    private int _idUbicacionCargada;
+    private bool _ubicacionFija;
+
+    private List<MapeoPosicionDto> _todas = new();   // posiciones de la ubicación cargada
+    private List<MapeoPosicionDto> _resultado = new(); // posiciones tras aplicar filtros (lo que se ve)
+    private bool _cargando = true;
+    private string? _mensaje;
+    private string? _error;
+
+    // Filtros (se aplican al presionar Buscar / Enter)
+    private string _fSector = "", _fMobiliario = "", _fModulo = "", _fFila = "", _fPosicion = "", _fArticulo = "";
+
+    private List<string> SectoresEnUso => _todas.Where(p => !string.IsNullOrWhiteSpace(p.Sector))
+        .Select(p => p.Sector!).Distinct().OrderBy(s => s).ToList();
+    private List<string> MobiliariosEnUso => _todas.Where(p => !string.IsNullOrWhiteSpace(p.Mobiliario))
+        .Select(p => p.Mobiliario!).Distinct().OrderBy(s => s).ToList();
+
+    // Modal posición
+    private bool _modalPos, _esAltaPos, _guardando, _verCoords;
+    private int _idPos;
+    private string? _errorModal;
+    private MapeoPosicionSaveRequest _pos = new();
+
+    // Modal artículos
+    private bool _modalArt;
+    private MapeoPosicionDto? _posSel;
+    private List<MapeoArticuloDto> _articulos = new();
+    private bool _cargandoArt, _guardandoArt;
+    private string _nuevoArt = "";
+    private string? _errorArt;
+
+    private IDisposable? _navReg;
+    private bool _restaurarScroll;
+    private double _scroll;
+    private const string EstadoKey = "mapeo";
+
+    private sealed record EstadoMapeo(int IdUbicacion, int IdUbicacionCargada, bool Fija,
+        string FSector, string FMobiliario, string FModulo, string FFila, string FPosicion, string FArticulo,
+        List<MapeoPosicionDto> Todas, List<MapeoPosicionDto> Resultado);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
+
+        try { _ubicaciones = await Api.ListarUbicacionesAsync(); }
+        catch (Exception ex) { _error = "No se pudieron cargar las ubicaciones."; Console.Error.WriteLine(ex); }
+
+        // Si hay estado guardado (se vuelve de otra pantalla), restaurar tal cual.
+        if (State.TryGet<EstadoMapeo>(EstadoKey, out var st, out _scroll))
+        {
+            _idUbicacion = st.IdUbicacion; _idUbicacionCargada = st.IdUbicacionCargada; _ubicacionFija = st.Fija;
+            _fSector = st.FSector; _fMobiliario = st.FMobiliario; _fModulo = st.FModulo;
+            _fFila = st.FFila; _fPosicion = st.FPosicion; _fArticulo = st.FArticulo;
+            _todas = st.Todas; _resultado = st.Resultado;
+            _cargando = false;
+            _restaurarScroll = true;
+            return;
+        }
+
+        // Si el usuario ES un local (perfil LURO/PERALTA), la ubicación queda fija a la suya.
+        string? perfil = null;
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            perfil = state.User.FindFirst("perfil")?.Value;
+        }
+        var propio = _ubicaciones.FirstOrDefault(u => string.Equals(u.Ubicacion, perfil, StringComparison.OrdinalIgnoreCase));
+        if (propio is not null)
+        {
+            _idUbicacion = propio.IdUbicacion;
+            _ubicacionFija = true;
+        }
+        else
+        {
+            _idUbicacion = _ubicaciones.FirstOrDefault()?.IdUbicacion ?? 0;
+        }
+
+        await Buscar();
+    }
+
+    // Al navegar a otra pantalla, guarda filtros + datos + scroll para restaurar al volver.
+    private async ValueTask OnNavegandoAfuera(Microsoft.AspNetCore.Components.Routing.LocationChangingContext ctx)
+    {
+        double y = 0;
+        try { y = await JS.InvokeAsync<double>("scrollGet"); } catch { }
+        State.Save(EstadoKey, new EstadoMapeo(_idUbicacion, _idUbicacionCargada, _ubicacionFija,
+            _fSector, _fMobiliario, _fModulo, _fFila, _fPosicion, _fArticulo, _todas, _resultado), y);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_restaurarScroll)
+        {
+            _restaurarScroll = false;
+            try { await JS.InvokeVoidAsync("scrollSet", _scroll); } catch { }
+        }
+    }
+
+    public void Dispose() => _navReg?.Dispose();
+
+    private async Task Buscar()
+    {
+        if (_idUbicacion == 0) { _todas = new(); _resultado = new(); _cargando = false; return; }
+        if (_idUbicacionCargada != _idUbicacion || _todas.Count == 0)
+            await CargarTodas();
+        Aplicar();
+    }
+
+    private async Task CargarTodas()
+    {
+        _cargando = true; _error = null;
+        try
+        {
+            _todas = await Api.ListarPosicionesAsync(_idUbicacion);
+            _idUbicacionCargada = _idUbicacion;
+        }
+        catch (Exception ex)
+        {
+            _todas = new(); _error = "No se pudieron cargar las posiciones."; Console.Error.WriteLine(ex);
+        }
+        finally { _cargando = false; }
+    }
+
+    private void Aplicar()
+    {
+        IEnumerable<MapeoPosicionDto> q = _todas;
+        if (!string.IsNullOrWhiteSpace(_fSector)) q = q.Where(p => string.Equals(p.Sector, _fSector, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(_fMobiliario)) q = q.Where(p => string.Equals(p.Mobiliario, _fMobiliario, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(_fModulo)) q = q.Where(p => (p.Modulo ?? "").Contains(_fModulo.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(_fFila)) q = q.Where(p => (p.Fila?.ToString() ?? "").Contains(_fFila.Trim()));
+        if (!string.IsNullOrWhiteSpace(_fPosicion)) q = q.Where(p => (p.Posicion?.ToString() ?? "").Contains(_fPosicion.Trim()));
+        if (!string.IsNullOrWhiteSpace(_fArticulo)) q = q.Where(p => (p.ArtCods ?? "").Contains(_fArticulo.Trim(), StringComparison.OrdinalIgnoreCase));
+        _resultado = q.ToList();
+    }
+
+    private async Task OnFiltroKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Buscar();
+    }
+
+    private async Task Limpiar()
+    {
+        _fSector = _fMobiliario = _fModulo = _fFila = _fPosicion = _fArticulo = "";
+        await Buscar();
+    }
+
+    // ---- Posición ABM ----
+    private void AbrirAltaPos()
+    {
+        _esAltaPos = true; _idPos = 0; _errorModal = null; _verCoords = false;
+        _pos = new MapeoPosicionSaveRequest { IdUbicacion = _idUbicacion };
+        _modalPos = true;
+    }
+
+    private void AbrirModPos(MapeoPosicionDto p)
+    {
+        _esAltaPos = false; _idPos = p.Id; _errorModal = null; _verCoords = false;
+        _pos = new MapeoPosicionSaveRequest
+        {
+            IdUbicacion = _idUbicacion,
+            Sector = p.Sector ?? "",
+            Modulo = p.Modulo ?? "",
+            Mobiliario = p.Mobiliario,
+            Fila = p.Fila,
+            Posicion = p.Posicion,
+            Panel = p.Panel,
+            OrdenPasillo = p.OrdenPasillo,
+            FilaOrden = p.FilaOrden,
+            NoReposicion = p.NoReposicion,
+            CoordX = p.CoordX, CoordY = p.CoordY,
+            CoordXLenceria = p.CoordXLenceria, CoordYLenceria = p.CoordYLenceria,
+            CoordXCodigo = p.CoordXCodigo, CoordYCodigo = p.CoordYCodigo,
+            CoordXDesc = p.CoordXDesc, CoordYDesc = p.CoordYDesc
+        };
+        _modalPos = true;
+    }
+
+    private async Task GuardarPos()
+    {
+        _guardando = true; _errorModal = null;
+        var (ok, error) = _esAltaPos
+            ? await Api.CrearPosicionAsync(_pos)
+            : await Api.ModificarPosicionAsync(_idPos, _pos);
+        _guardando = false;
+        if (!ok) { _errorModal = error; return; }
+        _modalPos = false;
+        _mensaje = _esAltaPos ? "Posición agregada." : "Posición modificada.";
+        await Recargar();
+    }
+
+    private async Task EliminarPos(MapeoPosicionDto p)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar la posición \"{p.Modulo}\"?");
+        if (!confirma) return;
+        await Api.EliminarPosicionAsync(p.Id);
+        _mensaje = "Posición eliminada.";
+        await Recargar();
+    }
+
+    // Recarga datos de la ubicación y reaplica filtros (tras un ABM).
+    private async Task Recargar()
+    {
+        await CargarTodas();
+        Aplicar();
+    }
+
+    // ---- Artículos ----
+    private async Task AbrirArticulos(MapeoPosicionDto p)
+    {
+        _posSel = p; _modalArt = true; _errorArt = null; _nuevoArt = "";
+        await CargarArticulos();
+    }
+
+    private async Task CargarArticulos()
+    {
+        _cargandoArt = true;
+        try { _articulos = await Api.ListarArticulosAsync(_posSel!.Id); }
+        catch { _articulos = new(); _errorArt = "No se pudieron cargar los artículos."; }
+        finally { _cargandoArt = false; }
+    }
+
+    private async Task OnArtKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AgregarArt();
+    }
+
+    private async Task AgregarArt()
+    {
+        if (string.IsNullOrWhiteSpace(_nuevoArt)) return;
+        _guardandoArt = true; _errorArt = null;
+        var (ok, error) = await Api.CrearArticuloAsync(new MapeoArticuloSaveRequest { IdMapeo = _posSel!.Id, ArtCod = _nuevoArt });
+        _guardandoArt = false;
+        if (!ok) { _errorArt = error; return; }
+        _nuevoArt = "";
+        await CargarArticulos();
+    }
+
+    private async Task QuitarArt(MapeoArticuloDto a)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Quitar el artículo \"{a.ArtCod}\" de la posición?");
+        if (!confirma) return;
+        await Api.EliminarArticuloAsync(a.Id);
+        await CargarArticulos();
+    }
+
+    private async Task CerrarArticulos()
+    {
+        _modalArt = false;
+        await Recargar();
+    }
+}

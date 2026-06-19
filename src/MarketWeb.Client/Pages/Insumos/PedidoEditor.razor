@@ -1,0 +1,284 @@
+@page "/insumos/pedidos/{Id:int}"
+@inject InsumosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Pedido de Insumos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Insumos" Titulo="@_titulo" Icono="fa-solid fa-clipboard-list" />
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_cab is null)
+    {
+        <div class="alert alert-warning">No se encontró el pedido.</div>
+        <button class="btn btn-outline-secondary" @onclick="Volver"><i class="fa-solid fa-arrow-left me-1"></i> Volver</button>
+    }
+    else
+    {
+        <div class="market-card mb-3" style="padding:14px 18px">
+            <div class="d-flex flex-wrap gap-4">
+                <div><div class="small text-muted">Local</div><div class="fw-semibold">@_cab.LocalNombre</div></div>
+                <div><div class="small text-muted">Nro. Pedido</div><div class="fw-semibold">@(_esNuevo ? "(se asigna al guardar)" : _cab.NroPedido.ToString())</div></div>
+                <div><div class="small text-muted">Fecha</div><div class="fw-semibold">@_cab.FechaPedido.ToString("dd/MM/yyyy")</div></div>
+                <div><div class="small text-muted">Estado</div><div class="fw-semibold">@_cab.Estado</div></div>
+            </div>
+        </div>
+
+        @if (!_editable)
+        {
+            <div class="alert alert-secondary d-flex align-items-center" role="alert">
+                <i class="fa-solid fa-lock me-2"></i>
+                <div>
+                    @(_cab.Enviado
+                        ? "Pedido enviado: solo lectura. Comuníquese con Logística para cambios."
+                        : "Depósito ya tomó el pedido (en armado): cerrado para el local. Comuníquese con Logística para cambios.")
+                </div>
+            </div>
+        }
+
+        @if (_editable)
+        {
+            <div class="market-card mb-3" style="padding:14px 18px; position:relative; overflow:visible">
+                <div class="fw-semibold mb-2"><i class="fa-solid fa-plus me-1"></i> Agregar insumo</div>
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div style="flex:1 1 360px; min-width:280px; position:relative">
+                        <label class="form-label small text-muted mb-1">Buscar artículo (por descripción)</label>
+                        <input class="form-control" placeholder="Escribí al menos 2 letras…" @bind="_busqueda" @bind:event="oninput" @bind:after="BuscarDebounce" autocomplete="off" />
+                        @if (_resultados.Count > 0)
+                        {
+                            <div class="list-group position-absolute w-100 shadow" style="z-index:20; max-height:280px; overflow:auto">
+                                @foreach (var a in _resultados)
+                                {
+                                    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between" @onclick="() => Elegir(a)">
+                                        <span><span class="text-muted me-2">@a.ArtCod</span>@a.ArtDes</span>
+                                        <span class="badge @(a.Stock > 0 ? "bg-success" : "bg-danger")">stock @Fmt.Miles(a.Stock)</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div style="width:120px">
+                        <label class="form-label small text-muted mb-1">Cantidad</label>
+                        <input type="number" min="1" class="form-control text-end" @bind="_nuevaCant" />
+                    </div>
+                    <button class="btn btn-success" @onclick="AgregarRenglon" disabled="@(_artSel is null)">
+                        <i class="fa-solid fa-plus me-1"></i> Agregar a la lista
+                    </button>
+                </div>
+                @if (_artSel is not null)
+                {
+                    <div class="small mt-2">
+                        Seleccionado: <strong>@_artSel.ArtCod</strong> — @_artSel.ArtDes
+                        @if (!string.IsNullOrWhiteSpace(_artSel.UnidadMedida)) { <span class="text-muted">· @_artSel.UnidadMedida</span> }
+                        @if (_artSel.Stock <= 0) { <span class="text-danger ms-2"><i class="fa-solid fa-triangle-exclamation me-1"></i>sin stock</span> }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_renglones.Count == 0)
+        {
+            <div class="market-empty"><i class="fa-solid fa-box-open"></i><p>El pedido todavía no tiene insumos.</p></div>
+        }
+        else
+        {
+            <div class="market-card table-responsive">
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:130px">Código</th>
+                            <th>Descripción</th>
+                            <th class="text-end" style="width:120px">Cantidad</th>
+                            @if (_editable)
+                            {
+                                <th class="text-center" style="width:60px"></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _renglones)
+                        {
+                            <tr>
+                                <td>@r.ArtCod</td>
+                                <td>@r.Descripcion</td>
+                                <td class="text-end">
+                                    @if (_editable)
+                                    {
+                                        <input type="number" min="1" class="form-control form-control-sm text-end" style="width:100px; display:inline-block"
+                                               value="@r.Cantidad" @onchange="e => CambiarCantidad(r, e.Value?.ToString())" />
+                                    }
+                                    else
+                                    {
+                                        @Fmt.Miles(r.Cantidad)
+                                    }
+                                </td>
+                                @if (_editable)
+                                {
+                                    <td class="text-center acciones">
+                                        <button class="btn btn-sm btn-outline-danger" title="Quitar" @onclick="() => QuitarRenglon(r)">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-muted small">@_renglones.Count insumo(s) · @Fmt.Miles(_renglones.Sum(x => x.Cantidad)) unidad(es).</p>
+        }
+
+        <div class="mt-3 d-flex gap-2">
+            @if (_editable)
+            {
+                <button class="btn btn-success" @onclick="Guardar" disabled="@_guardando">
+                    <i class="fa-solid fa-floppy-disk me-1"></i> @(_guardando ? "Guardando…" : "Guardar pedido")
+                </button>
+                <button class="btn btn-outline-secondary" @onclick="Cancelar" disabled="@_guardando">Cancelar</button>
+            }
+            else
+            {
+                <button class="btn btn-outline-secondary" @onclick="Volver"><i class="fa-solid fa-arrow-left me-1"></i> Volver</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public int Local { get; set; }
+
+    private PedidoCabeceraDto? _cab;
+    private List<PedidoRenglonDto> _renglones = new();   // SOLO en memoria hasta Guardar
+    private bool _cargando = true;
+    private bool _editable;
+    private bool _esNuevo;
+    private bool _guardando;
+    private string _titulo = "Pedido";
+
+    // Alta de renglón
+    private string _busqueda = "";
+    private List<ArticuloInsumoDto> _resultados = new();
+    private ArticuloInsumoDto? _artSel;
+    private int _nuevaCant = 1;
+    private int _busquedaSeq;
+
+    protected override async Task OnParametersSetAsync() => await Cargar();
+
+    private static string LocalNombre(int id) => id == 2 ? "LURO" : id == 3 ? "PERALTA" : "—";
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try
+        {
+            _esNuevo = Id == 0;
+            if (_esNuevo)
+            {
+                _cab = new PedidoCabeceraDto { Id = 0, NroPedido = 0, FechaPedido = DateTime.Now, IDLocal = Local, LocalNombre = LocalNombre(Local), Estado = "NUEVO", Enviado = false };
+                _renglones = new();
+                _editable = Local is 2 or 3;
+            }
+            else
+            {
+                var ped = await Api.ObtenerPedidoAsync(Id);
+                _cab = ped?.Cabecera;
+                _renglones = ped?.Renglones ?? new();
+                // El local edita hasta que DEPÓSITO lo imprime/envía (Cerrado). El 1/15 es solo para CREAR.
+                _editable = _cab is not null && !_cab.Cerrado;
+            }
+            _titulo = _cab is null ? "Pedido" : _esNuevo ? "Nuevo pedido" : $"Pedido N° {_cab.NroPedido}";
+        }
+        catch (Exception ex) { Console.Error.WriteLine(ex); _cab = null; }
+        finally { _cargando = false; }
+    }
+
+    private async Task BuscarDebounce()
+    {
+        _artSel = null;
+        var seq = ++_busquedaSeq;
+        var q = _busqueda.Trim();
+        if (q.Length < 2) { _resultados = new(); return; }
+        await Task.Delay(250);
+        if (seq != _busquedaSeq) return;
+        try { _resultados = await Api.BuscarArticulosInsumoAsync(q); }
+        catch { _resultados = new(); }
+    }
+
+    private void Elegir(ArticuloInsumoDto a)
+    {
+        _artSel = a;
+        _busqueda = $"{a.ArtCod} - {a.ArtDes}";
+        _resultados = new();
+    }
+
+    private async Task AgregarRenglon()
+    {
+        if (_artSel is null) return;
+        if (_nuevaCant <= 0) { await JS.InvokeVoidAsync("alert", "Ingresá una cantidad mayor a 0."); return; }
+        if (_renglones.Any(r => string.Equals(r.ArtCod, _artSel.ArtCod, StringComparison.OrdinalIgnoreCase)))
+        {
+            await JS.InvokeVoidAsync("alert", "Ese insumo ya está en el pedido. Modificá la cantidad en la lista.");
+            return;
+        }
+        if (_artSel.Stock <= 0)
+        {
+            var seguir = await JS.InvokeAsync<bool>("confirm", "El artículo no tiene stock en depósito. ¿Agregarlo igual?");
+            if (!seguir) return;
+        }
+        _renglones.Add(new PedidoRenglonDto { Id = 0, ArtCod = _artSel.ArtCod, Descripcion = _artSel.ArtDes, Cantidad = _nuevaCant });
+        _artSel = null; _busqueda = ""; _nuevaCant = 1; _resultados = new();
+    }
+
+    private void CambiarCantidad(PedidoRenglonDto r, string? valor)
+    {
+        if (int.TryParse(valor, out var cant) && cant > 0) r.Cantidad = cant;
+        // valor inválido → re-render deja el valor anterior
+    }
+
+    private async Task QuitarRenglon(PedidoRenglonDto r)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Quitar {r.ArtCod} del pedido?");
+        if (ok) _renglones.Remove(r);
+    }
+
+    private async Task Guardar()
+    {
+        if (_renglones.Count == 0)
+        {
+            await JS.InvokeVoidAsync("alert", "El pedido debe tener al menos un insumo.");
+            return;
+        }
+        _guardando = true;
+        try
+        {
+            var req = new GuardarPedidoRequest
+            {
+                Id = _esNuevo ? 0 : Id,
+                IdLocal = _cab!.IDLocal,
+                Renglones = _renglones.Select(r => new RenglonInput { ArtCod = r.ArtCod, Cantidad = r.Cantidad }).ToList()
+            };
+            var res = await Api.GuardarPedidoAsync(req);
+            await JS.InvokeVoidAsync("alert", $"Pedido N° {res.NroPedido} guardado correctamente.");
+            Nav.NavigateTo("/insumos/pedidos");
+        }
+        catch (Exception ex) { await JS.InvokeVoidAsync("alert", ex.Message); }
+        finally { _guardando = false; }
+    }
+
+    private async Task Cancelar()
+    {
+        if (_renglones.Count > 0)
+        {
+            var ok = await JS.InvokeAsync<bool>("confirm", "¿Cancelar? Se descartará lo cargado (no se guardó nada todavía).");
+            if (!ok) return;
+        }
+        Nav.NavigateTo("/insumos/pedidos");
+    }
+
+    private void Volver() => Nav.NavigateTo("/insumos/pedidos");
+}

@@ -1,0 +1,23 @@
+@page "/logistica/dashboard"
+
+<PageTitle>Logística · Dashboard</PageTitle>
+
+@* Dashboard de Logística (port de LogisticaDashboard). Vista TV con auto-refresh;
+   HTML estático embebido en iframe que llena el área de contenido. La API que
+   consume está protegida por la misma cookie de Google SSO. *@
+<iframe src="dashboard-logistica.html" class="dashboard-frame" title="Dashboard Logística" allow="fullscreen" allowfullscreen></iframe>
+
+<style>
+    .dashboard-frame {
+        display: block;
+        width: 100%;
+        height: calc(100vh - 6rem);
+        border: 0;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(16, 24, 40, .12);
+        background: #0b0f17;
+    }
+</style>
+
+@code {
+}

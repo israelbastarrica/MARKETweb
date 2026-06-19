@@ -1,0 +1,23 @@
+@page "/wip/{Seccion}/{Pantalla}"
+
+<PageTitle>En construcción</PageTitle>
+
+<div class="market-page">
+    <h1 class="market-page-title">@Bonito(Pantalla)</h1>
+    <p class="text-muted text-uppercase" style="letter-spacing:.05em">@Bonito(Seccion)</p>
+
+    <div class="market-empty">
+        <i class="fa-solid fa-helmet-safety"></i>
+        <h2>Pantalla en construcción</h2>
+        <p>Esta pantalla todavía no fue migrada desde el sistema de escritorio.</p>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Seccion { get; set; } = "";
+    [Parameter] public string Pantalla { get; set; } = "";
+
+    private static string Bonito(string slug)
+        => string.Join(' ', slug.Split('-').Select(p =>
+            p.Length == 0 ? p : char.ToUpper(p[0]) + p[1..]));
+}

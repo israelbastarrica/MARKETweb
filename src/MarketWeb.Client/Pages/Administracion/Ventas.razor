@@ -1,0 +1,233 @@
+@page "/administracion/ventas"
+@inject VentasApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Ventas · Cobranzas</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Administración" Titulo="Ventas" Icono="fa-solid fa-cash-register" />
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Desde</label>
+            <input type="date" class="form-control" @bind="_desde" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Hasta</label>
+            <input type="date" class="form-control" @bind="_hasta" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" @bind="_local">
+                <option value="TODOS">TODOS</option>
+                <option value="LURO">LURO</option>
+                <option value="PERALTA">PERALTA</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Agrupar</label>
+            <select class="form-select" @bind="_agrupamiento">
+                <option value="DÍA">DÍA</option>
+                <option value="MES">MES</option>
+                <option value="AÑO">AÑO</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Detalle</label>
+            <select class="form-select" @bind="_detalle">
+                <option value="CATEGORIA">CATEGORÍA</option>
+                <option value="MEDIO">MEDIO</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Categoría</label>
+            <select class="form-select" @bind="_categoria" @bind:after="OnCategoriaChange">
+                <option value="TODOS">TODOS</option>
+                @foreach (var cat in MediosPorCategoria.Keys)
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Medio</label>
+            <select class="form-select" @bind="_medio">
+                <option value="TODOS">TODOS</option>
+                @foreach (var m in MediosDisponibles())
+                {
+                    <option value="@m">@m</option>
+                }
+            </select>
+        </div>
+        <button class="btn btn-primary" @onclick="Procesar" disabled="@_cargando">
+            @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            Procesar
+        </button>
+        <button class="btn btn-outline-success" @onclick="ExportarExcel"
+                disabled="@(_cargando || _exportando || (_resumen.Count == 0 && _cobranzas.Count == 0))">
+            @if (_exportando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            else { <i class="fa-solid fa-file-excel me-1"></i> }
+            Exportar a Excel
+        </button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Procesar">Reintentar</button>
+        </div>
+    }
+
+    @if (_resumen.Count > 0)
+    {
+        <h2 class="market-subtitle">Resumen mensual</h2>
+        <div class="market-card table-responsive mb-4" style="max-width: 640px">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Período</th>
+                        <th class="text-end">Ventas</th>
+                        <th class="text-end">Costos</th>
+                        <th class="text-end">IVA Ventas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _resumen)
+                    {
+                        <tr>
+                            <td>@r.Periodo</td>
+                            <td class="text-end">@Fmt.Money(r.Ventas)</td>
+                            <td class="text-end">@Fmt.Money(r.Costos)</td>
+                            <td class="text-end">@Fmt.Money(r.Iva_Vtas)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <h2 class="market-subtitle">Detalle de cobranzas</h2>
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_cobranzas.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-cash-register"></i>
+            <p>Sin datos. Tocá "Procesar".</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Período</th>
+                        <th>Local</th>
+                        <th>Categoría</th>
+                        @if (_detalleAplicado == "MEDIO") { <th>Medio</th> }
+                        <th class="text-center">Payway</th>
+                        <th class="text-end">Cant. Op.</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _cobranzas)
+                    {
+                        <tr class="@(c.Total < 0 ? "texto-rojo" : null)">
+                            <td>@c.Periodo</td>
+                            <td>@c.Local</td>
+                            <td>@c.Categoria</td>
+                            @if (_detalleAplicado == "MEDIO") { <td>@c.Medio</td> }
+                            <td class="text-center">@(c.PasaPorPayway ? "Sí" : "No")</td>
+                            <td class="text-end">@Fmt.Miles(c.CantidadOperaciones)</td>
+                            <td class="text-end">@Fmt.Money(c.Total)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_cobranzas.Count fila(s).</p>
+    }
+</div>
+
+@code {
+    private List<VentaResumenDto> _resumen = new();
+    private List<CobranzaDto> _cobranzas = new();
+    private DateTime _desde = DateTime.Today.AddDays(-7);
+    private DateTime _hasta = DateTime.Today;
+    private string _local = "TODOS";
+    private string _agrupamiento = "DÍA";
+    private string _detalle = "CATEGORIA";
+    private string _categoria = "TODOS";
+    private string _medio = "TODOS";
+    private string _detalleAplicado = "CATEGORIA"; // el detalle del último Procesar (para mostrar/ocultar Medio)
+    private bool _cargando;
+    private bool _exportando;
+    private string? _error;
+
+    // Mismo mapa que sp_ConsultaCobranzas / el desktop.
+    private static readonly Dictionary<string, string[]> MediosPorCategoria = new()
+    {
+        ["Efectivo"] = new[] { "Efectivo (neto)" },
+        ["Débito"] = new[] { "Visa Débito", "Mastercard Débito", "Cabal Débito", "Favacard Débito", "American Express Débito", "Maestro" },
+        ["Crédito"] = new[] { "Visa Crédito", "Mastercard Crédito", "Cabal Crédito", "Favacard Crédito", "American Express Crédito" },
+        ["Dinero en Cuenta"] = new[] { "QR", "MODO", "Cuenta DNI" },
+        ["Otros"] = new[] { "Naranja", "Vale de Cambio" }
+    };
+
+    private IEnumerable<string> MediosDisponibles()
+        => _categoria == "TODOS"
+            ? MediosPorCategoria.Values.SelectMany(v => v)
+            : (MediosPorCategoria.TryGetValue(_categoria, out var m) ? m : Enumerable.Empty<string>());
+
+    private void OnCategoriaChange() => _medio = "TODOS"; // al cambiar categoría, reset medio
+
+    private async Task ExportarExcel()
+    {
+        _exportando = true;
+        try
+        {
+            var bytes = await Api.ExportarExcelAsync(_desde, _hasta, _local, _agrupamiento, _detalle, _categoria, _medio);
+            var nombre = $"Ventas_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx";
+            await JS.InvokeVoidAsync("descargarArchivo", nombre, Convert.ToBase64String(bytes),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+        catch (Exception ex)
+        {
+            _error = "No se pudo exportar el Excel.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _exportando = false;
+        }
+    }
+
+    private async Task Procesar()
+    {
+        _cargando = true;
+        _error = null;
+        _detalleAplicado = _detalle;
+        try
+        {
+            _resumen = await Api.ResumenAsync(_desde, _hasta);
+            _cobranzas = await Api.CobranzasAsync(_desde, _hasta, _local, _agrupamiento, _detalle, _categoria, _medio);
+        }
+        catch (Exception ex)
+        {
+            _resumen = new();
+            _cobranzas = new();
+            _error = "No se pudo generar el reporte de ventas. Verificá la conexión / los SPs.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+}

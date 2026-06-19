@@ -1,0 +1,284 @@
+@page "/logistica/palets"
+@implements IDisposable
+@inject PaletsApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject PageStateService State
+
+<PageTitle>Palets</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Palets" Icono="fa-solid fa-pallet" />
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Nro Palet</label>
+                <input class="form-control form-control-sm" @bind="_fNroPalet" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Artículo</label>
+                <input class="form-control form-control-sm" placeholder="Código..." @bind="_fCodArt" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Tipo</label>
+                <select class="form-select form-select-sm" @bind="_fTipo">
+                    <option value="TODOS">Todos</option>
+                    @foreach (var t in _tipos) { <option value="@t">@t</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Categoría</label>
+                <select class="form-select form-select-sm" @bind="_fCategoria">
+                    <option value="TODOS">Todas</option>
+                    @foreach (var c in _categorias) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="_fDesde" />
+            </div>
+            <div class="col-12 d-flex gap-2 mt-2 align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkDes" @bind="_fVerDesarmados" />
+                    <label class="form-check-label small" for="chkDes">Ver desarmados</label>
+                </div>
+                <button class="btn btn-primary btn-sm ms-auto" @onclick="Buscar">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Buscar">Reintentar</button>
+        </div>
+    }
+    @if (_mensaje is not null)
+    {
+        <div class="alert alert-success alert-dismissible d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i> @_mensaje
+            <button type="button" class="btn-close" @onclick="() => _mensaje = null"></button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_palets.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-pallet"></i><p>No hay palets para los filtros.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 90px">Palet</th>
+                        <th style="width: 120px">Remitos</th>
+                        <th style="width: 100px">Ubicación</th>
+                        <th>Tipo</th>
+                        <th>Categoría</th>
+                        <th>Artículos</th>
+                        <th class="text-center" style="width: 80px">Impreso</th>
+                        <th class="text-center" style="width: 150px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _palets)
+                    {
+                        <tr class="@(p.Desarmado ? "fila-desarmado" : null)">
+                            <td class="fw-semibold">@p.NroPalet</td>
+                            <td>@p.Remitos</td>
+                            <td><span class="badge-perfil">@p.Ubicacion</span></td>
+                            <td class="small">@p.Tipo</td>
+                            <td class="small">@p.Categoria</td>
+                            <td class="small text-muted art-lista" title="@p.Articulos">@p.Articulos</td>
+                            <td class="text-center">
+                                @if (p.Impreso) { <i class="fa-solid fa-check text-success" title="Impreso"></i> }
+                                else { <i class="fa-solid fa-minus text-muted"></i> }
+                            </td>
+                            <td class="text-center text-nowrap acciones">
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalle" @onclick="() => VerDetalle(p)">
+                                    <i class="fa-solid fa-list"></i>
+                                </button>
+                                @if (!p.Desarmado)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" title="Desarmar" @onclick="() => Desarmar(p)">
+                                        <i class="fa-solid fa-box-open"></i>
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_palets.Count palet(s).</p>
+    }
+</div>
+
+@* ---------- Modal detalle de palet ---------- *@
+@if (_modalDet && _paletSel is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Palet @_paletSel.NroPalet <span class="text-muted">· @_paletSel.Ubicacion</span></h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalDet = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_cargandoDet)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+                    }
+                    else if (_articulos.Count == 0)
+                    {
+                        <p class="text-muted">Sin artículos para mostrar.</p>
+                    }
+                    else
+                    {
+                        <table class="market-table align-middle">
+                            <thead><tr><th>Origen</th><th style="width: 150px">Código</th><th>Descripción</th><th>Combo</th><th>Remito</th><th class="text-end">Cant.</th></tr></thead>
+                            <tbody>
+                                @foreach (var a in _articulos)
+                                {
+                                    <tr>
+                                        <td class="small">@a.Origen</td>
+                                        <td><ArticuloLink Codigo="@a.Codigo" /></td>
+                                        <td>@a.Descripcion</td>
+                                        <td class="small text-muted">@a.Combo</td>
+                                        <td class="small">@a.Remito</td>
+                                        <td class="text-end">@Fmt.Miles(a.Cantidad)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td colspan="5" class="text-end">Total</td>
+                                    <td class="text-end">@Fmt.Miles(_articulos.Sum(x => x.Cantidad))</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalDet = false">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    tr.fila-desarmado { background: #fdeaea !important; color: #9b3030; }
+    .art-lista { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+
+@code {
+    private List<PaletDto> _palets = new();
+    private List<string> _tipos = new();
+    private List<string> _categorias = new();
+    private bool _cargando = true;
+    private string? _error;
+    private string? _mensaje;
+
+    // Filtros
+    private string _fNroPalet = "", _fCodArt = "", _fTipo = "TODOS", _fCategoria = "TODOS";
+    private bool _fVerDesarmados;
+    private DateTime _fDesde = DateTime.Today.AddMonths(-12);
+
+    // Detalle
+    private bool _modalDet;
+    private PaletDto? _paletSel;
+    private List<PaletArticuloDto> _articulos = new();
+    private bool _cargandoDet;
+
+    private IDisposable? _navReg;
+    private bool _restaurarScroll;
+    private double _scroll;
+    private const string EstadoKey = "palets";
+
+    private sealed record EstadoPalets(string FNroPalet, string FCodArt, string FTipo, string FCategoria,
+        bool FVerDesarmados, DateTime FDesde, List<PaletDto> Palets);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
+
+        try
+        {
+            _tipos = await Api.ListarTiposAsync();
+            _categorias = await Api.ListarCategoriasAsync();
+        }
+        catch { /* combos opcionales */ }
+
+        if (State.TryGet<EstadoPalets>(EstadoKey, out var st, out _scroll))
+        {
+            _fNroPalet = st.FNroPalet; _fCodArt = st.FCodArt; _fTipo = st.FTipo; _fCategoria = st.FCategoria;
+            _fVerDesarmados = st.FVerDesarmados; _fDesde = st.FDesde; _palets = st.Palets;
+            _cargando = false;
+            _restaurarScroll = true;
+            return;
+        }
+
+        await Buscar();
+    }
+
+    private async ValueTask OnNavegandoAfuera(Microsoft.AspNetCore.Components.Routing.LocationChangingContext ctx)
+    {
+        double y = 0;
+        try { y = await JS.InvokeAsync<double>("scrollGet"); } catch { }
+        State.Save(EstadoKey, new EstadoPalets(_fNroPalet, _fCodArt, _fTipo, _fCategoria, _fVerDesarmados, _fDesde, _palets), y);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_restaurarScroll)
+        {
+            _restaurarScroll = false;
+            try { await JS.InvokeVoidAsync("scrollSet", _scroll); } catch { }
+        }
+    }
+
+    public void Dispose() => _navReg?.Dispose();
+
+    private async Task Buscar()
+    {
+        _cargando = true; _error = null;
+        try { _palets = await Api.ListarAsync(_fNroPalet, _fCodArt, _fTipo, _fCategoria, _fVerDesarmados, _fDesde); }
+        catch (Exception ex) { _palets = new(); _error = "No se pudieron cargar los palets."; Console.Error.WriteLine(ex); }
+        finally { _cargando = false; }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Buscar();
+    }
+
+    private async Task VerDetalle(PaletDto p)
+    {
+        _paletSel = p; _modalDet = true; _articulos = new(); _cargandoDet = true;
+        try { _articulos = await Api.ListarArticulosAsync(p.Id); }
+        catch { _articulos = new(); }
+        finally { _cargandoDet = false; }
+    }
+
+    private async Task Desarmar(PaletDto p)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Desarmar el palet {p.NroPalet}? Se liberan sus remitos.");
+        if (!confirma) return;
+        var ok = await Api.DesarmarAsync(p.Id);
+        if (!ok) { _error = "No se pudo desarmar el palet."; return; }
+        _mensaje = $"Palet {p.NroPalet} desarmado.";
+        await Buscar();
+    }
+}

@@ -1,0 +1,16 @@
+<div class="header">
+    <div class="icon"><i class="@Icono" aria-hidden="true"></i></div>
+    <div class="texts">
+        @if (!string.IsNullOrWhiteSpace(Modulo))
+        {
+            <div class="eyebrow">@Modulo</div>
+        }
+        <h1 class="title">@Titulo</h1>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Modulo { get; set; }
+    [Parameter, EditorRequired] public string Titulo { get; set; } = "";
+    [Parameter] public string Icono { get; set; } = "fa-solid fa-square";
+}

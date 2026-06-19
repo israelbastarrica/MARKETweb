@@ -1,0 +1,250 @@
+.market-sidebar {
+    width: 264px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, #202024 0%, #161618 100%);
+    color: #e7e7ea;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
+    box-shadow: 2px 0 14px rgba(0, 0, 0, .28);
+}
+
+.market-sidebar::-webkit-scrollbar { width: 8px; }
+.market-sidebar::-webkit-scrollbar-thumb { background: #3a3a40; border-radius: 4px; }
+
+/* ---- Marca ---- */
+.market-brand {
+    background: #0e0e10;
+    border-bottom: 1px solid #2a2a2e;
+}
+
+.market-brand ::deep a {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: 1.1rem 1.25rem;
+    text-decoration: none;
+}
+
+.market-brand .logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 1.15rem;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, .35);
+}
+
+.market-brand .txt {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    gap: 3px;
+}
+
+.market-brand .name {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: .24em;
+    color: #fff;
+}
+
+.market-brand .sub {
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .4em;
+    color: #f59e0b;
+}
+
+/* ---- Navegación ---- */
+.market-nav {
+    padding: .6rem 0 2rem;
+}
+
+.market-module-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    padding: .7rem 1.25rem;
+    background: transparent;
+    border: 0;
+    color: #c9c9d0;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color .15s, background .15s;
+}
+
+.market-module-header .ico {
+    width: 1.4rem;
+    text-align: center;
+    font-size: .95rem;
+    color: #8a8a93;
+    transition: color .15s;
+}
+
+.market-module-header:hover { color: #fff; }
+.market-module-header:hover .ico { color: #f59e0b; }
+
+.market-caret {
+    margin-left: auto;
+    font-size: .65rem;
+    color: #6a6a72;
+    transition: transform .2s ease;
+}
+
+.market-module.open .market-module-header { color: #fff; }
+.market-module.open .market-module-header .ico { color: #f59e0b; }
+.market-module.open .market-caret { transform: rotate(180deg); }
+
+.market-submenu {
+    display: none;
+    flex-direction: column;
+    padding: .1rem 0 .5rem;
+}
+
+.market-module.open .market-submenu { display: flex; }
+
+.market-nav ::deep .market-link {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .5rem .8rem;
+    margin: .1rem .7rem;
+    border-radius: 9px;
+    color: #a6a6ae;
+    text-decoration: none;
+    font-size: .875rem;
+    transition: all .12s ease;
+}
+
+.market-nav ::deep .market-link .ico {
+    width: 1.2rem;
+    text-align: center;
+    font-size: .85rem;
+    opacity: .85;
+}
+
+.market-nav ::deep .market-link:hover {
+    background: rgba(255, 255, 255, .07);
+    color: #fff;
+    text-decoration: none;
+}
+
+.market-nav ::deep .market-link:hover .ico { color: #f59e0b; opacity: 1; }
+
+.market-nav ::deep .market-link.active {
+    background: #f59e0b;
+    color: #1a1a1a;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, .4);
+}
+
+.market-nav ::deep .market-link.active .ico { color: #1a1a1a; opacity: 1; }
+
+.market-nav ::deep .market-wip {
+    margin-left: auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffae42;
+    opacity: .65;
+}
+
+.market-nav ::deep .market-link.active .market-wip { background: #1a1a1a; opacity: .4; }
+
+.market-userbox {
+    margin-top: auto;
+    padding: .8rem 1rem;
+    border-top: 1px solid #2a2a2e;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+
+    .market-userbox .avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: #f59e0b;
+        color: #1a1a1a;
+        font-weight: 700;
+        font-size: .8rem;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+    }
+
+    .market-userbox .info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.2;
+    }
+
+        .market-userbox .info .n {
+            color: #fff;
+            font-size: .85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .market-userbox .info .p {
+            color: #8a8a93;
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+    .market-userbox .logout {
+        margin-left: auto;
+        background: transparent;
+        border: 0;
+        color: #8a8a93;
+        cursor: pointer;
+        font-size: 1rem;
+        padding: .3rem;
+    }
+
+        .market-userbox .logout:hover {
+            color: #fff;
+        }
+
+    .market-userbox .btn-google {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        background: #fff;
+        color: #3c4043;
+        border: 0;
+        border-radius: 8px;
+        padding: .55rem;
+        font-weight: 600;
+        font-size: .85rem;
+        cursor: pointer;
+    }
+
+        .market-userbox .btn-google:hover {
+            background: #f1f1f1;
+        }
+
+@media (max-width: 768px) {
+    .market-sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+    }
+}

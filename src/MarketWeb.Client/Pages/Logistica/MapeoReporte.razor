@@ -1,0 +1,265 @@
+@page "/logistica/mapeo"
+@implements IDisposable
+@inject MapeoApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject PageStateService State
+
+<PageTitle>Mapeo (Logística)</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Mapeo" Icono="fa-solid fa-map" />
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Ubicación</label>
+                <select class="form-select form-select-sm" @bind="_ubicSel">
+                    <option value="TODOS">Todas</option>
+                    <option value="LOCALES">Locales</option>
+                    @foreach (var u in _ubicaciones) { <option value="@($"id:{u.IdUbicacion}")">@u.Ubicacion</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Sector</label>
+                <input class="form-control form-control-sm" @bind="_fSector" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Mobiliario</label>
+                <input class="form-control form-control-sm" @bind="_fMobiliario" @onkeyup="OnKey" />
+            </div>
+            <div class="col-3 col-md-1">
+                <label class="form-label small text-muted mb-1">Fila</label>
+                <input type="number" class="form-control form-control-sm" @bind="_fFila" />
+            </div>
+            <div class="col-3 col-md-1">
+                <label class="form-label small text-muted mb-1">Pos.</label>
+                <input type="number" class="form-control form-control-sm" @bind="_fPosicion" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Artículo</label>
+                <input class="form-control form-control-sm" placeholder="Código..." @bind="_fCodArt" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Descripción</label>
+                <input class="form-control form-control-sm" @bind="_fDesc" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Tipo</label>
+                <select class="form-select form-select-sm" @bind="_fTipo">
+                    <option value="TODOS">Todos</option>
+                    @foreach (var t in _tipos) { <option value="@t">@t</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Categoría</label>
+                <select class="form-select form-select-sm" @bind="_fCategoria">
+                    <option value="TODOS">Todas</option>
+                    @foreach (var c in _categorias) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="col-3 col-md-1">
+                <label class="form-label small text-muted mb-1">Año</label>
+                <input type="number" class="form-control form-control-sm" @bind="_fAnio" />
+            </div>
+            <div class="col-9 col-md-5 d-flex align-items-center gap-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkVacios" @bind="_soloVacios" />
+                    <label class="form-check-label small" for="chkVacios">Solo vacíos</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkStock" @bind="_calcStock" />
+                    <label class="form-check-label small" for="chkStock">Calcular stock</label>
+                </div>
+                <button class="btn btn-primary btn-sm ms-auto" @onclick="Procesar" disabled="@_cargando">
+                    @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Procesar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Procesar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Procesando...</p>
+    }
+    else if (!_procesado)
+    {
+        <div class="market-empty"><i class="fa-solid fa-filter"></i><p>Elegí los filtros y tocá <strong>Procesar</strong>.</p></div>
+    }
+    else if (_resultado.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-table-cells"></i><p>Sin resultados para los filtros.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Ubicación</th>
+                        <th>Sector</th>
+                        <th class="text-center">Fila</th>
+                        <th class="text-center">Pos.</th>
+                        <th>Módulo</th>
+                        <th>Mobiliario / Palet</th>
+                        <th>Artículo</th>
+                        <th>Descripción</th>
+                        <th>Precio</th>
+                        @if (_calcStock) { <th class="text-end">Stock</th> }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _resultado)
+                    {
+                        <tr class="@(r.RegId is null ? "fila-vacia" : null)">
+                            <td><span class="badge-perfil">@r.Ubicacion</span></td>
+                            <td>@r.Pasillo</td>
+                            <td class="text-center">@r.Fila</td>
+                            <td class="text-center">@r.Posicion</td>
+                            <td>@r.Modulo</td>
+                            <td>@r.Mobiliario</td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(r.ArtCod))
+                                {
+                                    <ArticuloLink Codigo="@r.ArtCod" />
+                                }
+                            </td>
+                            <td class="@(r.RegId is null ? "text-muted fst-italic" : null)">@r.DescripcionFinal</td>
+                            <td class="small text-muted">@r.PrecioFinal</td>
+                            @if (_calcStock) { <td class="text-end">@Fmt.Miles(r.Stock)</td> }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_resultado.Count posición(es).</p>
+    }
+</div>
+
+<style>
+    tr.fila-vacia td { color: #9aa0a6; background: #fafafa; }
+</style>
+
+@code {
+    private List<MapeoUbicacionDto> _ubicaciones = new();
+    private List<string> _tipos = new();
+    private List<string> _categorias = new();
+    private List<MapeoReporteDto> _resultado = new();
+    private bool _cargando;
+    private bool _procesado;
+    private string? _error;
+
+    // Filtros
+    private string _ubicSel = "LOCALES";
+    private string _fSector = "", _fMobiliario = "", _fCodArt = "", _fDesc = "";
+    private int? _fFila, _fPosicion;
+    private string _fTipo = "TODOS", _fCategoria = "TODOS";
+    private int _fAnio = 0;
+    private bool _soloVacios, _calcStock;
+
+    private IDisposable? _navReg;
+    private bool _restaurarScroll;
+    private double _scroll;
+    private const string EstadoKey = "mapeo-reporte";
+
+    private sealed record EstadoReporte(string UbicSel, string FSector, string FMobiliario, int? FFila, int? FPosicion,
+        string FCodArt, string FDesc, string FTipo, string FCategoria, int FAnio, bool SoloVacios, bool CalcStock,
+        bool Procesado, List<MapeoReporteDto> Resultado);
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
+
+        try
+        {
+            _ubicaciones = await Api.ListarUbicacionesReporteAsync();
+            _tipos = await Api.ListarTiposAsync();
+            _categorias = await Api.ListarCategoriasAsync();
+        }
+        catch { /* combos opcionales */ }
+
+        if (State.TryGet<EstadoReporte>(EstadoKey, out var st, out _scroll))
+        {
+            _ubicSel = st.UbicSel; _fSector = st.FSector; _fMobiliario = st.FMobiliario;
+            _fFila = st.FFila; _fPosicion = st.FPosicion; _fCodArt = st.FCodArt; _fDesc = st.FDesc;
+            _fTipo = st.FTipo; _fCategoria = st.FCategoria; _fAnio = st.FAnio;
+            _soloVacios = st.SoloVacios; _calcStock = st.CalcStock;
+            _procesado = st.Procesado; _resultado = st.Resultado;
+            _restaurarScroll = true;
+            return;
+        }
+
+        // Default por perfil: Logística arranca fijo en DEPÓSITO.
+        string? perfil = null;
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            perfil = state.User.FindFirst("perfil")?.Value;
+        }
+        if (string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase))
+        {
+            var dep = _ubicaciones.FirstOrDefault(u => u.Ubicacion.StartsWith("DEP", StringComparison.OrdinalIgnoreCase));
+            if (dep is not null) _ubicSel = $"id:{dep.IdUbicacion}";
+        }
+    }
+
+    private MapeoReporteRequest BuildReq()
+    {
+        var r = new MapeoReporteRequest
+        {
+            Sector = _fSector, Mobiliario = _fMobiliario, Fila = _fFila, Posicion = _fPosicion,
+            CodArt = _fCodArt, Descripcion = _fDesc,
+            Tipo = _fTipo == "TODOS" ? null : _fTipo,
+            Categoria = _fCategoria == "TODOS" ? null : _fCategoria,
+            Anio = _fAnio, SoloVacios = _soloVacios, CalculaStock = _calcStock
+        };
+        if (_ubicSel == "TODOS") r.FiltroUbicacion = "TODOS";
+        else if (_ubicSel == "LOCALES") r.FiltroUbicacion = "LOCALES";
+        else if (_ubicSel.StartsWith("id:")) { r.FiltroUbicacion = "ESPECIFICO"; r.IdUbicacion = int.Parse(_ubicSel[3..]); }
+        return r;
+    }
+
+    private async Task Procesar()
+    {
+        _cargando = true; _error = null;
+        try { _resultado = await Api.ReporteAsync(BuildReq()); _procesado = true; }
+        catch (Exception ex) { _resultado = new(); _error = "No se pudo generar el reporte."; Console.Error.WriteLine(ex); }
+        finally { _cargando = false; }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Procesar();
+    }
+
+    private async ValueTask OnNavegandoAfuera(Microsoft.AspNetCore.Components.Routing.LocationChangingContext ctx)
+    {
+        double y = 0;
+        try { y = await JS.InvokeAsync<double>("scrollGet"); } catch { }
+        State.Save(EstadoKey, new EstadoReporte(_ubicSel, _fSector, _fMobiliario, _fFila, _fPosicion, _fCodArt, _fDesc,
+            _fTipo, _fCategoria, _fAnio, _soloVacios, _calcStock, _procesado, _resultado), y);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_restaurarScroll)
+        {
+            _restaurarScroll = false;
+            try { await JS.InvokeVoidAsync("scrollSet", _scroll); } catch { }
+        }
+    }
+
+    public void Dispose() => _navReg?.Dispose();
+}

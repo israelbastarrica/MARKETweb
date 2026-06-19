@@ -1,0 +1,18 @@
+.art-cod-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.art-cod-ir {
+    color: #e8820c;
+    text-decoration: none;
+    font-size: .8rem;
+    opacity: .75;
+    transition: opacity .12s ease, transform .12s ease;
+}
+
+.art-cod-ir:hover {
+    opacity: 1;
+    transform: translate(1px, -1px);
+}

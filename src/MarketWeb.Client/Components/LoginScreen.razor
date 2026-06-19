@@ -1,0 +1,30 @@
+@inject NavigationManager Nav
+
+<div class="login-bg">
+    <div class="login-card">
+        <div class="login-brand">MARKET <span>WEB</span></div>
+        <p class="login-sub">Sistema de gestión</p>
+
+        @if (_dominioError)
+        {
+            <div class="login-error">
+                Esa cuenta no es <strong>@@marketarg.com</strong>. Ingresá con tu cuenta corporativa.
+            </div>
+        }
+
+        <button class="login-google" @onclick="Login">
+            <i class="fa-brands fa-google"></i> Entrar con Google
+        </button>
+
+        <p class="login-foot">Acceso solo para cuentas <strong>@@marketarg.com</strong></p>
+    </div>
+</div>
+
+@code {
+    private bool _dominioError;
+
+    protected override void OnInitialized()
+        => _dominioError = new Uri(Nav.Uri).Query.Contains("error=dominio", StringComparison.OrdinalIgnoreCase);
+
+    private void Login() => Nav.NavigateTo("api/auth/login", forceLoad: true);
+}

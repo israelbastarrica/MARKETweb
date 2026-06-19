@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Market</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117; --card-bg: #161b22;
+            --luro-color: #39d353; --peralta-color: #58a6ff;
+            --ticket-color: #f0e68c; --text-main: #c9d1d9; --text-muted: #8b949e;
+            --pause-color: #ff7b72; --btn-bg: #21262d;
+            --proj-color: #87CEEB;
+        }
+
+        body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        .dots-nav { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #30363d; cursor: pointer; transition: all 0.25s ease; }
+        .dot:hover { background: #58a6ff; transform: scale(1.2); }
+        .dot.active { background: #c9d1d9; width: 24px; border-radius: 5px; }
+
+        .progress-rotacion { height: 3px; background: transparent; margin: -8px 0 12px 0; overflow: hidden; }
+        .progress-rotacion-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #39d353, #58a6ff); border-radius: 2px; transition: width 0.1s linear; }
+        .hidden { display: none !important; }
+
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #30363d; padding-bottom: 10px; }
+        .header h1 { margin: 0; font-size: 2.5vw; font-weight: 800; }
+        .controls { display: flex; align-items: center; gap: 15px; }
+        .clock { font-size: 1.4vw; color: var(--text-muted); margin-right: 10px; min-width: 140px; text-align: right; }
+        .btn-control { background-color: var(--btn-bg); color: white; border: 1px solid #30363d; border-radius: 8px; width: 45px; height: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s; }
+        .btn-control:hover { background-color: #30363d; border-color: #8b949e; transform: scale(1.05); }
+        .btn-control:active { transform: scale(0.95); }
+        #btn-pause.paused { background-color: var(--pause-color); border-color: #f85149; box-shadow: 0 0 15px rgba(248, 81, 73, 0.4); }
+
+        .date-picker { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 8px; padding: 5px 10px; font-size: 18px; outline: none; font-family: 'Segoe UI'; height: 33px; }
+        .date-picker::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        .date-group { display: flex; align-items: center; gap: 5px; border-right: 1px solid #30363d; padding-right: 15px; margin-right: 5px; }
+
+        .grid-sales, .grid-cashiers { display: grid; gap: 25px; height: 85vh; }
+        .grid-sales { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }
+        .grid-cashiers { grid-template-columns: 1fr 1fr; }
+        .card { background-color: var(--card-bg); border-radius: 15px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .kpi-card { display: flex; flex-direction: column; align-items: center; border-top: 5px solid transparent; }
+        .kpi-card.luro { border-top-color: var(--luro-color); }
+        .kpi-card.peralta { border-top-color: var(--peralta-color); }
+
+        .kpi-title { font-size: 1.8vw; color: var(--text-muted); text-transform: uppercase; }
+        .kpi-value { font-size: 4.5vw; font-weight: 900; margin-top: 5px; }
+        .kpi-tickets { font-size: 1.8vw; color: var(--ticket-color); font-weight: bold; margin-top: 5px; }
+        .kpi-card.luro .kpi-value { color: var(--luro-color); text-shadow: 0 0 20px rgba(57, 211, 83, 0.4); }
+        .kpi-card.peralta .kpi-value { color: var(--peralta-color); text-shadow: 0 0 20px rgba(88, 166, 255, 0.4); }
+
+        .view-title { text-align: center; font-size: 2.5vw; margin-bottom: 20px; color: #fff; }
+        .list-container { list-style: none; padding: 0; margin: 0; font-size: 2.2vw; }
+        .list-item { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #30363d; }
+        .item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+        .item-value { color: var(--ticket-color); font-weight: bold; }
+
+        .table-container { width: 100%; max-height: 75vh; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 2vw; }
+        th { background-color: #21262d; color: var(--text-muted); padding: 15px; text-align: left; }
+        td { padding: 15px; border-bottom: 1px solid #30363d; }
+        td.qty { color: var(--luro-color); font-weight: bold; text-align: right; }
+
+        .kpi-mini-title { color: var(--text-muted); font-size: 1.2vw; text-transform: uppercase; }
+        .kpi-mini-value { font-size: 2vw; font-weight: bold; margin-top: 5px;}
+        .saldo-pos { color: var(--luro-color); font-weight: bold; }
+        .saldo-neg { color: #ff7b72; font-weight: bold; }
+
+        .cajero-layout { display: flex; flex-direction: column; gap: 20px; height: 85vh; }
+        .kpi-card-cajero { flex: 0 0 auto; padding: 30px; }
+        .chart-cajero { flex: 1; }
+
+        #dashboard-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .view-panel.view-fichadas { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .view-panel.view-fichadas.hidden { display: none !important; }
+        .fichadas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex: 1; min-height: 0; }
+        .fichadas-grid.solo-cajero { grid-template-columns: 1fr; }
+        .local-panel { display: flex; flex-direction: column; gap: 15px; overflow-y: auto; min-height: 0; padding-bottom: 30px; box-sizing: border-box; }
+        .local-panel h3 { margin: 0 0 5px 0; font-size: 1.8vw; text-align: center; }
+        .local-panel.luro h3 { color: var(--luro-color); }
+        .local-panel.peralta h3 { color: var(--peralta-color); }
+        .puesto-section { background-color: #21262d; border-radius: 10px; padding: 12px 15px; }
+        .puesto-title { color: var(--text-muted); font-size: 1vw; text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 1px; }
+        .puesto-title .count { color: var(--text-main); font-weight: bold; }
+        .tags-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .fichada-tag { background-color: #161b22; border: 2px solid #30363d; border-radius: 8px; padding: 8px 12px; min-width: 170px; font-size: 1vw; transition: 0.2s; }
+        .fichada-tag.trabajando { border-color: #39d353; background-color: rgba(57, 211, 83, 0.14); box-shadow: 0 0 12px rgba(57, 211, 83, 0.2); }
+        .fichada-tag.descanso { border-color: #f0c674; background-color: rgba(240, 198, 116, 0.14); box-shadow: 0 0 12px rgba(240, 198, 116, 0.2); }
+        .fichada-tag.ido { border-color: #ff7b72; background-color: rgba(255, 123, 114, 0.10); opacity: 0.8; }
+        .fichada-tag.ido.auto { border-color: #d29922; border-style: dashed; background-color: rgba(210, 153, 34, 0.14); opacity: 0.95; }
+        .fichada-tag.ido.auto .tag-dot { background: #d29922 !important; box-shadow: 0 0 8px #d29922 !important; }
+        .salida-auto { color: #d29922; font-weight: bold; }
+        .tag-nombre { font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+        .tag-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .fichada-tag.trabajando .tag-dot { background: #39d353; box-shadow: 0 0 8px #39d353; }
+        .fichada-tag.descanso .tag-dot { background: #f0c674; box-shadow: 0 0 8px #f0c674; animation: pulse-amber 1.5s infinite; }
+        .fichada-tag.ido .tag-dot { background: #ff7b72; }
+        @keyframes pulse-amber { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .tag-horas { font-size: 0.85vw; color: var(--text-muted); margin-top: 4px; }
+        .tag-horas .desc-now { color: #f0c674; font-weight: bold; }
+        .tag-descansos { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+        .desc-chip { font-size: 0.72vw; color: #f0c674; background: #2a2418; padding: 1px 5px; border-radius: 3px; line-height: 1.4; }
+        .view-cajero .desc-chip { font-size: 0.95vw; }
+        .fichadas-empty { color: var(--text-muted); text-align: center; padding: 40px; font-size: 1.3vw; }
+
+        .view-cajero .fichada-tag { font-size: 1.4vw; min-width: 240px; padding: 12px 16px; }
+        .view-cajero .tag-horas { font-size: 1.1vw; }
+        .view-cajero .puesto-title { font-size: 1.3vw; }
+        .view-cajero .local-panel h3 { font-size: 2.2vw; }
+    </style>
+</head>
+<body>
+
+    <div id="dashboard-content">
+        <div class="header">
+            <h1 id="main-title">⚡ MARKET en vivo</h1>
+            <div class="controls">
+                <div class="date-group">
+                    <button class="btn-control" onclick="cambiarFecha(-1)">&lt;</button>
+                    <input type="date" id="date-picker" class="date-picker" onchange="fechaSeleccionada(this.value)">
+                    <button class="btn-control" onclick="cambiarFecha(1)">&gt;</button>
+                </div>
+                <div class="clock" id="reloj">Actualizando...</div>
+                <div class="dots-nav" id="dots-nav"></div>
+                <button class="btn-control" id="btn-pause" onclick="togglePause()"><span id="icon-pause">&#10074;&#10074;</span></button>
+                <button class="btn-control" id="btn-fullscreen" onclick="toggleFullscreen()" title="Pantalla completa"><span id="icon-fullscreen">&#9974;</span></button>
+            </div>
+        </div>
+        <div class="progress-rotacion"><div class="progress-rotacion-bar" id="progress-rotacion-bar"></div></div>
+
+        <div id="admin-view-0" class="view-panel view-admin">
+            <div class="grid-sales">
+                <div class="card kpi-card luro"><div class="kpi-title">Sucursal Luro</div><div class="kpi-value" id="monto-luro">$ 0</div><div class="kpi-tickets" id="tickets-luro">🎫 0 Tickets</div></div>
+                <div class="card kpi-card peralta"><div class="kpi-title">Sucursal Peralta</div><div class="kpi-value" id="monto-peralta">$ 0</div><div class="kpi-tickets" id="tickets-peralta">🎫 0 Tickets</div></div>
+                <div class="card"><canvas id="chartLuro"></canvas></div><div class="card"><canvas id="chartPeralta"></canvas></div>
+            </div>
+        </div>
+
+        <div id="admin-view-1" class="view-panel view-admin hidden">
+            <h2 class="view-title">🏆 TICKETS POR VENDEDOR</h2>
+            <div class="grid-cashiers">
+                <div class="card"><h2 style="color: var(--luro-color); text-align: center; margin-top: 0;">LURO</h2><div id="list-luro" class="list-container"></div></div>
+                <div class="card"><h2 style="color: var(--peralta-color); text-align: center; margin-top: 0;">PERALTA</h2><div id="list-peralta" class="list-container"></div></div>
+            </div>
+        </div>
+
+        <div id="admin-view-2" class="view-panel view-admin hidden">
+            <h2 class="view-title">🔥 ARTÍCULOS: TOP RECAUDACIÓN (DÍA)</h2>
+            <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 55%;">Descripción del Artículo</th><th style="width: 15%; text-align: center;">Unidades</th><th style="width: 25%; text-align: right;">Recaudación ($)</th></tr></thead><tbody id="table-articles"></tbody></table></div>
+        </div>
+
+        <div id="admin-view-3" class="view-panel view-admin hidden">
+            <h2 class="view-title">📊 RUBROS: VENTAS POR TIPO (DÍA)</h2>
+            <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 55%;">Tipo de Artículo / Rubro</th><th style="width: 15%; text-align: center;">Unidades</th><th style="width: 25%; text-align: right;">Recaudación ($)</th></tr></thead><tbody id="table-tipos-venta"></tbody></table></div>
+        </div>
+
+        <div id="admin-view-4" class="view-panel view-admin hidden">
+            <h2 class="view-title">📦 BALANCE 7 DÍAS: VENTA VS REPOSICIÓN</h2>
+            <div style="display: flex; gap: 20px; margin-bottom: 20px; justify-content: center;">
+                <div class="card" style="flex: 1; text-align: center; border-left: 5px solid var(--luro-color);"><div class="kpi-mini-title">Total Luro (Semanal)</div><div class="kpi-mini-value">Venta: <span style="color: var(--luro-color);" id="7d-venta-luro">0</span> | Repo: <span style="color: #8b949e;" id="7d-repo-luro">0</span></div><div style="font-size: 1.5vw; margin-top: 5px;">Saldo Final: <span id="7d-saldo-luro">0</span></div></div>
+                <div class="card" style="flex: 1; text-align: center; border-left: 5px solid var(--peralta-color);"><div class="kpi-mini-title">Total Peralta (Semanal)</div><div class="kpi-mini-value">Venta: <span style="color: var(--peralta-color);" id="7d-venta-peralta">0</span> | Repo: <span style="color: #8b949e;" id="7d-repo-peralta">0</span></div><div style="font-size: 1.5vw; margin-top: 5px;">Saldo Final: <span id="7d-saldo-peralta">0</span></div></div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 58vh;"><div class="card"><canvas id="chart7Luro"></canvas></div><div class="card"><canvas id="chart7Peralta"></canvas></div></div>
+        </div>
+
+        <div id="admin-view-5" class="view-panel view-admin hidden">
+            <h2 class="view-title">⚖️ RUBROS: VENTA VS REPO (7 DÍAS)</h2>
+            <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 50%;">Tipo de Artículo / Rubro</th><th style="width: 15%; text-align: center;">Venta</th><th style="width: 15%; text-align: center;">Repo</th><th style="width: 15%; text-align: right;">Diferencia</th></tr></thead><tbody id="table-tipos-balance"></tbody></table></div>
+        </div>
+
+        <div id="admin-view-6" class="view-panel view-admin view-fichadas hidden">
+            <h2 class="view-title">⏱ FICHADAS DEL DÍA</h2>
+            <div class="fichadas-grid">
+                <div class="card local-panel luro">
+                    <h3>🏪 LURO</h3>
+                    <div id="fichadas-luro"></div>
+                </div>
+                <div class="card local-panel peralta">
+                    <h3>🏪 PERALTA</h3>
+                    <div id="fichadas-peralta"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="cajero-view-0" class="view-panel view-cajero hidden">
+            <div class="cajero-layout">
+                <div class="card kpi-card kpi-card-cajero" id="cajero-kpi-border">
+                    <div class="kpi-title" id="cajero-local-nombre">Mi Sucursal</div>
+                    <div class="kpi-value" id="cajero-kpi-prendas">0 Prendas</div>
+                    <div class="kpi-tickets" id="cajero-kpi-tickets">🎫 0 Tickets</div>
+                </div>
+                <div class="card chart-cajero"><canvas id="chartCajero"></canvas></div>
+            </div>
+        </div>
+
+        <div id="cajero-view-1" class="view-panel view-cajero hidden">
+            <h2 class="view-title">🏆 RANKING DE CAJEROS (<span id="cajero-ranking-local"></span>)</h2>
+            <div class="card" style="height: 75vh; overflow: hidden; padding-top: 40px;">
+                <div id="list-cajero-ranking" class="list-container" style="max-width: 800px; margin: 0 auto;"></div>
+            </div>
+        </div>
+
+        <div id="cajero-view-2" class="view-panel view-cajero view-fichadas hidden">
+            <h2 class="view-title">⏱ FICHADAS DEL DÍA - <span id="fichadas-cajero-titulo"></span></h2>
+            <div class="fichadas-grid solo-cajero">
+                <div class="card local-panel" id="fichadas-cajero-panel">
+                    <div id="fichadas-cajero"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Endpoints de la API MarketWeb. La auth es por cookie (Google SSO); si no hay
+        // sesión válida la API responde 401 y mandamos al usuario al login de la app.
+        const API_VENTAS = '/api/dashboard/ventas';
+        const API_FICHADAS = '/api/dashboard/fichadas';
+
+        let dataGlobal = null;
+        let dataFichadas = null;
+        let graficoLuro = null, graficoPeralta = null, grafico7Luro = null, grafico7Peralta = null;
+        let graficoCajero = null;
+
+        let rolUsuario = null;
+        let vistaActual = 0;
+        let totalVistas = 0;
+        let isPaused = false;
+        let fetchInterval = null;
+        let rotarInterval = null;
+        let progressInterval = null;
+        let progressValue = 0;
+        const ROTACION_MS = 60000;
+        const PROGRESS_TICK_MS = 100;
+        let fechaFiltro = new Date();
+
+        // Formato AR: separador de miles, sin decimales (cantidades e importes).
+        const nf = (n) => Math.round(Number(n || 0)).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+
+        function noAutorizado() {
+            clearInterval(fetchInterval); clearInterval(rotarInterval);
+            // El iframe vive dentro de la app Blazor: mandamos toda la página al inicio.
+            (window.top || window).location.href = '/';
+        }
+
+        function getFechaSQL(d) { return d.getFullYear() + (d.getMonth() + 1).toString().padStart(2, '0') + d.getDate().toString().padStart(2, '0'); }
+        function getFechaInput(d) { return d.getFullYear() + '-' + (d.getMonth() + 1).toString().padStart(2, '0') + '-' + d.getDate().toString().padStart(2, '0'); }
+
+        function actualizarTitulo() {
+            const esHoy = (fechaFiltro.getDate() === new Date().getDate() && fechaFiltro.getMonth() === new Date().getMonth() && fechaFiltro.getFullYear() === new Date().getFullYear());
+            let titulo = esHoy ? '⚡ MARKET en vivo' : '⚡ MARKET';
+            if(rolUsuario === 'cajero' && dataGlobal && dataGlobal.local) {
+                titulo += ' - ' + dataGlobal.local;
+            }
+            document.getElementById('main-title').innerText = titulo;
+        }
+
+        function cambiarFecha(dias) {
+            fechaFiltro.setDate(fechaFiltro.getDate() + dias);
+            document.getElementById('date-picker').value = getFechaInput(fechaFiltro);
+            document.getElementById('reloj').innerText = 'Cargando fecha...';
+            actualizarTitulo(); fetchData();
+        }
+
+        function fechaSeleccionada(val) {
+            if (!val) return;
+            let parts = val.split('-'); fechaFiltro = new Date(parts[0], parts[1] - 1, parts[2]);
+            document.getElementById('reloj').innerText = 'Cargando fecha...';
+            actualizarTitulo(); fetchData();
+        }
+
+        Chart.defaults.color = '#8b949e'; Chart.defaults.font.size = 16;
+
+        function initGraficoVentas(id, color, tit) {
+            return new Chart(document.getElementById(id).getContext('2d'), {
+                data: { labels: [], datasets: [
+                    { type: 'line', label: 'Tickets Reales', data: [], borderColor: '#f0e68c', borderWidth: 4, tension: 0.4, yAxisID: 'yT' },
+                    { type: 'line', label: 'Proyección Tickets', data: [], borderColor: '#87CEEB', borderWidth: 3, borderDash: [6, 4], tension: 0.4, yAxisID: 'yT' },
+                    { type: 'bar', label: 'Monto ($)', data: [], backgroundColor: color + '80', borderColor: color, borderWidth: 2, borderRadius: 6, yAxisID: 'yM' }
+                ]},
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: true, labels: { color: '#fff' } }, title: { display: true, text: tit, color: '#c9d1d9', font: { size: 20 } } },
+                    scales: {
+                        yM: { position: 'left', grid: { color: '#30363d' }, ticks: { callback: v => '$ ' + (v/1000).toFixed(0) + 'k' } },
+                        yT: { position: 'right', grid: { display: false }, ticks: { color: '#f0e68c', stepSize: 5 } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function initGraficoSemana(id, colorV, tit) {
+            return new Chart(document.getElementById(id).getContext('2d'), {
+                data: { labels: [], datasets: [{ type: 'line', label: 'Tendencia Stock', data: [], borderColor: '#f0e68c', borderWidth: 4, tension: 0.3, fill: false }, { type: 'bar', label: 'Venta', data: [], backgroundColor: colorV, borderRadius: 4 }, { type: 'bar', label: 'Repo', data: [], backgroundColor: '#6e7681', borderRadius: 4 }]},
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#c9d1d9', font: { size: 16 } } }, title: { display: true, text: tit, color: '#c9d1d9', font: { size: 22 } } },
+                scales: { y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } }, x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 18 } } } } }
+            });
+        }
+
+        function initGraficoCajero(id, color, tit) {
+            return new Chart(document.getElementById(id).getContext('2d'), {
+                data: { labels: [], datasets: [
+                    { type: 'line', label: 'Tickets Reales', data: [], borderColor: '#f0e68c', borderWidth: 4, tension: 0.4, yAxisID: 'yT' },
+                    { type: 'line', label: 'Proyección Tickets', data: [], borderColor: '#87CEEB', borderWidth: 3, borderDash: [6, 4], tension: 0.4, yAxisID: 'yT' },
+                    { type: 'bar', label: 'Prendas', data: [], backgroundColor: color + '80', borderColor: color, borderWidth: 2, borderRadius: 6, yAxisID: 'yP' }
+                ]},
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#fff' } }, title: { display: true, text: tit, color: '#c9d1d9', font: { size: 20 } } },
+                scales: {
+                    yP: { position: 'left', grid: { color: '#30363d' }, ticks: { color: color, callback: v => v + ' u.' } },
+                    yT: { position: 'right', grid: { display: false }, ticks: { color: '#f0e68c', stepSize: 5 } },
+                    x: { grid: { display: false } }
+                } }
+            });
+        }
+
+        async function fetchData() {
+            try {
+                const fechaQS = '?fecha=' + getFechaSQL(fechaFiltro);
+                const [respVentas, respFichadas] = await Promise.all([
+                    fetch(API_VENTAS + fechaQS),
+                    fetch(API_FICHADAS + fechaQS)
+                ]);
+
+                if (respVentas.status === 401) { noAutorizado(); return; }
+
+                dataGlobal = await respVentas.json();
+                dataFichadas = respFichadas.ok ? await respFichadas.json() : null;
+                rolUsuario = dataGlobal.role;
+                actualizarTitulo();
+
+                if (!isPaused) document.getElementById('reloj').innerText = 'Act: ' + new Date().toLocaleTimeString();
+
+                if (rolUsuario === 'admin') {
+                    totalVistas = 7;
+                    updateAdmin();
+                    updateFichadasAdmin();
+                } else if (rolUsuario === 'cajero') {
+                    totalVistas = 3;
+                    updateCajero();
+                    updateFichadasCajero();
+                }
+                renderDots();
+            } catch (e) { document.getElementById('reloj').innerText = 'Error conexión'; }
+        }
+
+        const ORDEN_PUESTOS = [
+            'lider de tienda',
+            'responsable de caja',
+            'cajero',
+            'repositor',
+            'auxiliar de sal',
+            'recepcionista',
+            'maestranza'
+        ];
+        function prioridadPuesto(nombre) {
+            const n = (nombre || '').toLowerCase();
+            for (let i = 0; i < ORDEN_PUESTOS.length; i++) {
+                if (n.includes(ORDEN_PUESTOS[i])) return i;
+            }
+            return 99;
+        }
+
+        function renderPuestos(containerId, puestosData) {
+            const el = document.getElementById(containerId);
+            if (!puestosData || Object.keys(puestosData).length === 0) {
+                el.innerHTML = '<div class="fichadas-empty">Sin fichadas hoy</div>';
+                return;
+            }
+            const puestosOrden = Object.keys(puestosData).sort((a, b) => {
+                const pa = prioridadPuesto(a), pb = prioridadPuesto(b);
+                return pa !== pb ? pa - pb : a.localeCompare(b);
+            });
+            el.innerHTML = puestosOrden.map(puesto => {
+                const legajos = puestosData[puesto];
+                const tags = legajos.map(l => {
+                    let horas;
+                    if (l.estado === 'descanso') {
+                        horas = `${l.ingreso || '--'} → <span class="desc-now">⏸ descanso ${l.inicio_descanso || ''}</span>`;
+                    } else if (l.estado === 'ido') {
+                        let salidaTxt;
+                        if (l.sin_salida) {
+                            salidaTxt = '<span class="salida-auto" title="No fichó salida">sin salida ⚠</span>';
+                        } else if (l.salida_auto) {
+                            salidaTxt = `<span class="salida-auto" title="Cierre automático – no fichó salida">${l.salida || '--'} ⚠</span>`;
+                        } else {
+                            salidaTxt = l.salida || '--';
+                        }
+                        horas = `${l.ingreso || '--'} → ${salidaTxt}`;
+                    } else {
+                        horas = `${l.ingreso || '--'} → trabajando`;
+                    }
+                    const tagClass = (l.estado === 'ido' && (l.salida_auto || l.sin_salida)) ? 'ido auto' : l.estado;
+                    let descansosHtml = '';
+                    if (l.descansos && l.descansos.length > 0) {
+                        descansosHtml = '<div class="tag-descansos">' + l.descansos.map(d => {
+                            const min = d.minutos != null ? ` ${d.minutos}m` : '';
+                            return `<span class="desc-chip">⏸ ${d.inicio}–${d.fin}${min}</span>`;
+                        }).join('') + '</div>';
+                    }
+                    return `<div class="fichada-tag ${tagClass}" title="${l.nombre}">
+                        <div class="tag-nombre"><span class="tag-dot"></span>${l.nombre}</div>
+                        <div class="tag-horas">${horas}</div>
+                        ${descansosHtml}
+                    </div>`;
+                }).join('');
+                return `<div class="puesto-section">
+                    <div class="puesto-title">${puesto} <span class="count">(${legajos.length})</span></div>
+                    <div class="tags-row">${tags}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function updateFichadasAdmin() {
+            if (!dataFichadas || !dataFichadas.fichadas) return;
+            renderPuestos('fichadas-luro', dataFichadas.fichadas.LURO);
+            renderPuestos('fichadas-peralta', dataFichadas.fichadas.PERALTA);
+        }
+
+        function updateFichadasCajero() {
+            if (!dataFichadas || !dataFichadas.fichadas) return;
+            const loc = dataFichadas.local;
+            document.getElementById('fichadas-cajero-titulo').innerText = loc;
+            document.getElementById('fichadas-cajero-titulo').style.color = (loc === 'LURO') ? '#39d353' : '#58a6ff';
+            renderPuestos('fichadas-cajero', dataFichadas.fichadas[loc]);
+        }
+
+        function updateAdmin() {
+            document.querySelectorAll('.view-cajero').forEach(el => el.classList.add('hidden'));
+            if(document.querySelectorAll('.view-admin:not(.hidden)').length === 0) {
+                document.getElementById('admin-view-0').classList.remove('hidden');
+            }
+
+            document.getElementById('monto-luro').innerText = '$ ' + nf(dataGlobal.totales_dia.LURO.monto);
+            document.getElementById('tickets-luro').innerText = '🎫 ' + dataGlobal.totales_dia.LURO.tickets + ' Tickets';
+            document.getElementById('monto-peralta').innerText = '$ ' + nf(dataGlobal.totales_dia.PERALTA.monto);
+            document.getElementById('tickets-peralta').innerText = '🎫 ' + dataGlobal.totales_dia.PERALTA.tickets + ' Tickets';
+
+            const updV = (c, d) => {
+                const h = Object.keys(d).sort();
+                c.data.labels = h.map(x => x+':00');
+                c.data.datasets[0].data = h.map(x => d[x].tickets);
+                c.data.datasets[1].data = h.map(x => d[x].proyeccion || 0);
+                c.data.datasets[2].data = h.map(x => d[x].monto);
+                c.update();
+            };
+            updV(graficoLuro, dataGlobal.por_hora.LURO);
+            updV(graficoPeralta, dataGlobal.por_hora.PERALTA);
+
+            const renderC = (id, loc) => { document.getElementById(id).innerHTML = Object.entries(dataGlobal.por_cajero[loc]).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([n,v], i) => `<div class="list-item"><span class="item-name">${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}${n}</span><span class="item-value">${v} Tks</span></div>`).join(''); };
+            renderC('list-luro', 'LURO'); renderC('list-peralta', 'PERALTA');
+
+            document.getElementById('table-articles').innerHTML = dataGlobal.top_articulos.map((a, i) => `<tr><td>${i+1}</td><td>${a.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(a.cantidad)}</td><td class="qty">$ ${nf(a.monto)}</td></tr>`).join('');
+            document.getElementById('table-tipos-venta').innerHTML = dataGlobal.top_tipos_venta.map((t, i) => `<tr><td>${i+1}</td><td>${t.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(t.cantidad)}</td><td class="qty">$ ${nf(t.monto)}</td></tr>`).join('');
+
+            const l7 = dataGlobal.totales_7_dias.LURO;
+            document.getElementById('7d-venta-luro').innerText = nf(l7.venta); document.getElementById('7d-repo-luro').innerText = nf(l7.reposicion);
+            document.getElementById('7d-saldo-luro').innerText = (l7.saldo_final > 0 ? '+' : '') + nf(l7.saldo_final); document.getElementById('7d-saldo-luro').className = l7.saldo_final >= 0 ? 'saldo-pos' : 'saldo-neg';
+
+            const p7 = dataGlobal.totales_7_dias.PERALTA;
+            document.getElementById('7d-venta-peralta').innerText = nf(p7.venta); document.getElementById('7d-repo-peralta').innerText = nf(p7.reposicion);
+            document.getElementById('7d-saldo-peralta').innerText = (p7.saldo_final > 0 ? '+' : '') + nf(p7.saldo_final); document.getElementById('7d-saldo-peralta').className = p7.saldo_final >= 0 ? 'saldo-pos' : 'saldo-neg';
+
+            const updS = (c, d) => { const keys = Object.keys(d); c.data.labels = keys; c.data.datasets[0].data = keys.map(k => d[k].saldo_acumulado); c.data.datasets[1].data = keys.map(k => d[k].venta); c.data.datasets[2].data = keys.map(k => d[k].reposicion); c.update(); };
+            updS(grafico7Luro, dataGlobal.ultimos_7_dias.LURO); updS(grafico7Peralta, dataGlobal.ultimos_7_dias.PERALTA);
+
+            document.getElementById('table-tipos-balance').innerHTML = dataGlobal.top_tipos_balance.map((t, i) => { let saldo = t.reposicion - t.venta; let cS = saldo >= 0 ? 'saldo-pos' : 'saldo-neg'; return `<tr><td>${i+1}</td><td>${t.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(t.venta)}</td><td style="text-align:center; color: #58a6ff;">${nf(t.reposicion)}</td><td style="text-align:right;" class="${cS}">${saldo>0?'+':''}${nf(saldo)}</td></tr>`; }).join('');
+        }
+
+        function updateCajero() {
+            document.querySelectorAll('.view-admin').forEach(el => el.classList.add('hidden'));
+            if(document.querySelectorAll('.view-cajero:not(.hidden)').length === 0) {
+                document.getElementById('cajero-view-0').classList.remove('hidden');
+            }
+
+            const d = dataGlobal;
+            const esLuro = d.local === 'LURO';
+            const colorHex = esLuro ? '#39d353' : '#58a6ff';
+
+            document.getElementById('cajero-local-nombre').innerText = 'Sucursal ' + d.local;
+            document.getElementById('cajero-kpi-border').style.borderTopColor = colorHex;
+            document.getElementById('cajero-kpi-prendas').innerText = nf(d.totales_dia.prendas) + ' Prendas';
+            document.getElementById('cajero-kpi-prendas').style.color = colorHex;
+            document.getElementById('cajero-kpi-tickets').innerText = '🎫 ' + d.totales_dia.tickets + ' Tickets';
+
+            if(!graficoCajero) graficoCajero = initGraficoCajero('chartCajero', colorHex, 'Unidades Vendidas por Hora');
+
+            const h = Object.keys(d.por_hora).sort();
+            graficoCajero.data.labels = h.map(x => x+':00');
+            graficoCajero.data.datasets[0].data = h.map(x => d.por_hora[x].tickets);
+            graficoCajero.data.datasets[1].data = h.map(x => d.por_hora[x].proyeccion || 0);
+            graficoCajero.data.datasets[2].data = h.map(x => d.por_hora[x].prendas);
+
+            graficoCajero.data.datasets[2].backgroundColor = colorHex + '80';
+            graficoCajero.data.datasets[2].borderColor = colorHex;
+            graficoCajero.update();
+
+            document.getElementById('cajero-ranking-local').innerText = d.local;
+            document.getElementById('cajero-ranking-local').style.color = colorHex;
+
+            document.getElementById('list-cajero-ranking').innerHTML = Object.entries(d.por_cajero).sort((a,b)=>b[1]-a[1]).map(([n,v], i) =>
+                `<div class="list-item" style="font-size: 2.5vw;"><span class="item-name">${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}${n}</span><span class="item-value">${v} Tks</span></div>`
+            ).join('');
+        }
+
+        function renderDots() {
+            const cont = document.getElementById('dots-nav');
+            let html = '';
+            for (let i = 0; i < totalVistas; i++) {
+                html += `<div class="dot${i === vistaActual ? ' active' : ''}" onclick="irAVista(${i})"></div>`;
+            }
+            cont.innerHTML = html;
+        }
+
+        function tickProgress() {
+            progressValue += (PROGRESS_TICK_MS / ROTACION_MS) * 100;
+            if (progressValue > 100) progressValue = 100;
+            const bar = document.getElementById('progress-rotacion-bar');
+            if (bar) bar.style.width = progressValue + '%';
+        }
+
+        function resetProgress() {
+            clearInterval(progressInterval);
+            progressValue = 0;
+            const bar = document.getElementById('progress-rotacion-bar');
+            if (bar) bar.style.width = '0%';
+            if (!isPaused) progressInterval = setInterval(tickProgress, PROGRESS_TICK_MS);
+        }
+
+        function pauseProgress() {
+            clearInterval(progressInterval);
+            progressInterval = null;
+        }
+
+        function irAVista(idx) {
+            if (totalVistas === 0) return;
+            if (idx < 0) idx = totalVistas - 1;
+            if (idx >= totalVistas) idx = 0;
+            if (idx === vistaActual) return;
+            const claseActiva = rolUsuario === 'admin' ? '.view-admin' : '.view-cajero';
+            const paneles = document.querySelectorAll(claseActiva);
+            paneles[vistaActual].classList.add('hidden');
+            vistaActual = idx;
+            paneles[vistaActual].classList.remove('hidden');
+            renderDots();
+            resetProgress();
+            if (!isPaused) {
+                clearInterval(rotarInterval);
+                rotarInterval = setInterval(() => cambiarVista(1), ROTACION_MS);
+            }
+        }
+
+        function cambiarVista(sentido) {
+            irAVista(vistaActual + sentido);
+        }
+
+        function toggleFullscreen() {
+            const icon = document.getElementById('icon-fullscreen');
+            if (!document.fullscreenElement) {
+                // El iframe tiene allowfullscreen → poner en pantalla completa su documento.
+                (document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : Promise.reject())
+                    .catch(() => {});
+            } else {
+                document.exitFullscreen && document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            const icon = document.getElementById('icon-fullscreen');
+            // ⛶ entrar / ⤡ salir
+            if (icon) icon.innerHTML = document.fullscreenElement ? '&#10530;' : '&#9974;';
+        });
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = document.getElementById('btn-pause'), icon = document.getElementById('icon-pause');
+            if (isPaused) {
+                clearInterval(fetchInterval); clearInterval(rotarInterval);
+                pauseProgress();
+                btn.classList.add('paused'); icon.innerHTML = '&#9654;'; document.getElementById('reloj').innerText = 'PAUSADO';
+            } else {
+                startTimers(); btn.classList.remove('paused'); icon.innerHTML = '&#10074;&#10074;'; fetchData();
+            }
+        }
+
+        function startTimers() {
+            clearInterval(fetchInterval); clearInterval(rotarInterval);
+            fetchInterval = setInterval(fetchData, 20000);
+            rotarInterval = setInterval(() => cambiarVista(1), ROTACION_MS);
+            resetProgress();
+        }
+
+        function arrancarDashboard() {
+            document.getElementById('date-picker').value = getFechaInput(fechaFiltro);
+            actualizarTitulo();
+
+            if(!graficoLuro) {
+                graficoLuro = initGraficoVentas('chartLuro', '#39d353', 'Ventas LURO');
+                graficoPeralta = initGraficoVentas('chartPeralta', '#58a6ff', 'Ventas PERALTA');
+                grafico7Luro = initGraficoSemana('chart7Luro', '#39d353', 'Flujo Semanal LURO');
+                grafico7Peralta = initGraficoSemana('chart7Peralta', '#58a6ff', 'Flujo Semanal PERALTA');
+            }
+
+            fetchData();
+            startTimers();
+        }
+
+        window.onload = arrancarDashboard;
+    </script>
+</body>
+</html>

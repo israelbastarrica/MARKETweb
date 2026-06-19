@@ -1,0 +1,6 @@
+@MarketWeb.Api_HostAddress = http://localhost:5062
+
+GET {{MarketWeb.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,221 @@
+@page "/insumos/pedidos"
+@inject InsumosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Insumos · Pedidos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Insumos" Titulo="Pedidos" Icono="fa-solid fa-boxes-stacked" />
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Ubicación</label>
+            <select class="form-select" style="min-width: 220px" @bind="_ubicacionSel" @bind:after="Cargar" disabled="@_ubicacionFija">
+                <option value="0">TODOS</option>
+                <option value="-1">LOCALES</option>
+                @foreach (var u in _ubicaciones)
+                {
+                    <option value="@u.Id">@u.Descripcion</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Estado</label>
+            <select class="form-select" style="min-width: 160px" @bind="_estado" @bind:after="Cargar">
+                <option value="SIN ENVIAR">SIN ENVIAR</option>
+                <option value="ENVIADOS">ENVIADOS</option>
+                <option value="TODOS">TODOS</option>
+            </select>
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="Cargar">
+            <i class="fa-solid fa-rotate me-1"></i> Actualizar
+        </button>
+        @if (_puedeABM)
+        {
+            <button class="btn btn-primary" @onclick="NuevoPedido" title="Crear un pedido nuevo">
+                <i class="fa-solid fa-plus me-1"></i> Nuevo pedido
+            </button>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_pedidos.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-box-open"></i>
+            <p>No se encontraron pedidos de insumos.</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Ubicación</th>
+                        <th class="text-end" style="width: 110px">Nro. Pedido</th>
+                        <th>Estado</th>
+                        <th class="text-end" style="width: 80px">Art.</th>
+                        <th class="text-end" style="width: 90px">Cantidad</th>
+                        <th class="text-end" style="width: 90px">Art. Env.</th>
+                        <th class="text-end" style="width: 100px">Cant. Env.</th>
+                        @if (_puedeABM)
+                        {
+                            <th class="text-center" style="width: 96px">Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _pedidos)
+                    {
+                        <tr class="@(p.Enviado ? "fila-enviado" : null)">
+                            <td>@p.Ubicacion</td>
+                            <td class="text-end">@p.NroPedido</td>
+                            <td>@p.Estado</td>
+                            <td class="text-end">@Fmt.Miles(p.CantArt)</td>
+                            <td class="text-end">@Fmt.Miles(p.CantidadTotal)</td>
+                            <td class="text-end">@Fmt.Miles(p.CantArtEnviada)</td>
+                            <td class="text-end">@Fmt.Miles(p.CantidadTotalEnviada)</td>
+                            @if (_puedeABM)
+                            {
+                                <td class="text-center acciones">
+                                    <button class="btn btn-sm btn-outline-secondary" title="@(p.Cerrado ? "Ver" : "Abrir / Modificar")"
+                                            @onclick="() => Abrir(p)">
+                                        <i class="fa-solid @(p.Cerrado ? "fa-eye" : "fa-pen")"></i>
+                                    </button>
+                                    @if (!p.Cerrado)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(p)">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_pedidos.Count pedido(s).</p>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<UbicacionDto> _ubicaciones = new();
+    private List<PedidoInsumoDto> _pedidos = new();
+    private int _ubicacionSel = 0;
+    private string _estado = "SIN ENVIAR";
+    private bool _cargando = true;
+    private string? _error;
+
+    private string _perfil = "";
+    private bool _puedeABM;          // LURO/PERALTA/ADMIN pueden ABM
+    private bool _ubicacionFija;     // local con ubicación bloqueada
+    private int _idLocalPedir;       // local con el que se crea un pedido (2/3)
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+            _perfil = (await AuthState).User.FindFirst("perfil")?.Value ?? "";
+
+        try { _ubicaciones = await Api.ListarUbicacionesAsync(); }
+        catch { _ubicaciones = new(); }
+
+        // Perfil → local. LURO=2, PERALTA=3 (fijan su ubicación). ADMIN puede elegir.
+        var esLuro = string.Equals(_perfil, "LURO", StringComparison.OrdinalIgnoreCase);
+        var esPeralta = string.Equals(_perfil, "PERALTA", StringComparison.OrdinalIgnoreCase);
+        var esAdmin = string.Equals(_perfil, "ADMIN", StringComparison.OrdinalIgnoreCase);
+        _puedeABM = esLuro || esPeralta || esAdmin;
+
+        if (esLuro) { _ubicacionSel = 2; _ubicacionFija = true; _idLocalPedir = 2; }
+        else if (esPeralta) { _ubicacionSel = 3; _ubicacionFija = true; _idLocalPedir = 3; }
+        // ADMIN: arranca en TODOS; _idLocalPedir se setea si elige un local concreto.
+
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        _error = null;
+        // ADMIN: si el filtro es un local concreto (2/3), ese es con el que puede pedir.
+        if (!_ubicacionFija)
+            _idLocalPedir = (_ubicacionSel == 2 || _ubicacionSel == 3) ? _ubicacionSel : 0;
+        try
+        {
+            int? ubic = _ubicacionSel == 0 ? null : _ubicacionSel;
+            _pedidos = await Api.ListarPedidosAsync(ubic, _estado);
+        }
+        catch (Exception ex)
+        {
+            _pedidos = new();
+            _error = "No se pudieron cargar los pedidos. Verificá la conexión a la base de datos.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task NuevoPedido()
+    {
+        if (_idLocalPedir == 0)
+        {
+            await JS.InvokeVoidAsync("alert", "Elegí un local (LURO o PERALTA) en el filtro de Ubicación para crear el pedido.");
+            return;
+        }
+        try
+        {
+            var val = await Api.ValidarFechaAsync(_idLocalPedir);
+            if (val.Resultado == "BLOQUEADO")
+            {
+                await JS.InvokeVoidAsync("alert", $"{val.Titulo}\n\n{val.Mensaje}");
+                return;
+            }
+            if (val.Resultado == "AVISO")
+            {
+                // Igual que el "Entendido" de la app Android: informa y deja pasar.
+                await JS.InvokeVoidAsync("alert", $"{val.Titulo}\n\n{val.Mensaje}");
+            }
+            // No se crea nada en la base todavía: se arma en el editor y se persiste recién al Guardar.
+            Nav.NavigateTo($"/insumos/pedidos/0?local={_idLocalPedir}");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", ex.Message);
+        }
+    }
+
+    private void Abrir(PedidoInsumoDto p) => Nav.NavigateTo($"/insumos/pedidos/{p.Id}");
+
+    private async Task Eliminar(PedidoInsumoDto p)
+    {
+        // El local puede eliminar mientras DEPÓSITO no lo haya tomado (impreso/enviado).
+        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el pedido N° {p.NroPedido}?");
+        if (!ok) return;
+        try
+        {
+            var borrado = await Api.EliminarPedidoAsync(p.Id);
+            if (!borrado)
+                await JS.InvokeVoidAsync("alert", "El pedido ya fue tomado por Depósito (en armado/enviado): cerrado para el local.");
+            await Cargar();
+        }
+        catch (Exception ex) { Console.Error.WriteLine(ex); }
+    }
+}

@@ -1,0 +1,53 @@
+.market-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+.market-content {
+    flex: 1;
+    min-width: 0;
+    padding: 1.5rem 2rem;
+    background: #f8f7f3;
+}
+
+.market-topbar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.market-burger {
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    border: 1px solid #e6e4dd;
+    background: #fff;
+    color: #555;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+    transition: background .12s ease, color .12s ease;
+}
+
+.market-burger:hover {
+    background: #faf9f6;
+    color: #1f2430;
+}
+
+/* Colapsado: el menú se oculta y el contenido toma todo el ancho. */
+.market-shell.colapsado ::deep .market-sidebar {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .market-shell {
+        flex-direction: column;
+    }
+
+    .market-content {
+        padding: 1rem;
+    }
+}

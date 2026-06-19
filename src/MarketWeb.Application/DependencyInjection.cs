@@ -1,0 +1,49 @@
+using MarketWeb.Application.Articulos;
+using MarketWeb.Application.Costos;
+using MarketWeb.Application.Dashboard;
+using MarketWeb.Application.Data;
+using MarketWeb.Application.Despachos;
+using MarketWeb.Application.Insumos;
+using MarketWeb.Application.Locales;
+using MarketWeb.Application.LogisticaDashboard;
+using MarketWeb.Application.Mapeo;
+using MarketWeb.Application.Palets;
+using MarketWeb.Application.RemitoImpresion;
+using MarketWeb.Application.TiposLocal;
+using MarketWeb.Application.UsuariosPc;
+using MarketWeb.Application.Ventas;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace MarketWeb.Application;
+
+/// <summary>
+/// Registro de la capa de aplicación. Cada feature nuevo agrega aquí su servicio.
+/// </summary>
+public static class DependencyInjection
+{
+    public static IServiceCollection AddMarketApplication(this IServiceCollection services)
+    {
+        services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
+
+        // --- Features ---
+        services.AddScoped<ILocalesService, LocalesService>();
+        services.AddScoped<ITiposLocalService, TiposLocalService>();
+        services.AddScoped<IUsuariosPcService, UsuariosPcService>();
+        services.AddScoped<IInsumosService, InsumosService>();
+        services.AddScoped<ICostosService, CostosService>();
+        services.AddScoped<IVentasService, VentasService>();
+        services.AddScoped<IArticulosService, ArticulosService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IMapeoService, MapeoService>();
+        services.AddScoped<IDespachosService, DespachosService>();
+        services.AddScoped<IRemitoImpresionService, RemitoImpresionService>();
+        services.AddScoped<IPaletsService, PaletsService>();
+        services.AddSingleton<EstancadosCache>();
+        services.AddSingleton<BackgroundCache<List<MarketWeb.Shared.LogisticaDashboard.ArticuloUbicacionesDto>>>();
+        services.AddSingleton(new BackgroundCache<MarketWeb.Application.LogisticaDashboard.ReposFast> { Ttl = TimeSpan.FromSeconds(60) });
+        services.AddSingleton(new BackgroundCache<Dictionary<string, MarketWeb.Shared.LogisticaDashboard.RepoAbastDto>> { Ttl = TimeSpan.FromHours(1) });
+        services.AddScoped<ILogisticaDashboardService, LogisticaDashboardService>();
+
+        return services;
+    }
+}

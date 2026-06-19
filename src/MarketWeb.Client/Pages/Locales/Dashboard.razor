@@ -1,0 +1,24 @@
+@page "/locales/dashboard"
+
+<PageTitle>Dashboard</PageTitle>
+
+@* El dashboard (port de NoblexTV) es una vista con su propia rotación y auto-refresh.
+   Lo servimos como HTML estático y lo embebemos en un iframe que llena el área de
+   contenido (las medidas vw/vh del dashboard escalan al tamaño del iframe).
+   La API que consume está protegida por la misma cookie de Google SSO. *@
+<iframe src="dashboard.html" class="dashboard-frame" title="Dashboard Market" allow="fullscreen" allowfullscreen></iframe>
+
+<style>
+    .dashboard-frame {
+        display: block;
+        width: 100%;
+        height: calc(100vh - 6rem);
+        border: 0;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(16, 24, 40, .12);
+        background: #0d1117;
+    }
+</style>
+
+@code {
+}

@@ -1,0 +1,249 @@
+@page "/locales/remito-impresion"
+@page "/logistica/remito-impresion"
+@implements IDisposable
+@inject RemitoImpresionApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Remito Impresión</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Locales" Titulo="Remito Impresión" Icono="fa-solid fa-print" />
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Local origen</label>
+                <select class="form-select form-select-sm" @bind="_local" @bind:after="Buscar" disabled="@_localFijo">
+                    @if (!_localFijo) { <option value="TODOS">Todos</option> }
+                    @foreach (var l in _locales) { <option value="@l">@l</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="_desde" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="_hasta" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Estado</label>
+                <select class="form-select form-select-sm" @bind="_estado" @bind:after="Buscar" disabled="@_soloErrores">
+                    <option value="TODOS">Todos</option>
+                    <option value="PENDIENTE">Pendiente</option>
+                    <option value="IMPRESO">Impreso</option>
+                    <option value="ERROR">Error</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="chkErr" @bind="_soloErrores" @bind:after="Buscar" />
+                    <label class="form-check-label small" for="chkErr">Solo errores</label>
+                </div>
+            </div>
+            <div class="col-6 col-md-2 d-flex">
+                <button class="btn btn-primary btn-sm flex-grow-1" @onclick="Buscar">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Buscar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_remitos.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-print"></i><p>No hay remitos en la cola para el período.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 130px">Estado</th>
+                        <th>Nro Remito</th>
+                        <th>Origen</th>
+                        <th>Destino</th>
+                        <th>Emisión</th>
+                        <th>Detectado</th>
+                        <th>Impreso</th>
+                        <th class="text-center">Int.</th>
+                        <th>IP</th>
+                        <th>Error</th>
+                        <th style="width: 120px" class="text-center">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _remitos)
+                    {
+                        <tr class="@FilaClase(r.Estado)">
+                            <td><span class="badge @BadgeClase(r.Estado)">@r.Estado</span></td>
+                            <td class="fw-semibold">@r.NroRemito</td>
+                            <td>@r.LocalOrigen</td>
+                            <td>@r.LocalDestino</td>
+                            <td class="small">@r.FechaEmision.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="small">@r.FechaDetectado.ToString("dd/MM HH:mm:ss")</td>
+                            <td class="small">@(r.FechaImpreso?.ToString("dd/MM HH:mm:ss") ?? "—")</td>
+                            <td class="text-center">@r.Intentos</td>
+                            <td class="small text-muted">@r.IpImpresora</td>
+                            <td class="small text-danger">@r.ErrorMsg</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-primary" title="Reimprimir" disabled="@(_seguimiento.Contains(r.Id))"
+                                        @onclick="() => Reimprimir(r)">
+                                    @if (_seguimiento.Contains(r.Id)) { <i class="fa-solid fa-spinner fa-spin"></i> }
+                                    else { <i class="fa-solid fa-print me-1"></i> }
+                                    Reimprimir
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_remitos.Count remito(s)@(_seguimiento.Count > 0 ? $" · {_seguimiento.Count} en cola..." : "").</p>
+    }
+</div>
+
+<style>
+    tr.fila-imp { }
+    tr.fila-pen { background: #eef4ff !important; }
+    tr.fila-err { background: #fdeaea !important; }
+    .badge-imp { background: #198754; }
+    .badge-pen { background: #0d6efd; }
+    .badge-err { background: #dc3545; }
+</style>
+
+@code {
+    private List<string> _locales = new();
+    private string _local = "TODOS";
+    private bool _localFijo;
+    private DateTime _desde = DateTime.Today.AddDays(-6);
+    private DateTime _hasta = DateTime.Today;
+    private string _estado = "TODOS";
+    private bool _soloErrores;
+
+    private List<RemitoColaDto> _remitos = new();
+    private bool _cargando = true;
+    private string? _error;
+
+    private readonly HashSet<int> _seguimiento = new();
+    private CancellationTokenSource? _pollCts;
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _locales = await Api.ListarLocalesAsync(); }
+        catch (Exception ex) { _error = "No se pudieron cargar los locales."; Console.Error.WriteLine(ex); }
+
+        string? perfil = null;
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            perfil = state.User.FindFirst("perfil")?.Value;
+        }
+        // Local → su origen; LOGISTICA → CENTRAL; ADMIN → combo libre.
+        var scopeName = string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase) ? "CENTRAL" : perfil;
+        var propio = _locales.FirstOrDefault(l => string.Equals(l, scopeName, StringComparison.OrdinalIgnoreCase));
+        if (propio is not null) { _local = propio; _localFijo = true; }
+
+        await Buscar();
+    }
+
+    private async Task Buscar()
+    {
+        _cargando = true; _error = null;
+        try { _remitos = await Api.ListarAsync(_desde, _hasta, _local, _estado, _soloErrores); }
+        catch (Exception ex) { _remitos = new(); _error = "No se pudo cargar la cola de impresión."; Console.Error.WriteLine(ex); }
+        finally { _cargando = false; }
+    }
+
+    private async Task Reimprimir(RemitoColaDto r)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Re-encolar el remito {r.NroRemito} ({r.LocalDestino}) para reimprimir?");
+        if (!confirma) return;
+
+        var ok = await Api.ReimprimirAsync(r.Id);
+        if (!ok) { _error = "No se pudo re-encolar el remito."; return; }
+
+        // Marca visual inmediata + seguimiento en tiempo real.
+        r.Estado = "PENDIENTE";
+        r.Intentos = 0;
+        r.ErrorMsg = null;
+        r.FechaImpreso = null;
+        _seguimiento.Add(r.Id);
+        ArrancarPolling();
+    }
+
+    private void ArrancarPolling()
+    {
+        if (_pollCts is not null) return; // ya corriendo
+        _pollCts = new CancellationTokenSource();
+        _ = PollLoopAsync(_pollCts.Token);
+    }
+
+    private async Task PollLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested && _seguimiento.Count > 0)
+            {
+                await Task.Delay(3000, ct);
+                var estados = await Api.EstadoAsync(_seguimiento.ToArray());
+                foreach (var e in estados)
+                {
+                    var r = _remitos.FirstOrDefault(x => x.Id == e.Id);
+                    if (r is not null)
+                    {
+                        r.Estado = e.Estado;
+                        r.Intentos = e.Intentos;
+                        r.FechaImpreso = e.FechaImpreso;
+                        r.ErrorMsg = e.ErrorMsg;
+                    }
+                    if (!string.Equals(e.Estado, "PENDIENTE", StringComparison.OrdinalIgnoreCase))
+                        _seguimiento.Remove(e.Id);
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Console.Error.WriteLine(ex); }
+        finally
+        {
+            _pollCts?.Dispose();
+            _pollCts = null;
+        }
+    }
+
+    private static string FilaClase(string estado) => estado switch
+    {
+        "PENDIENTE" => "fila-pen",
+        "ERROR" => "fila-err",
+        _ => "fila-imp"
+    };
+
+    private static string BadgeClase(string estado) => estado switch
+    {
+        "PENDIENTE" => "badge-pen",
+        "ERROR" => "badge-err",
+        _ => "badge-imp"
+    };
+
+    public void Dispose()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+    }
+}

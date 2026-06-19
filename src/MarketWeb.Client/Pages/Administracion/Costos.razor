@@ -1,0 +1,217 @@
+@page "/administracion/costos"
+@using System.Globalization
+@inject CostosApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Costos · Margen</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Administración" Titulo="Costos" Icono="fa-solid fa-money-bill" />
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Desde</label>
+            <input type="date" class="form-control" @bind="_desde" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Hasta</label>
+            <input type="date" class="form-control" @bind="_hasta" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" style="min-width: 180px" @bind="_local">
+                <option value="TODOS">TODOS</option>
+                @foreach (var u in _ubicaciones)
+                {
+                    <option value="@u.Descripcion">@u.Descripcion</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Agrupar por</label>
+            <select class="form-select" style="min-width: 110px" @bind="_agrupamiento">
+                <option value="DÍA">DÍA</option>
+                <option value="MES">MES</option>
+                <option value="AÑO">AÑO</option>
+            </select>
+        </div>
+        <div class="form-check ms-1 mb-2">
+            <input class="form-check-input" type="checkbox" id="chkLocal" @bind="_agruparLocal" />
+            <label class="form-check-label" for="chkLocal">Subtotales por local</label>
+        </div>
+        <button class="btn btn-primary" @onclick="Cargar" disabled="@_cargando">
+            @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            Procesar
+        </button>
+        <button class="btn btn-outline-success" @onclick="ExportarExcel" disabled="@(_cargando || _exportando || _filas.Count == 0)">
+            @if (_exportando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            else { <i class="fa-solid fa-file-excel me-1"></i> }
+            Exportar a Excel
+        </button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_filas.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-chart-line"></i>
+            <p>Sin datos para el rango seleccionado. Tocá "Procesar".</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Período</th>
+                        <th>Local</th>
+                        <th class="text-end">Cant. Vend.</th>
+                        <th class="text-end">Total Venta</th>
+                        <th class="text-end">Total Costo</th>
+                        <th class="text-end">Margen ($)</th>
+                        <th class="text-end">Margen (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in _filas)
+                    {
+                        <tr class="@(f.EsSubtotal ? "fila-subtotal" : null) @(f.Margen < 0 ? "texto-rojo" : null)">
+                            <td>@f.Periodo</td>
+                            <td>@f.Local</td>
+                            <td class="text-end">@Cant(f.Cant)</td>
+                            <td class="text-end">@Money(f.Venta)</td>
+                            <td class="text-end">@Money(f.Costo)</td>
+                            <td class="text-end">@Money(f.Margen)</td>
+                            <td class="text-end">@Pct(f.MargenPorc)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<UbicacionDto> _ubicaciones = new();
+    private List<Fila> _filas = new();
+    private DateTime _desde = DateTime.Today.AddDays(-7);
+    private DateTime _hasta = DateTime.Today;
+    private string _local = "TODOS";
+    private string _agrupamiento = "DÍA";
+    private bool _agruparLocal;
+    private bool _cargando;
+    private bool _exportando;
+    private string? _error;
+
+    private sealed record Fila(string Periodo, string Local, decimal Cant, decimal Venta,
+        decimal Costo, decimal Margen, decimal MargenPorc, bool EsSubtotal);
+
+    private static readonly NumberFormatInfo Ar = new()
+    {
+        NumberGroupSeparator = ".",
+        NumberDecimalSeparator = ",",
+        NumberGroupSizes = new[] { 3 }
+    };
+
+    private static string Money(decimal d) => "$ " + d.ToString("#,##0.00", Ar);
+    private static string Cant(decimal d) => d.ToString("#,##0", Ar);
+    private static string Pct(decimal d) => d.ToString("#,##0.00", Ar) + " %";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _ubicaciones = await Api.ListarUbicacionesAsync(); }
+        catch { _ubicaciones = new(); }
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            var datos = await Api.ListarMargenAsync(_desde, _hasta, _local, _agrupamiento);
+            _filas = _agruparLocal ? ConSubtotales(datos) : datos.Select(ToFila).ToList();
+        }
+        catch (Exception ex)
+        {
+            _filas = new();
+            _error = "No se pudo generar el reporte. Verificá la conexión / el SP sp_ConsultaMargenVentas.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task ExportarExcel()
+    {
+        _exportando = true;
+        try
+        {
+            var bytes = await Api.ExportarMargenExcelAsync(_desde, _hasta, _local, _agrupamiento);
+            var nombre = $"Costos_Margen_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx";
+            await JS.InvokeVoidAsync("descargarArchivo", nombre, Convert.ToBase64String(bytes),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+        catch (Exception ex)
+        {
+            _error = "No se pudo exportar el Excel.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _exportando = false;
+        }
+    }
+
+    private static Fila ToFila(CostoMargenDto d)
+        => new(d.Periodo, d.Local, d.CantidadVendida, d.TotalFacturado, d.TotalCosto, d.MargenDinero, d.MargenPorcentaje, false);
+
+    // Replica el "Agrupar por Local" del desktop: ordena por local+período e
+    // intercala una fila de subtotal por cada local.
+    private static List<Fila> ConSubtotales(List<CostoMargenDto> datos)
+    {
+        var orden = datos.OrderBy(d => d.Local).ThenBy(d => d.Periodo).ToList();
+        var res = new List<Fila>();
+        string? localActual = null;
+        decimal cant = 0, venta = 0, costo = 0, margen = 0;
+
+        void PushSubtotal()
+        {
+            if (localActual is null) return;
+            var pct = venta != 0 ? margen / venta * 100 : 0;
+            res.Add(new Fila("", "TOTAL " + localActual, cant, venta, costo, margen, pct, true));
+        }
+
+        foreach (var d in orden)
+        {
+            if (localActual is not null && d.Local != localActual)
+            {
+                PushSubtotal();
+                cant = 0; venta = 0; costo = 0; margen = 0;
+            }
+            localActual = d.Local;
+            res.Add(ToFila(d));
+            cant += d.CantidadVendida;
+            venta += d.TotalFacturado;
+            costo += d.TotalCosto;
+            margen += d.MargenDinero;
+        }
+        PushSubtotal();
+        return res;
+    }
+}

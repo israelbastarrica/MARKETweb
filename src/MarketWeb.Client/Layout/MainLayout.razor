@@ -1,0 +1,19 @@
+@inherits LayoutComponentBase
+
+<div class="market-shell @(_colapsado ? "colapsado" : null)">
+    <NavMenu />
+    <main class="market-content">
+        <div class="market-topbar">
+            <button class="market-burger" @onclick="ToggleMenu" title="Mostrar/ocultar menú" aria-label="Menú">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+        @Body
+    </main>
+</div>
+
+@code {
+    private bool _colapsado;
+
+    private void ToggleMenu() => _colapsado = !_colapsado;
+}

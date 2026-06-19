@@ -1,0 +1,406 @@
+@page "/locales/despachos"
+@page "/logistica/despachos"
+@implements IDisposable
+@inject DespachosApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject PageStateService State
+
+<PageTitle>Despachos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Locales" Titulo="Despachos" Icono="fa-solid fa-qrcode" />
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Ubicación</label>
+                <select class="form-select form-select-sm" @bind="_idLocalSel" @bind:after="Buscar" disabled="@_localFijo">
+                    @if (!_localFijo)
+                    {
+                        <option value="0">Todas</option>
+                    }
+                    @foreach (var l in _locales)
+                    {
+                        <option value="@l.Id">@l.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="_desde" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="_hasta" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Estado</label>
+                <select class="form-select form-select-sm" @bind="_fEstado" @bind:after="Aplicar">
+                    <option value="">Todos</option>
+                    <option value="RECIBIDO">Recibido</option>
+                    <option value="EN TRÁNSITO">En tránsito</option>
+                    <option value="PENDIENTE DESPACHO">Pendiente</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-grow-1" @onclick="Buscar">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Buscar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_todos.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-truck-fast"></i><p>No hay despachos en el período.</p></div>
+    }
+    else
+    {
+        <div class="d-flex gap-3 flex-wrap mb-2 small">
+            <span class="leyenda"><span class="dot dot-rec"></span> Recibido (@Contar("RECIBIDO"))</span>
+            <span class="leyenda"><span class="dot dot-tra"></span> En tránsito (@Contar("EN TRÁNSITO"))</span>
+            <span class="leyenda"><span class="dot dot-pen"></span> Pendiente (@Contar("PENDIENTE DESPACHO"))</span>
+        </div>
+
+        @if (_resultado.Count == 0)
+        {
+            <div class="market-empty"><i class="fa-solid fa-filter-circle-xmark"></i><p>Ningún remito coincide con el filtro de estado.</p></div>
+        }
+        else
+        {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 160px">Estado</th>
+                        <th>Nro Remito</th>
+                        <th>Fecha</th>
+                        <th>Origen</th>
+                        <th>Despacho</th>
+                        <th>Recepción</th>
+                        <th>Dragon</th>
+                        <th style="width: 130px" class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in _resultado)
+                    {
+                        <tr class="@FilaClase(d)" @ondblclick="() => VerDetalle(d)">
+                            <td>
+                                <span class="badge @BadgeClase(d.EstadoVisual)">@d.EstadoVisual</span>
+                                @if (d.Cruzado)
+                                {
+                                    <span class="badge bg-danger ms-1" title="Despachado a otro local">CRUZADO → @d.DestinoReal</span>
+                                }
+                                @if (d.EsQRDePantalla)
+                                {
+                                    <i class="fa-solid fa-mobile-screen ms-1 text-info" title="Recibido por QR de pantalla"></i>
+                                }
+                            </td>
+                            <td class="fw-semibold">@d.NroRemito</td>
+                            <td>@(d.FechaEmision?.ToString("dd/MM/yyyy HH:mm") ?? d.FechaRemito.ToString("dd/MM/yyyy"))</td>
+                            <td>@d.Origen</td>
+                            <td>@(d.FechaDespacho?.ToString("dd/MM HH:mm") ?? "—")</td>
+                            <td>
+                                @if (d.FechaRecepcion is not null)
+                                {
+                                    @d.FechaRecepcion.Value.ToString("dd/MM HH:mm")
+                                    <span class="text-muted small d-block">@d.UsuarioRecepcion</span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="small text-muted">@d.EstadoDragon</td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Ver artículos" @onclick="() => VerDetalle(d)">
+                                    <i class="fa-solid fa-list"></i>
+                                </button>
+                                @if (d.EstadoVisual != "RECIBIDO")
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" title="Mostrar QR (etiqueta rota)" @onclick="() => AbrirQr(d)">
+                                        <i class="fa-solid fa-qrcode"></i>
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_resultado.Count de @_todos.Count remito(s).</p>
+        }
+    }
+</div>
+
+@* ---------- Modal detalle de remito ---------- *@
+@if (_modalDet && _remitoSel is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        Remito @_remitoSel.NroRemito <span class="text-muted">· @_remitoSel.Origen → @_remitoSel.Destino</span>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalDet = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_cargandoDet)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+                    }
+                    else if (_articulos.Count == 0)
+                    {
+                        <p class="text-muted">Sin artículos para mostrar.</p>
+                    }
+                    else
+                    {
+                        <table class="market-table align-middle">
+                            <thead><tr><th style="width: 150px">Código</th><th>Descripción</th><th>Color</th><th>Talle</th><th class="text-end">Cant.</th></tr></thead>
+                            <tbody>
+                                @foreach (var a in _articulos)
+                                {
+                                    <tr>
+                                        <td><ArticuloLink Codigo="@a.ArtCod" /></td>
+                                        <td>@a.Descripcion</td>
+                                        <td>@a.Color</td>
+                                        <td>@a.Talle</td>
+                                        <td class="text-end">@Fmt.Miles(a.Cantidad)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td colspan="4" class="text-end">Total</td>
+                                    <td class="text-end">@Fmt.Miles(_articulos.Sum(x => x.Cantidad))</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalDet = false">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---------- Modal Mostrar QR ---------- *@
+@if (_modalQr && _qrRemito is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">QR remito @_qrRemito.NroRemito</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalQr = false"></button>
+                </div>
+                <div class="modal-body text-center">
+                    @if (_qrCargando)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Generando...</p>
+                    }
+                    else if (_qrResult is { Ok: true })
+                    {
+                        <div>
+                            <img src="data:image/png;base64,@_qrResult.QrPngBase64" alt="QR" style="width: 260px; height: 260px; image-rendering: pixelated;" />
+                            <div class="mt-2 small text-muted">@_qrResult.Origen → @_qrResult.Destino</div>
+                            <div class="alert alert-info mt-3 mb-0 small">
+                                Escaneá este QR con el colector para registrar la recepción.
+                            </div>
+                        </div>
+                    }
+                    else if (_qrResult is not null)
+                    {
+                        <div class="alert alert-danger mb-0"><i class="fa-solid fa-triangle-exclamation me-2"></i>@_qrResult.Error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalQr = false">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .leyenda { display: inline-flex; align-items: center; gap: 6px; color: #555; }
+    .leyenda .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+    .dot-rec { background: #c6efce; border: 1px solid #7bc97f; }
+    .dot-tra { background: #ffeb9c; border: 1px solid #e6c34a; }
+    .dot-pen { background: #ffd9d9; border: 1px solid #e69a9a; }
+    tr.fila-rec { background: #eafaf0 !important; }
+    tr.fila-tra { background: #fffbe6 !important; }
+    tr.fila-pen { background: #fdeaea !important; }
+    .badge-rec { background: #198754; }
+    .badge-tra { background: #d39e00; color: #1f2430; }
+    .badge-pen { background: #dc3545; }
+</style>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<DespachoLocalDto> _locales = new();
+    private int _idLocalSel;          // 0 = todas
+    private bool _localFijo;
+    private DateTime _desde = DateTime.Today;
+    private DateTime _hasta = DateTime.Today;
+    private string _fEstado = "";
+
+    private List<DespachoDto> _todos = new();
+    private List<DespachoDto> _resultado = new();
+    private bool _cargando = true;
+    private string? _error;
+
+    // Detalle
+    private bool _modalDet;
+    private DespachoDto? _remitoSel;
+    private List<DespachoArticuloDto> _articulos = new();
+    private bool _cargandoDet;
+
+    private IDisposable? _navReg;
+    private bool _restaurarScroll;
+    private double _scroll;
+    private const string EstadoKey = "despachos";
+
+    private sealed record EstadoDespachos(int IdLocalSel, bool LocalFijo, DateTime Desde, DateTime Hasta,
+        string FEstado, List<DespachoDto> Todos, List<DespachoDto> Resultado);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
+
+        try { _locales = await Api.ListarLocalesAsync(); }
+        catch (Exception ex) { _error = "No se pudieron cargar los locales."; Console.Error.WriteLine(ex); }
+
+        if (State.TryGet<EstadoDespachos>(EstadoKey, out var st, out _scroll))
+        {
+            _idLocalSel = st.IdLocalSel; _localFijo = st.LocalFijo; _desde = st.Desde; _hasta = st.Hasta;
+            _fEstado = st.FEstado; _todos = st.Todos; _resultado = st.Resultado;
+            _cargando = false;
+            _restaurarScroll = true;
+            return;
+        }
+
+        string? perfil = null;
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            perfil = state.User.FindFirst("perfil")?.Value;
+        }
+        // Local → su local; LOGISTICA → DEPÓSITO; ADMIN → combo libre.
+        var scopeName = string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase) ? "DEPÓSITO" : perfil;
+        var propio = _locales.FirstOrDefault(l => string.Equals(l.Nombre, scopeName, StringComparison.OrdinalIgnoreCase));
+        if (propio is not null)
+        {
+            _idLocalSel = propio.Id;
+            _localFijo = true;
+        }
+
+        await Buscar();
+    }
+
+    private async ValueTask OnNavegandoAfuera(Microsoft.AspNetCore.Components.Routing.LocationChangingContext ctx)
+    {
+        double y = 0;
+        try { y = await JS.InvokeAsync<double>("scrollGet"); } catch { }
+        State.Save(EstadoKey, new EstadoDespachos(_idLocalSel, _localFijo, _desde, _hasta, _fEstado, _todos, _resultado), y);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_restaurarScroll)
+        {
+            _restaurarScroll = false;
+            try { await JS.InvokeVoidAsync("scrollSet", _scroll); } catch { }
+        }
+    }
+
+    public void Dispose() => _navReg?.Dispose();
+
+    private async Task Buscar()
+    {
+        _cargando = true; _error = null;
+        try
+        {
+            _todos = await Api.ListarAsync(_desde, _hasta, _idLocalSel == 0 ? null : _idLocalSel);
+            Aplicar();
+        }
+        catch (Exception ex)
+        {
+            _todos = new(); _resultado = new();
+            _error = "No se pudieron cargar los despachos.";
+            Console.Error.WriteLine(ex);
+        }
+        finally { _cargando = false; }
+    }
+
+    private void Aplicar()
+    {
+        _resultado = string.IsNullOrWhiteSpace(_fEstado)
+            ? _todos.ToList()
+            : _todos.Where(d => d.EstadoVisual == _fEstado).ToList();
+    }
+
+    private int Contar(string estado) => _todos.Count(d => d.EstadoVisual == estado);
+
+    private static string FilaClase(DespachoDto d) => d.EstadoVisual switch
+    {
+        "RECIBIDO" => "fila-rec",
+        "EN TRÁNSITO" => "fila-tra",
+        _ => "fila-pen"
+    };
+
+    private static string BadgeClase(string estado) => estado switch
+    {
+        "RECIBIDO" => "badge-rec",
+        "EN TRÁNSITO" => "badge-tra",
+        _ => "badge-pen"
+    };
+
+    private async Task VerDetalle(DespachoDto d)
+    {
+        _remitoSel = d; _modalDet = true; _articulos = new(); _cargandoDet = true;
+        try { _articulos = await Api.ListarArticulosAsync(d.RemitoId, d.Origen); }
+        catch { _articulos = new(); }
+        finally { _cargandoDet = false; }
+    }
+
+    // ---- Mostrar QR (etiqueta rota) ----
+    private bool _modalQr;
+    private DespachoDto? _qrRemito;
+    private bool _qrEsPc = true;
+    private QrRemitoDto? _qrResult;
+    private bool _qrCargando;
+
+    private async Task AbrirQr(DespachoDto d)
+    {
+        _qrRemito = d; _qrEsPc = true; _qrResult = null; _modalQr = true;  // el server decide el "-PC" según perfil
+        await GenerarQr();
+    }
+
+    private async Task GenerarQr()
+    {
+        if (_qrRemito is null) return;
+        _qrCargando = true; _qrResult = null;
+        try { _qrResult = await Api.GenerarQrAsync(_qrRemito.RemitoId, _qrEsPc); }
+        catch { _qrResult = new QrRemitoDto { Ok = false, Error = "No se pudo generar el QR." }; }
+        finally { _qrCargando = false; }
+    }
+}

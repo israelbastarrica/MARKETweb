@@ -1,0 +1,242 @@
+@page "/configuracion/locales"
+@inject LocalesApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Locales</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Configuración" Titulo="Locales" Icono="fa-solid fa-shop" />
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div class="input-group" style="max-width: 420px">
+            <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input class="form-control" placeholder="Buscar por descripción..."
+                   @bind="_filtro" @bind:event="oninput" @onkeyup="OnFiltroKeyUp" />
+            <button class="btn btn-outline-secondary" @onclick="Buscar">Buscar</button>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirAlta">
+            <i class="fa-solid fa-plus me-1"></i> Agregar
+        </button>
+    </div>
+
+    @if (_mensaje is not null)
+    {
+        <div class="alert alert-success alert-dismissible d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i> @_mensaje
+            <button type="button" class="btn-close" @onclick="() => _mensaje = null"></button>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_locales.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-store-slash"></i>
+            <p>No se encontraron locales.</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 30%">Tipo</th>
+                        <th>Local</th>
+                        <th style="width: 110px" class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in _locales)
+                    {
+                        <tr @ondblclick="() => AbrirModificacion(l)">
+                            <td>@l.Tipo</td>
+                            <td>@l.Local</td>
+                            <td class="text-center text-nowrap acciones">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar"
+                                        @onclick="() => AbrirModificacion(l)">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar"
+                                        @onclick="() => Eliminar(l)">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_locales.Count local(es).</p>
+    }
+</div>
+
+@if (_modalAbierto)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <EditForm Model="_editado" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_esAlta ? "Nuevo local" : "Modificar local")</h5>
+                        <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_errorModal is not null)
+                        {
+                            <div class="alert alert-danger py-2">@_errorModal</div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label">Tipo</label>
+                            <InputSelect class="form-select" @bind-Value="_editado.IdTipo">
+                                <option value="0">— Seleccione —</option>
+                                @foreach (var t in _tipos)
+                                {
+                                    <option value="@t.Id">@t.Descripcion</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="() => _editado.IdTipo" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Descripción</label>
+                            <InputText class="form-control" @bind-Value="_editado.Descripcion" />
+                            <ValidationMessage For="() => _editado.Descripcion" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_guardando">
+                            @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                            Guardar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private readonly List<LocalDto> _locales = new();
+    private List<LocalTipoDto> _tipos = new();
+    private string _filtro = "";
+    private bool _cargando = true;
+    private string? _mensaje;
+    private string? _error;
+
+    // Estado del modal ABM
+    private bool _modalAbierto;
+    private bool _esAlta;
+    private bool _guardando;
+    private int _idEditado;
+    private string? _errorModal;
+    private LocalSaveRequest _editado = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarTipos();
+        await Cargar();
+    }
+
+    private async Task CargarTipos()
+    {
+        // Si falla, el cartel de error lo muestra Cargar(); acá no rompemos la pantalla.
+        try { _tipos = await Api.ListarTiposAsync(); }
+        catch { _tipos = new(); }
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            var datos = await Api.ListarAsync(_filtro);
+            _locales.Clear();
+            _locales.AddRange(datos);
+        }
+        catch (Exception ex)
+        {
+            _locales.Clear();
+            _error = "No se pudieron cargar los locales. Verificá la conexión a la base de datos.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private Task Buscar() => Cargar();
+
+    private async Task OnFiltroKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Cargar();
+    }
+
+    private void AbrirAlta()
+    {
+        _esAlta = true;
+        _idEditado = 0;
+        _editado = new LocalSaveRequest();
+        _errorModal = null;
+        _modalAbierto = true;
+    }
+
+    private void AbrirModificacion(LocalDto l)
+    {
+        _esAlta = false;
+        _idEditado = l.Id;
+        _editado = new LocalSaveRequest { IdTipo = l.IdTipo, Descripcion = l.Local };
+        _errorModal = null;
+        _modalAbierto = true;
+    }
+
+    private void CerrarModal() => _modalAbierto = false;
+
+    private async Task Guardar()
+    {
+        _guardando = true;
+        _errorModal = null;
+
+        var (ok, error) = _esAlta
+            ? await Api.CrearAsync(_editado)
+            : await Api.ModificarAsync(_idEditado, _editado);
+
+        _guardando = false;
+
+        if (!ok)
+        {
+            _errorModal = error;
+            return;
+        }
+
+        _modalAbierto = false;
+        _mensaje = _esAlta ? "Registro agregado correctamente." : "Registro modificado correctamente.";
+        await Cargar();
+    }
+
+    private async Task Eliminar(LocalDto l)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Está seguro de eliminar \"{l.Local}\"?");
+        if (!confirma) return;
+
+        await Api.EliminarAsync(l.Id);
+        _mensaje = "Registro eliminado correctamente.";
+        await Cargar();
+    }
+}

@@ -1,0 +1,33 @@
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<div class="login-bg">
+    <div class="login-card">
+        <div class="login-brand">MARKET <span>WEB</span></div>
+        <div class="pend-icon"><i class="fa-solid fa-clock"></i></div>
+        <h2 class="pend-title">Acceso pendiente</h2>
+        <p class="ob-text">
+            Tu PC quedó asociada a <strong>@_email</strong> y está esperando que un
+            administrador apruebe tu acceso. Avisá a Sistemas.
+        </p>
+
+        <button class="login-google" @onclick="Reintentar">
+            <i class="fa-solid fa-rotate me-1"></i> Ya me aprobaron, reintentar
+        </button>
+        <button class="ob-logout" @onclick="Logout">Salir</button>
+    </div>
+</div>
+
+@code {
+    private string _email = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthProvider.GetAuthenticationStateAsync();
+        _email = auth.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
+    }
+
+    private void Reintentar() => (AuthProvider as HostAuthStateProvider)?.Refrescar();
+
+    private void Logout() => Nav.NavigateTo("api/auth/logout", forceLoad: true);
+}
