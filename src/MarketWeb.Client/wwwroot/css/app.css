@@ -380,6 +380,14 @@ code {
     overflow: hidden;
 }
 
+/* Tablas anchas: que la tarjeta scrollee horizontal en vez de cortar columnas.
+   El overflow:hidden de arriba (necesario para el redondeo) pisaba el
+   overflow-x:auto de Bootstrap; esta regla, más específica, lo restituye. */
+.market-card.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .market-table {
     margin: 0;
     width: 100%;
@@ -555,6 +563,12 @@ html[data-theme="dark"] .market-table tbody tr.texto-rojo td {
     .market-table .acciones .btn {
         width: 28px;
         height: 28px;
+    }
+
+    /* Texto explicativo de cabecera de página: más chico en celular. */
+    .market-hint {
+        font-size: .74rem;
+        line-height: 1.3;
     }
 }
 
