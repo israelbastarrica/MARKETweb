@@ -75,4 +75,31 @@ public sealed class AuthController : ControllerBase
     }
 
     public sealed record ReclamarPcRequest(int PcId);
+
+    /// <summary>Perfiles existentes (áreas/locales) para que un usuario nuevo elija el suyo.</summary>
+    [Authorize]
+    [HttpGet("perfiles")]
+    public async Task<IActionResult> Perfiles([FromServices] IUsuariosPcService usuarios, CancellationToken ct)
+        => Ok(await usuarios.ListarPerfilesAsync(ct));
+
+    /// <summary>Usuario sin PC: pide acceso eligiendo su perfil. Queda pendiente de aprobación.</summary>
+    [Authorize]
+    [HttpPost("solicitar-acceso")]
+    public async Task<IActionResult> SolicitarAcceso(
+        [FromServices] IUsuariosPcService usuarios, [FromBody] SolicitarAccesoRequest req, CancellationToken ct)
+    {
+        var email = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(email)) return Unauthorized();
+        try
+        {
+            await usuarios.SolicitarAccesoAsync(email, req.Perfil, ct);
+            return Ok();
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(new { mensaje = ex.Message });
+        }
+    }
+
+    public sealed record SolicitarAccesoRequest(string Perfil);
 }

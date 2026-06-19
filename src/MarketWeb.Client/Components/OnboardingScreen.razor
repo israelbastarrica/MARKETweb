@@ -7,33 +7,66 @@
         <div class="login-brand">MARKET <span>WEB</span></div>
         <p class="login-sub">Primer ingreso</p>
 
-        <p class="ob-text">
-            No encontramos tu PC asociada a <strong>@_email</strong>.
-            Elegí cuál es tu PC para continuar.
-        </p>
-
         @if (_error is not null)
         {
             <div class="login-error">@_error</div>
         }
 
-        @if (_cargando)
+        @if (_modo == "pc")
         {
-            <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando PCs...</p>
+            <p class="ob-text">
+                No encontramos tu PC asociada a <strong>@_email</strong>.
+                Elegí cuál es tu PC para continuar.
+            </p>
+
+            @if (_cargando)
+            {
+                <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando PCs...</p>
+            }
+            else
+            {
+                <select class="form-select mb-3" @bind="_pcId">
+                    <option value="0">— Elegí tu PC —</option>
+                    @foreach (var p in _pcs)
+                    {
+                        <option value="@p.Id">@p.Pc</option>
+                    }
+                </select>
+                <button class="login-google" @onclick="Confirmar" disabled="@(_pcId == 0 || _guardando)">
+                    @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                    Confirmar
+                </button>
+
+                <button class="ob-logout" @onclick="IrANuevo">No encuentro mi PC o soy nuevo</button>
+            }
         }
         else
         {
-            <select class="form-select mb-3" @bind="_pcId">
-                <option value="0">— Elegí tu PC —</option>
-                @foreach (var p in _pcs)
-                {
-                    <option value="@p.Id">@p.Pc</option>
-                }
-            </select>
-            <button class="login-google" @onclick="Confirmar" disabled="@(_pcId == 0 || _guardando)">
-                @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
-                Confirmar
-            </button>
+            <p class="ob-text">
+                Elegí tu <strong>área o local</strong> y pedí acceso. Un administrador
+                lo revisa y te habilita.
+            </p>
+
+            @if (_cargando)
+            {
+                <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando...</p>
+            }
+            else
+            {
+                <select class="form-select mb-3" @bind="_perfilSel">
+                    <option value="">— Elegí tu área / local —</option>
+                    @foreach (var p in _perfiles)
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </select>
+                <button class="login-google" @onclick="PedirAcceso" disabled="@(string.IsNullOrEmpty(_perfilSel) || _guardando)">
+                    @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                    Pedir acceso
+                </button>
+
+                <button class="ob-logout" @onclick="IrAPc">Volver a elegir mi PC</button>
+            }
         }
 
         <p class="login-foot">Tu acceso quedará <strong>pendiente de aprobación</strong>.</p>
@@ -42,8 +75,14 @@
 </div>
 
 @code {
+    private string _modo = "pc";   // "pc" = elegir PC | "nuevo" = pedir acceso por perfil
+
     private List<UsuarioPcDto> _pcs = new();
     private int _pcId;
+
+    private List<string> _perfiles = new();
+    private string _perfilSel = "";
+
     private bool _cargando = true;
     private bool _guardando;
     private string? _error;
@@ -64,6 +103,27 @@
         _cargando = false;
     }
 
+    private async Task CargarPerfiles()
+    {
+        _cargando = true;
+        try { _perfiles = await Api.PerfilesAsync(); }
+        catch { _error = "No se pudieron cargar las áreas."; }
+        _cargando = false;
+    }
+
+    private async Task IrANuevo()
+    {
+        _error = null;
+        _modo = "nuevo";
+        if (_perfiles.Count == 0) await CargarPerfiles();
+    }
+
+    private void IrAPc()
+    {
+        _error = null;
+        _modo = "pc";
+    }
+
     private async Task Confirmar()
     {
         if (_pcId == 0) return;
@@ -82,6 +142,25 @@
         }
 
         // Reclamada → estado pasa a "pendiente" → la UI muestra PendienteScreen.
+        (AuthProvider as HostAuthStateProvider)?.Refrescar();
+    }
+
+    private async Task PedirAcceso()
+    {
+        if (string.IsNullOrEmpty(_perfilSel)) return;
+        _guardando = true;
+        _error = null;
+
+        var (ok, err) = await Api.SolicitarAccesoAsync(_perfilSel);
+        _guardando = false;
+
+        if (!ok)
+        {
+            _error = err;
+            return;
+        }
+
+        // Solicitud creada → estado "pendiente" → PendienteScreen.
         (AuthProvider as HostAuthStateProvider)?.Refrescar();
     }
 

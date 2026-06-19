@@ -17,6 +17,12 @@ public interface IUsuariosPcService
     /// <summary>El usuario reclama una PC (queda pendiente de aprobación).</summary>
     Task ReclamarPcAsync(int pcId, string mail, CancellationToken ct = default);
 
+    /// <summary>
+    /// El usuario que no tiene PC (o no la encuentra) pide acceso eligiendo su
+    /// perfil (área/local). Crea una solicitud pendiente para que el admin apruebe.
+    /// </summary>
+    Task SolicitarAccesoAsync(string mail, string perfil, CancellationToken ct = default);
+
     /// <summary>Aprueba el match mail↔PC (lo habilita el administrador).</summary>
     Task AprobarAsync(int id, CancellationToken ct = default);
 

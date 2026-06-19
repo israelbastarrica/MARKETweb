@@ -126,6 +126,32 @@ public sealed class UsuariosPcService : IUsuariosPcService
             throw new BusinessException("Esa PC ya fue tomada o no existe. Elegí otra.");
     }
 
+    public async Task SolicitarAccesoAsync(string mail, string perfil, CancellationToken ct = default)
+    {
+        var m = NormalizarMail(mail);
+        if (m is null) throw new BusinessException("Mail inválido.");
+        var p = (perfil ?? "").Trim();
+        if (p.Length == 0) throw new BusinessException("Elegí tu área o local.");
+
+        using var cn = _db.Create();
+
+        // El mail no puede tener ya una fila (solicitud o cuenta).
+        var existe = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT COUNT(1) FROM UsuariosPC WHERE Eliminado = 0 AND Mail = @m;", new { m }, cancellationToken: ct));
+        if (existe > 0)
+            throw new BusinessException("Ya hay una solicitud o cuenta con este mail. Avisá a Sistemas.");
+
+        // Alta como solicitud web (sin PC física). PC = mail como referencia legible
+        // (entra en varchar(100)); queda PENDIENTE para que el admin revise el perfil y apruebe.
+        var pc = m.Length <= 100 ? m : null;
+        var aud = ConstruirAuditoria("Solicitud de acceso web (pendiente)");
+        const string sql = """
+            INSERT INTO UsuariosPC (PC, PERFIL, Mail, MailAprobado, Eliminado, Auditoria)
+            VALUES (@pc, @p, @m, 0, 0, @aud);
+            """;
+        await cn.ExecuteAsync(new CommandDefinition(sql, new { pc, p, m, aud }, cancellationToken: ct));
+    }
+
     public async Task AprobarAsync(int id, CancellationToken ct = default)
     {
         const string sql = "UPDATE UsuariosPC SET MailAprobado = 1 WHERE ID = @id;";

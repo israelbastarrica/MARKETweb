@@ -28,6 +28,24 @@ public sealed class AuthApi
         }
     }
 
+    public async Task<List<string>> PerfilesAsync()
+        => await _http.GetFromJsonAsync<List<string>>("api/auth/perfiles") ?? new();
+
+    public async Task<(bool Ok, string? Error)> SolicitarAccesoAsync(string perfil)
+    {
+        var resp = await _http.PostAsJsonAsync("api/auth/solicitar-acceso", new { perfil });
+        if (resp.IsSuccessStatusCode) return (true, null);
+        try
+        {
+            var err = await resp.Content.ReadFromJsonAsync<ErrorResponse>();
+            return (false, err?.Mensaje ?? "No se pudo completar la operación.");
+        }
+        catch
+        {
+            return (false, "No se pudo completar la operación.");
+        }
+    }
+
     private sealed class ErrorResponse
     {
         public string? Mensaje { get; set; }
