@@ -1,0 +1,195 @@
+@implements IDisposable
+@using MarketWeb.Shared.LogisticaDashboard
+@inject LogisticaDashboardApi Api
+
+@* Vista mobile del dashboard de Logística: KPIs clave en tarjetas verticales,
+   con el tema (claro/oscuro) de la app. Reusa los mismos endpoints que la TV. *@
+
+<div class="dm">
+    <div class="dm-head">
+        <div>
+            <div class="dm-eyebrow">Logística</div>
+            <div class="dm-title">Tablero</div>
+        </div>
+        <button class="dm-refresh" @onclick="Refrescar" disabled="@_cargando" title="Actualizar">
+            <i class="fa-solid @(_cargando ? "fa-spinner fa-spin" : "fa-rotate")"></i>
+        </button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="dm-error"><i class="fa-solid fa-triangle-exclamation me-2"></i>@_error</div>
+    }
+
+    @if (_repo is not null)
+    {
+        <div class="dm-sec">Reposición</div>
+        @foreach (var l in new[] { _repo.Luro, _repo.Peralta })
+        {
+            <div class="dm-card">
+                <div class="dm-card-head">
+                    <span class="dm-local">@l.Local</span>
+                    <span class="dm-rojos @(l.Cobertura.Rojo > 0 ? "bad" : "ok")">
+                        @l.Cobertura.Rojo <small>a pedir</small>
+                    </span>
+                </div>
+                <div class="dm-bar">
+                    <span class="v" style="flex:@(Math.Max(l.Cobertura.Verde, 0))"></span>
+                    <span class="a" style="flex:@(Math.Max(l.Cobertura.Ambar, 0))"></span>
+                    <span class="r" style="flex:@(Math.Max(l.Cobertura.Rojo, 0))"></span>
+                </div>
+                <div class="dm-barleg">
+                    <span><b class="ok">@l.Cobertura.Verde</b> ok</span>
+                    <span><b class="warn">@l.Cobertura.Ambar</b> medio</span>
+                    <span><b class="bad">@l.Cobertura.Rojo</b> rojo</span>
+                    <span class="muted">@l.Cobertura.Mapeados mapeados</span>
+                </div>
+                <div class="dm-kpis k3">
+                    <div><span class="n">@l.DiaOp.VentaAyer</span><span class="t">Venta ayer</span></div>
+                    <div><span class="n acc">@l.DiaOp.RepoHoy</span><span class="t">Repo hoy</span></div>
+                    <div><span class="n">@l.DiaOp.DevolAyer</span><span class="t">Devol (@Pct(l.DiaOp.DevolPct))</span></div>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_pick is { ModoRepo: true })
+    {
+        <div class="dm-sec">Picking nocturno</div>
+        @foreach (var l in new[] { _pick.Luro, _pick.Peralta })
+        {
+            var pct = l.TotalPedido > 0 ? (double)l.TotalArmado / l.TotalPedido * 100 : 100;
+            <div class="dm-card">
+                <div class="dm-card-head">
+                    <span class="dm-local">@l.Local</span>
+                    <span class="dm-rojos @(pct >= 99 ? "ok" : "warn")">@Pct(pct)</span>
+                </div>
+                <div class="dm-kpis k2">
+                    <div><span class="n">@((int)l.TotalArmado)/@l.TotalPedido</span><span class="t">Packs armados</span></div>
+                    <div><span class="n">@l.ArtsArmados/@l.ArtsPedidos</span><span class="t">Artículos</span></div>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_desp is not null && _desp.Despacho.Count > 0)
+    {
+        <div class="dm-sec">Despachos a locales</div>
+        @foreach (var d in _desp.Despacho)
+        {
+            <div class="dm-card">
+                <div class="dm-card-head">
+                    <span class="dm-local">@d.Local</span>
+                    <span class="dm-rojos @CircClase(d.PctCircuito)">@Pct(d.PctCircuito)</span>
+                </div>
+                <div class="dm-kpis k3">
+                    <div><span class="n">@d.Despachados</span><span class="t">Enviados</span></div>
+                    <div><span class="n ok">@d.Recibidos</span><span class="t">Recibidos</span></div>
+                    <div><span class="n @(d.EnTransito > 0 ? "warn" : "")">@d.EnTransito</span><span class="t">En tránsito</span></div>
+                </div>
+            </div>
+        }
+    }
+
+    @if (_pend is not null)
+    {
+        var total = _pend.Cruzados.Total + _pend.DobleDespacho.Total + _pend.SinEscanear.Total + _pend.SinSalida.Total + _pend.Recepcion.Total;
+        <div class="dm-sec">Pendientes en tránsito</div>
+        <div class="dm-card">
+            <div class="dm-card-head">
+                <span class="dm-local">Total</span>
+                <span class="dm-rojos @(total > 0 ? "warn" : "ok")">@total</span>
+            </div>
+            <div class="dm-chips">
+                <span>Sin escanear <b>@_pend.SinEscanear.Total</b></span>
+                <span>Sin salida <b>@_pend.SinSalida.Total</b></span>
+                <span>Recepción <b>@_pend.Recepcion.Total</b></span>
+                @if (_pend.Cruzados.Total > 0) { <span class="bad">Cruzados <b>@_pend.Cruzados.Total</b></span> }
+                @if (_pend.DobleDespacho.Total > 0) { <span class="bad">Doble <b>@_pend.DobleDespacho.Total</b></span> }
+            </div>
+        </div>
+    }
+
+    @if (_est is not null || _vac is not null || _map is not null)
+    {
+        <div class="dm-mini">
+            @if (_est is not null) { <div><span class="n">@_est.Total</span><span class="t">Estancados</span></div> }
+            @if (_vac is not null) { <div><span class="n">@_vac.Total</span><span class="t">Ubic. libres</span></div> }
+            @if (_map is not null) { <div><span class="n">@_map.Total</span><span class="t">Mapeos (@_map.Ventana)</span></div> }
+        </div>
+    }
+
+    @if (_cargando && _repo is null)
+    {
+        <div class="dm-loading"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando tablero...</div>
+    }
+
+    <div class="dm-foot">Actualizado @_actualizado · se refresca solo cada 45s</div>
+</div>
+
+@code {
+    private PanelReposicionDto? _repo;
+    private PanelDespachoRecepcionDto? _desp;
+    private PanelPendientesDto? _pend;
+    private PanelPickingDto? _pick;
+    private PanelEstancadosDto? _est;
+    private PanelVaciasDto? _vac;
+    private PanelMapeosDto? _map;
+
+    private bool _cargando = true;
+    private string? _error;
+    private string _actualizado = "—";
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refrescar();
+        _cts = new CancellationTokenSource();
+        _ = AutoRefrescar(_cts.Token);
+    }
+
+    private async Task AutoRefrescar(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(45000, ct);
+                await Refrescar();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task Refrescar()
+    {
+        _cargando = true; _error = null;
+        try
+        {
+            // En paralelo; los más pesados (5/8) ya están cacheados en el server.
+            var t1 = Api.Panel1(); var t2 = Api.Panel2(); var t6 = Api.Panel6();
+            var t8 = Api.Panel8(); var t5 = Api.Panel5(); var t4 = Api.Panel4(); var t3 = Api.Panel3();
+            await Task.WhenAll(t1, t2, t6, t8, t5, t4, t3);
+            _desp = t1.Result; _pend = t2.Result; _pick = t6.Result;
+            _repo = t8.Result; _est = t5.Result; _vac = t4.Result; _map = t3.Result;
+            _actualizado = _repo?.Actualizado ?? _desp?.Actualizado ?? "—";
+        }
+        catch (Exception ex)
+        {
+            _error = "No se pudo cargar el tablero.";
+            Console.Error.WriteLine(ex);
+        }
+        finally { _cargando = false; }
+    }
+
+    private static string Pct(double d) => $"{Math.Round(d)}%";
+
+    private static string CircClase(double pct) => pct >= 95 ? "ok" : pct >= 80 ? "warn" : "bad";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

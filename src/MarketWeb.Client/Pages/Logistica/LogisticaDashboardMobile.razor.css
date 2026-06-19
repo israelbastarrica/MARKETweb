@@ -1,0 +1,225 @@
+.dm {
+    --ok: #1d9e75;
+    --warn: #ba7517;
+    --bad: #d8492f;
+    --acc: #2563eb;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 1rem;
+}
+
+.dm-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dm-eyebrow {
+    font-size: .62rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #d08700;
+}
+
+.dm-title {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--mk-text-strong);
+    line-height: 1.1;
+}
+
+.dm-refresh {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--mk-border);
+    background: var(--mk-surface);
+    color: var(--mk-text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.dm-error {
+    background: rgba(216, 73, 47, .12);
+    color: var(--bad);
+    border: 1px solid rgba(216, 73, 47, .35);
+    border-radius: 10px;
+    padding: .6rem .8rem;
+    font-size: .85rem;
+}
+
+.dm-sec {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--mk-text-muted);
+    margin-top: 6px;
+}
+
+.dm-card {
+    background: var(--mk-surface);
+    border: 1px solid var(--mk-border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dm-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dm-local {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--mk-text-strong);
+    letter-spacing: .02em;
+}
+
+.dm-rojos {
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.dm-rojos small {
+    font-size: .62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-left: 4px;
+    color: var(--mk-text-muted);
+}
+
+.dm-rojos.bad { color: var(--bad); }
+.dm-rojos.warn { color: var(--warn); }
+.dm-rojos.ok { color: var(--ok); }
+
+.dm-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--mk-surface-2);
+}
+
+.dm-bar .v { background: var(--ok); }
+.dm-bar .a { background: var(--warn); }
+.dm-bar .r { background: var(--bad); }
+.dm-bar span { min-width: 0; }
+
+.dm-barleg {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    font-size: .72rem;
+    color: var(--mk-text-muted);
+}
+
+.dm-barleg b { font-weight: 800; }
+.dm-barleg .ok { color: var(--ok); }
+.dm-barleg .warn { color: var(--warn); }
+.dm-barleg .bad { color: var(--bad); }
+.dm-barleg .muted { color: var(--mk-text-muted); margin-left: auto; }
+
+.dm-kpis {
+    display: grid;
+    gap: 10px;
+    border-top: 1px solid var(--mk-border);
+    padding-top: 10px;
+}
+
+.dm-kpis.k3 { grid-template-columns: repeat(3, 1fr); }
+.dm-kpis.k2 { grid-template-columns: repeat(2, 1fr); }
+
+.dm-kpis > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dm-kpis .n {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--mk-text-strong);
+    line-height: 1;
+}
+
+.dm-kpis .n.ok { color: var(--ok); }
+.dm-kpis .n.warn { color: var(--warn); }
+.dm-kpis .n.acc { color: var(--acc); }
+
+.dm-kpis .t {
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--mk-text-muted);
+    font-weight: 600;
+}
+
+.dm-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dm-chips span {
+    background: var(--mk-surface-2);
+    border: 1px solid var(--mk-border);
+    border-radius: 999px;
+    padding: 4px 11px;
+    font-size: .78rem;
+    color: var(--mk-text-muted);
+}
+
+.dm-chips span b { color: var(--mk-text-strong); font-weight: 800; margin-left: 3px; }
+.dm-chips span.bad { color: var(--bad); border-color: rgba(216, 73, 47, .4); }
+.dm-chips span.bad b { color: var(--bad); }
+
+.dm-mini {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.dm-mini > div {
+    background: var(--mk-surface);
+    border: 1px solid var(--mk-border);
+    border-radius: 12px;
+    padding: 10px;
+    text-align: center;
+}
+
+.dm-mini .n {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--mk-text-strong);
+}
+
+.dm-mini .t {
+    font-size: .6rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--mk-text-muted);
+    font-weight: 600;
+}
+
+.dm-loading {
+    color: var(--mk-text-muted);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.dm-foot {
+    text-align: center;
+    font-size: .68rem;
+    color: var(--mk-text-muted);
+    margin-top: 4px;
+}

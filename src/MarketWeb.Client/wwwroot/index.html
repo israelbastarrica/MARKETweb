@@ -64,6 +64,7 @@
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
+        window.esMobile = () => window.matchMedia('(max-width: 768px)').matches;
         window.focusSelect = (el) => { if (el) { el.focus(); el.select(); } };
         window.scrollGet = () => window.scrollY || document.documentElement.scrollTop || 0;
         window.scrollSet = (y) => window.scrollTo(0, y || 0);

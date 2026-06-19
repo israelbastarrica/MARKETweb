@@ -1,11 +1,22 @@
 @page "/logistica/dashboard"
+@inject IJSRuntime JS
 
 <PageTitle>Logística · Dashboard</PageTitle>
 
-@* Dashboard de Logística (port de LogisticaDashboard). Vista TV con auto-refresh;
-   HTML estático embebido en iframe que llena el área de contenido. La API que
-   consume está protegida por la misma cookie de Google SSO. *@
-<iframe src="dashboard-logistica.html" class="dashboard-frame" title="Dashboard Logística" allow="fullscreen" allowfullscreen></iframe>
+@* En celular (pantalla angosta) mostramos una vista nativa con los KPIs clave;
+   en pantalla grande, el dashboard de TV embebido en iframe. *@
+@if (_mobile == true)
+{
+    <LogisticaDashboardMobile />
+}
+else if (_mobile == false)
+{
+    <iframe src="dashboard-logistica.html" class="dashboard-frame" title="Dashboard Logística" allow="fullscreen" allowfullscreen></iframe>
+}
+else
+{
+    <p class="text-muted p-3"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+}
 
 <style>
     .dashboard-frame {
@@ -20,4 +31,15 @@
 </style>
 
 @code {
+    private bool? _mobile;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { _mobile = await JS.InvokeAsync<bool>("esMobile"); }
+            catch { _mobile = false; }   // ante la duda, TV
+            StateHasChanged();
+        }
+    }
 }

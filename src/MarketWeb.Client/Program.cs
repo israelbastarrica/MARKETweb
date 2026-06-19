@@ -23,6 +23,7 @@ builder.Services.AddScoped<MapeoApi>();
 builder.Services.AddScoped<DespachosApi>();
 builder.Services.AddScoped<RemitoImpresionApi>();
 builder.Services.AddScoped<PaletsApi>();
+builder.Services.AddScoped<LogisticaDashboardApi>();
 builder.Services.AddSingleton<PageStateService>();
 
 // --- Autenticación (estado en el cliente; identidad real en cookie del server) ---
