@@ -570,6 +570,15 @@ html[data-theme="dark"] .market-table tbody tr.texto-rojo td {
         font-size: .74rem;
         line-height: 1.3;
     }
+
+    /* Combos/selects de filtros: más bajos y sin forzar ancho fijo en celular
+       (el min-width inline los hacía gigantes). Inputs de texto se dejan en 16px
+       para que iOS no haga zoom al enfocar. */
+    .form-select {
+        font-size: .9rem;
+        padding: .3rem 1.6rem .3rem .6rem;
+        min-width: 0 !important;
+    }
 }
 
 /* ===== Impresión (reutilizable por cualquier listado) =====
