@@ -1,19 +1,36 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
 
-<div class="market-shell @(_colapsado ? "colapsado" : null)">
+<div class="market-shell @(_menuAbierto ? "menu-abierto" : null)">
     <NavMenu />
+    <div class="market-backdrop" @onclick="CerrarMenu"></div>
     <main class="market-content">
         <div class="market-topbar">
-            <button class="market-burger" @onclick="ToggleMenu" title="Mostrar/ocultar menú" aria-label="Menú">
+            <button class="market-burger" @onclick="ToggleMenu" title="Menú" aria-label="Menú">
                 <i class="fa-solid fa-bars"></i>
             </button>
+            <span class="market-topbar-brand">MARKET <b>WEB</b></span>
         </div>
         @Body
     </main>
 </div>
 
 @code {
-    private bool _colapsado;
+    // Drawer mobile: en celular el menú es un panel que entra desde el costado.
+    // En desktop el sidebar está siempre visible (este estado no aplica).
+    private bool _menuAbierto;
 
-    private void ToggleMenu() => _colapsado = !_colapsado;
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    private void ToggleMenu() => _menuAbierto = !_menuAbierto;
+    private void CerrarMenu() => _menuAbierto = false;
+
+    // Al navegar (tocar un link del menú en mobile) se cierra solo.
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (_menuAbierto) { _menuAbierto = false; StateHasChanged(); }
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 }

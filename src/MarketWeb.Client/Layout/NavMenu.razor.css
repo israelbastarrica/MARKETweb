@@ -241,10 +241,5 @@
             background: #f1f1f1;
         }
 
-@media (max-width: 768px) {
-    .market-sidebar {
-        width: 100%;
-        height: auto;
-        position: static;
-    }
-}
+/* En mobile el sidebar pasa a ser un drawer; eso lo maneja MainLayout.razor.css
+   (position fixed + transform), para poder reaccionar al estado del menú. */

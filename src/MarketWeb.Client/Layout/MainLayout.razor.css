@@ -10,9 +10,12 @@
     background: #f8f7f3;
 }
 
+/* Topbar (con el botón hamburguesa): SOLO en celular. En desktop el sidebar
+   está siempre visible y no hace falta. */
 .market-topbar {
-    display: flex;
+    display: none;
     align-items: center;
+    gap: .8rem;
     margin-bottom: 1rem;
 }
 
@@ -37,17 +40,49 @@
     color: #1f2430;
 }
 
-/* Colapsado: el menú se oculta y el contenido toma todo el ancho. */
-.market-shell.colapsado ::deep .market-sidebar {
-    display: none;
+.market-topbar-brand {
+    font-weight: 800;
+    letter-spacing: .12em;
+    color: #1f2430;
+    font-size: 1.05rem;
 }
 
-@media (max-width: 768px) {
-    .market-shell {
-        flex-direction: column;
-    }
+.market-topbar-brand b { color: #f59e0b; }
 
+/* Fondo oscuro detrás del drawer (solo mobile, solo con el menú abierto). */
+.market-backdrop { display: none; }
+
+@media (max-width: 768px) {
     .market-content {
         padding: 1rem;
+    }
+
+    .market-topbar {
+        display: flex;
+    }
+
+    /* El sidebar pasa a ser un panel deslizable desde la izquierda. */
+    .market-shell ::deep .market-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 82%;
+        max-width: 300px;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform .25s ease;
+    }
+
+    .market-shell.menu-abierto ::deep .market-sidebar {
+        transform: translateX(0);
+    }
+
+    .market-shell.menu-abierto .market-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .45);
+        z-index: 900;
     }
 }

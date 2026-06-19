@@ -85,7 +85,8 @@
         ["LOGISTICA"] = new[] { "Configuración", "Logística" },
         ["DISEÑO"] = new[] { "Diseño", "Producción" },
         ["DISENO"] = new[] { "Diseño", "Producción" },
-        ["ADMINISTRACION"] = new[] { "Administración", "Producción" },
+        ["ADMINISTRACION"] = new[] { "Administración", "Compras", "Producción" },
+        ["COMPRAS"] = new[] { "Compras" },
     };
 
     private bool VeModulo(Modulo m)
@@ -145,6 +146,10 @@
             new Item("Insumos", "fa-solid fa-boxes-stacked", "/administracion/insumos", Implementado: true),
             new Item("Costos", "fa-solid fa-money-bill", "/administracion/costos", Implementado: true),
             new Item("Ventas", "fa-solid fa-cash-register", "/administracion/ventas", Implementado: true),
+        }),
+        new("Compras", "fa-solid fa-cart-shopping", new[]
+        {
+            new Item("Calculadora", "fa-solid fa-calculator", "/wip/compras/calculadora"),
         }),
         new("Locales", "fa-solid fa-store", new[]
         {
