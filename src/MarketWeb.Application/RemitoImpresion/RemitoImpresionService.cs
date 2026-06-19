@@ -17,8 +17,23 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
         return (await cn.QueryAsync<string>(new CommandDefinition(sql, cancellationToken: ct))).ToList();
     }
 
+    public async Task<IReadOnlyList<ImpresoraColaDto>> ListarImpresorasAsync(CancellationToken ct = default)
+    {
+        // Impresoras (SALTAFW) presentes en la cola, con una IP representativa. Para el
+        // selector "esta PC" de logística (cada equipo elige su impresora).
+        const string sql = """
+            SELECT SALTAFW AS Saltafw, MAX(RTRIM(IPImpresora)) AS Ip
+            FROM   ImpresorRemito_Cola
+            WHERE  ID > 776 AND SALTAFW IS NOT NULL
+            GROUP BY SALTAFW
+            ORDER BY SALTAFW;
+            """;
+        using var cn = _db.Create();
+        return (await cn.QueryAsync<ImpresoraColaDto>(new CommandDefinition(sql, cancellationToken: ct))).ToList();
+    }
+
     public async Task<IReadOnlyList<RemitoColaDto>> ListarAsync(
-        DateTime desde, DateTime hasta, string? localOrigen, string? estado, bool soloErrores, CancellationToken ct = default)
+        DateTime desde, DateTime hasta, string? localOrigen, string? estado, bool soloErrores, int? saltafw, CancellationToken ct = default)
     {
         // Solo errores ignora el filtro de estado.
         var estadoFiltro = soloErrores ? null : (string.IsNullOrWhiteSpace(estado) || estado == "TODOS" ? null : estado);
@@ -27,13 +42,14 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
             SELECT TOP 2000
                    ID AS Id, RTRIM(RemitoCODIGO) AS RemitoCodigo, LocalOrigen, LocalDestino,
                    FPTOVEN AS Punto, FNUMCOMP AS NroComp, FechaEmision, Estado, Intentos,
-                   ErrorMsg, FechaDetectado, FechaImpreso, IPImpresora AS IpImpresora, Reimpresiones
+                   ErrorMsg, FechaDetectado, FechaImpreso, IPImpresora AS IpImpresora, Reimpresiones, SALTAFW AS Saltafw
             FROM   ImpresorRemito_Cola
             WHERE  ID > 776
               AND  FechaDetectado >= @desde AND FechaDetectado < @hastaExcl
               AND  (@local IS NULL OR UPPER(RTRIM(LocalOrigen)) = UPPER(@local))
               AND  (@soloErrores = 0 OR Estado = 'ERROR')
               AND  (@estado IS NULL OR Estado = @estado)
+              AND  (@saltafw IS NULL OR SALTAFW = @saltafw)
             ORDER BY FechaDetectado DESC, ID DESC;
             """;
 
@@ -44,7 +60,8 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
             hastaExcl = hasta.Date.AddDays(1),
             local = string.IsNullOrWhiteSpace(localOrigen) ? null : localOrigen.Trim(),
             estado = estadoFiltro,
-            soloErrores = soloErrores ? 1 : 0
+            soloErrores = soloErrores ? 1 : 0,
+            saltafw
         }, cancellationToken: ct));
         return rows.ToList();
     }

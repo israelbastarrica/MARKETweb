@@ -12,11 +12,15 @@ public sealed class RemitoImpresionApi
     public async Task<List<string>> ListarLocalesAsync()
         => await _http.GetFromJsonAsync<List<string>>("api/remitoimpresion/locales") ?? new();
 
-    public async Task<List<RemitoColaDto>> ListarAsync(DateTime desde, DateTime hasta, string? local, string? estado, bool soloErrores)
+    public async Task<List<ImpresoraColaDto>> ListarImpresorasAsync()
+        => await _http.GetFromJsonAsync<List<ImpresoraColaDto>>("api/remitoimpresion/impresoras") ?? new();
+
+    public async Task<List<RemitoColaDto>> ListarAsync(DateTime desde, DateTime hasta, string? local, string? estado, bool soloErrores, int? saltafw = null)
     {
         var url = $"api/remitoimpresion?desde={desde:yyyy-MM-dd}&hasta={hasta:yyyy-MM-dd}&soloErrores={soloErrores.ToString().ToLowerInvariant()}";
         if (!string.IsNullOrWhiteSpace(local) && local != "TODOS") url += $"&local={Uri.EscapeDataString(local)}";
         if (!string.IsNullOrWhiteSpace(estado) && estado != "TODOS") url += $"&estado={Uri.EscapeDataString(estado)}";
+        if (saltafw is not null) url += $"&saltafw={saltafw.Value}";
         return await _http.GetFromJsonAsync<List<RemitoColaDto>>(url) ?? new();
     }
 

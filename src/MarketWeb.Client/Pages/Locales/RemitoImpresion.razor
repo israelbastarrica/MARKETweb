@@ -18,6 +18,21 @@
                     @foreach (var l in _locales) { <option value="@l">@l</option> }
                 </select>
             </div>
+            @if (_esLogistica)
+            {
+                <div class="col-6 col-md-3">
+                    <label class="form-label small text-muted mb-1">
+                        <i class="fa-solid fa-desktop me-1"></i>Esta PC (impresora)
+                    </label>
+                    <select class="form-select form-select-sm" @bind="_saltafwSel" @bind:after="OnCambioEquipo">
+                        <option value="">Todas</option>
+                        @foreach (var im in _impresoras)
+                        {
+                            <option value="@im.Saltafw">@im.Saltafw@(string.IsNullOrWhiteSpace(im.Ip) ? "" : $" · {im.Ip}")</option>
+                        }
+                    </select>
+                </div>
+            }
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Desde</label>
                 <input type="date" class="form-control form-control-sm" @bind="_desde" />
@@ -134,6 +149,12 @@
     private string _estado = "TODOS";
     private bool _soloErrores;
 
+    // Solo logística: identificar el equipo por su impresora (SALTAFW), guardado en el navegador.
+    private bool _esLogistica;
+    private List<ImpresoraColaDto> _impresoras = new();
+    private string _saltafwSel = "";   // "" = todas; si no, el SALTAFW de esta PC
+    private const string SaltafwKey = "marketweb.saltafw";
+
     private List<RemitoColaDto> _remitos = new();
     private bool _cargando = true;
     private string? _error;
@@ -159,15 +180,32 @@
         var propio = _locales.FirstOrDefault(l => string.Equals(l, scopeName, StringComparison.OrdinalIgnoreCase));
         if (propio is not null) { _local = propio; _localFijo = true; }
 
+        // Solo logística: cargar impresoras y recordar la de ESTE equipo (localStorage del navegador).
+        _esLogistica = string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase);
+        if (_esLogistica)
+        {
+            try { _impresoras = await Api.ListarImpresorasAsync(); } catch (Exception ex) { Console.Error.WriteLine(ex); }
+            try { _saltafwSel = await JS.InvokeAsync<string>("localStorage.getItem", SaltafwKey) ?? ""; } catch { _saltafwSel = ""; }
+        }
+
         await Buscar();
     }
 
     private async Task Buscar()
     {
         _cargando = true; _error = null;
-        try { _remitos = await Api.ListarAsync(_desde, _hasta, _local, _estado, _soloErrores); }
+        // Solo en logística filtramos por la impresora (SALTAFW) de este equipo; "" = todas.
+        int? saltafw = (_esLogistica && int.TryParse(_saltafwSel, out var sf)) ? sf : null;
+        try { _remitos = await Api.ListarAsync(_desde, _hasta, _local, _estado, _soloErrores, saltafw); }
         catch (Exception ex) { _remitos = new(); _error = "No se pudo cargar la cola de impresión."; Console.Error.WriteLine(ex); }
         finally { _cargando = false; }
+    }
+
+    private async Task OnCambioEquipo()
+    {
+        // Guarda la impresora de ESTE equipo en el navegador y re-filtra.
+        try { await JS.InvokeVoidAsync("localStorage.setItem", SaltafwKey, _saltafwSel ?? ""); } catch { }
+        await Buscar();
     }
 
     private async Task Reimprimir(RemitoColaDto r)

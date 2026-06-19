@@ -19,6 +19,10 @@ public sealed class RemitoImpresionController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<string>>> Locales(CancellationToken ct)
         => Ok(await _service.ListarLocalesAsync(ct));
 
+    [HttpGet("impresoras")]
+    public async Task<ActionResult<IReadOnlyList<ImpresoraColaDto>>> Impresoras(CancellationToken ct)
+        => Ok(await _service.ListarImpresorasAsync(ct));
+
     // Devuelve el LocalOrigen forzado por perfil (o null si ADMIN/otro), respetando el filtro pedido.
     private async Task<string?> ResolverOrigenAsync(string? localPedido, CancellationToken ct)
     {
@@ -33,10 +37,10 @@ public sealed class RemitoImpresionController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<RemitoColaDto>>> Listar(
         [FromQuery] DateTime desde, [FromQuery] DateTime hasta, [FromQuery] string? local,
-        [FromQuery] string? estado, [FromQuery] bool soloErrores, CancellationToken ct)
+        [FromQuery] string? estado, [FromQuery] bool soloErrores, [FromQuery] int? saltafw, CancellationToken ct)
     {
         var origen = await ResolverOrigenAsync(local, ct);
-        return Ok(await _service.ListarAsync(desde, hasta, origen, estado, soloErrores, ct));
+        return Ok(await _service.ListarAsync(desde, hasta, origen, estado, soloErrores, saltafw, ct));
     }
 
     [HttpPost("{id:int}/reimprimir")]

@@ -17,8 +17,16 @@ public sealed class RemitoColaDto
     public DateTime? FechaImpreso { get; set; }
     public string? IpImpresora { get; set; }
     public int Reimpresiones { get; set; }
+    public int? Saltafw { get; set; }     // impresora asignada (filtro "por PC" en logística)
 
     public string NroRemito => $"{Punto:D4}-{NroComp:D8}";
+}
+
+/// <summary>Una impresora de la cola (SALTAFW + su IP). Para el selector "esta PC" en logística.</summary>
+public sealed class ImpresoraColaDto
+{
+    public int Saltafw { get; set; }
+    public string? Ip { get; set; }
 }
 
 /// <summary>Estado liviano de un remito para el polling tras reimprimir.</summary>
