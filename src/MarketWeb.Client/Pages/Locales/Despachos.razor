@@ -149,7 +149,7 @@
 @if (_modalDet && _remitoSel is not null)
 {
     <div class="modal fade show d-block" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
@@ -168,6 +168,7 @@
                     }
                     else
                     {
+                        <div class="table-responsive">
                         <table class="market-table align-middle">
                             <thead><tr><th style="width: 150px">Código</th><th>Descripción</th><th>Color</th><th>Talle</th><th class="text-end">Cant.</th></tr></thead>
                             <tbody>
@@ -189,6 +190,7 @@
                                 </tr>
                             </tfoot>
                         </table>
+                        </div>
                     }
                 </div>
                 <div class="modal-footer">
