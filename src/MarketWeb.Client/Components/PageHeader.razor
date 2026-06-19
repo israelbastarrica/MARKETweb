@@ -1,9 +1,10 @@
 <div class="header">
     <div class="icon"><i class="@Icono" aria-hidden="true"></i></div>
-    <div class="texts">
+    <div class="crumbs">
         @if (!string.IsNullOrWhiteSpace(Modulo))
         {
-            <div class="eyebrow">@Modulo</div>
+            <span class="eyebrow">@Modulo</span>
+            <span class="sep">|</span>
         }
         <h1 class="title">@Titulo</h1>
     </div>

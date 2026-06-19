@@ -1,65 +1,51 @@
 .header {
     display: flex;
     align-items: center;
-    gap: .7rem;
+    gap: .6rem;
     margin-bottom: 1.05rem;
 }
 
 .icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
     display: grid;
     place-items: center;
     background: rgba(245, 158, 11, .13);
     color: #c27803;
-    font-size: 1rem;
+    font-size: .85rem;
     flex-shrink: 0;
 }
 
-.texts {
+/* Todo en una línea, estilo breadcrumb: MODULO | TITULO, ambos con la tipografía
+   chica del módulo. COMPRAS en naranja, el título en el color de texto fuerte. */
+.crumbs {
     display: flex;
-    flex-direction: column;
-    gap: 1px;
+    align-items: center;
+    gap: .45rem;
+    flex-wrap: wrap;
 }
 
 .eyebrow {
-    font-size: .64rem;
+    font-size: .72rem;
     font-weight: 600;
     letter-spacing: .14em;
     text-transform: uppercase;
     color: #d08700;
 }
 
-.title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .02em;
-    color: var(--mk-text-strong);
-    margin: 0;
-    line-height: 1.15;
+.sep {
+    font-size: .72rem;
+    font-weight: 400;
+    color: var(--mk-text-muted);
 }
 
-/* En celular el encabezado se achica para no comer pantalla. */
-@media (max-width: 768px) {
-    .header {
-        gap: .6rem;
-        margin-bottom: .9rem;
-    }
-
-    .icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 9px;
-        font-size: .9rem;
-    }
-
-    .eyebrow {
-        font-size: .58rem;
-    }
-
-    .title {
-        font-size: 1.1rem;
-    }
+.title {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--mk-text-strong);
+    margin: 0;
+    line-height: 1.2;
 }
