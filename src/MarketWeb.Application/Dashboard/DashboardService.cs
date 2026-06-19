@@ -167,13 +167,17 @@ public sealed class DashboardService : IDashboardService
         }
         catch { /* sin proyecciones */ }
 
+        // Solo ADMIN ve plata. Al cajero ni se le manda el monto (ni top de productos
+        // con importes): la plata es exclusiva de administración.
+        var conPlata = rol == "admin";
+
         var locales = new List<VentaLocalResumenDto>();
         if (rol == "cajero" && !string.IsNullOrEmpty(local))
-            locales.Add(await ResumenLocalAsync(cn, local, hoy, inicio, proy.GetValueOrDefault(local.ToUpperInvariant()), horaCorte, ct));
+            locales.Add(await ResumenLocalAsync(cn, local, hoy, inicio, proy.GetValueOrDefault(local.ToUpperInvariant()), horaCorte, conPlata, ct));
         else
         {
-            locales.Add(await ResumenLocalAsync(cn, "LURO", hoy, inicio, proy["LURO"], horaCorte, ct));
-            locales.Add(await ResumenLocalAsync(cn, "PERALTA", hoy, inicio, proy["PERALTA"], horaCorte, ct));
+            locales.Add(await ResumenLocalAsync(cn, "LURO", hoy, inicio, proy["LURO"], horaCorte, conPlata, ct));
+            locales.Add(await ResumenLocalAsync(cn, "PERALTA", hoy, inicio, proy["PERALTA"], horaCorte, conPlata, ct));
         }
 
         return new DashboardVentasMobileDto
@@ -186,7 +190,7 @@ public sealed class DashboardService : IDashboardService
 
     private async Task<VentaLocalResumenDto> ResumenLocalAsync(
         SqlConnection cn, string local, string hoy, string inicio,
-        Dictionary<int, int>? proyHoras, int horaCorte, CancellationToken ct)
+        Dictionary<int, int>? proyHoras, int horaCorte, bool conPlata, CancellationToken ct)
     {
         var v = await VentaLocalAsync(cn, local, hoy, inicio, ct);
 
@@ -200,16 +204,19 @@ public sealed class DashboardService : IDashboardService
         return new VentaLocalResumenDto
         {
             Local = local,
-            Monto = (decimal)v.Totales["monto"],
+            // Sin plata para no-admin: el monto no se transmite (queda en 0).
+            Monto = conPlata ? (decimal)v.Totales["monto"] : 0,
             Tickets = (int)v.Totales["tickets"],
             Prendas = (decimal)v.Totales["prendas"],
-            TopArticulos = v.Articulos.Values.OrderByDescending(a => a.Monto).Take(5)
-                .Select(a => new TopArticuloDto
-                {
-                    Descripcion = string.IsNullOrWhiteSpace(a.Descripcion) ? a.Codigo : a.Descripcion.Trim(),
-                    Cantidad = a.Cantidad,
-                    Monto = a.Monto
-                }).ToList(),
+            TopArticulos = conPlata
+                ? v.Articulos.Values.OrderByDescending(a => a.Monto).Take(5)
+                    .Select(a => new TopArticuloDto
+                    {
+                        Descripcion = string.IsNullOrWhiteSpace(a.Descripcion) ? a.Codigo : a.Descripcion.Trim(),
+                        Cantidad = a.Cantidad,
+                        Monto = a.Monto
+                    }).ToList()
+                : new List<TopArticuloDto>(),
             Cajeros = v.PorCajero.OrderByDescending(c => c.Value)
                 .Select(c => new CajeroTicketsDto { Nombre = c.Key, Tickets = c.Value }).ToList(),
             ProyTicketsDia = proyDia,

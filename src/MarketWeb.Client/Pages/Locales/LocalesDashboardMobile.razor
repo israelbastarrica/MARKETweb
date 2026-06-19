@@ -29,11 +29,10 @@
         {
             @if (_data.Role == "cajero")
             {
-                @* ---- Versión cajero: avance vs proyección ---- *@
+                @* ---- Versión cajero: avance vs proyección (SIN plata) ---- *@
                 <div class="vm-card">
                     <div class="vm-card-head">
                         <span class="vm-local">@l.Local</span>
-                        <span class="vm-monto">$ @Miles(l.Monto)</span>
                     </div>
 
                     @if (l.ProyTicketsAhora is int proyAhora)
@@ -69,7 +68,7 @@
 
                     <div class="vm-kpis k2">
                         <div><span class="n">@Miles(l.Prendas)</span><span class="t">Prendas</span></div>
-                        <div><span class="n">$ @Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
+                        <div><span class="n">@PrendasPorTicket(l)</span><span class="t">Prendas x ticket</span></div>
                     </div>
 
                     @if (l.Cajeros.Count > 0)
@@ -165,6 +164,10 @@
     }
 
     private static decimal TicketProm(VentaLocalResumenDto l) => l.Tickets > 0 ? l.Monto / l.Tickets : 0;
+
+    // Métrica operativa sin plata para la vista cajero (prendas vendidas por ticket).
+    private static string PrendasPorTicket(VentaLocalResumenDto l)
+        => l.Tickets > 0 ? (l.Prendas / l.Tickets).ToString("0.0", CultureInfo.InvariantCulture) : "0";
 
     private static string Pct(double d) => $"{Math.Round(d)}%";
 
