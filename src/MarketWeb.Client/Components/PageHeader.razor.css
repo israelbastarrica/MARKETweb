@@ -1,30 +1,30 @@
 .header {
     display: flex;
     align-items: center;
-    gap: .9rem;
-    margin-bottom: 1.4rem;
+    gap: .7rem;
+    margin-bottom: 1.05rem;
 }
 
 .icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
     display: grid;
     place-items: center;
     background: rgba(245, 158, 11, .13);
     color: #c27803;
-    font-size: 1.15rem;
+    font-size: 1rem;
     flex-shrink: 0;
 }
 
 .texts {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
 }
 
 .eyebrow {
-    font-size: .7rem;
+    font-size: .64rem;
     font-weight: 600;
     letter-spacing: .14em;
     text-transform: uppercase;
@@ -32,7 +32,7 @@
 }
 
 .title {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .02em;
@@ -49,17 +49,17 @@
     }
 
     .icon {
-        width: 34px;
-        height: 34px;
+        width: 32px;
+        height: 32px;
         border-radius: 9px;
-        font-size: .95rem;
+        font-size: .9rem;
     }
 
     .eyebrow {
-        font-size: .6rem;
+        font-size: .58rem;
     }
 
     .title {
-        font-size: 1.15rem;
+        font-size: 1.1rem;
     }
 }
