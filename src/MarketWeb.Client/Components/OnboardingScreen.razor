@@ -37,7 +37,7 @@
                     Confirmar
                 </button>
 
-                <button class="ob-logout" @onclick="IrANuevo">No encuentro mi PC o soy nuevo</button>
+                <button class="ob-logout" @onclick="IrANuevo">No tengo PC asignada</button>
             }
         }
         else
@@ -65,7 +65,7 @@
                     Pedir acceso
                 </button>
 
-                <button class="ob-logout" @onclick="IrAPc">Volver a elegir mi PC</button>
+                <button class="ob-logout" @onclick="IrAPc">Tengo una PC asignada</button>
             }
         }
 
@@ -75,7 +75,7 @@
 </div>
 
 @code {
-    private string _modo = "pc";   // "pc" = elegir PC | "nuevo" = pedir acceso por perfil
+    private string _modo = "nuevo";   // "nuevo" = pedir acceso por área/local (default) | "pc" = elegir PC
 
     private List<UsuarioPcDto> _pcs = new();
     private int _pcId;
@@ -92,7 +92,7 @@
     {
         var auth = await AuthProvider.GetAuthenticationStateAsync();
         _email = auth.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
-        await CargarPcs();
+        await CargarPerfiles();   // arranca en modo "nuevo" (área/local)
     }
 
     private async Task CargarPcs()
@@ -118,10 +118,11 @@
         if (_perfiles.Count == 0) await CargarPerfiles();
     }
 
-    private void IrAPc()
+    private async Task IrAPc()
     {
         _error = null;
         _modo = "pc";
+        if (_pcs.Count == 0) await CargarPcs();
     }
 
     private async Task Confirmar()
