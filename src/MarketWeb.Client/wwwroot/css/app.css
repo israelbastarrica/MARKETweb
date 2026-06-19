@@ -493,19 +493,26 @@ code {
         background: #dff5e8;
     }
 
-/* En oscuro, las filas de estado pasan a tintes translúcidos (si no, quedaría
-   texto claro sobre pastel claro). El texto lo da el tema. */
+/* En oscuro, las filas de estado: PRIMERO neutralizamos el fondo claro que la
+   regla base pone en el <tr> (si no, el pastel claro queda debajo y con el texto
+   claro del tema no se lee), y pintamos las celdas con un tinte oscuro legible. */
+html[data-theme="dark"] .market-table tbody tr.fila-verde,
+html[data-theme="dark"] .market-table tbody tr.fila-enviado,
+html[data-theme="dark"] .market-table tbody tr.fila-roja {
+    background: transparent;
+}
+
 html[data-theme="dark"] .market-table tbody tr.fila-verde td,
 html[data-theme="dark"] .market-table tbody tr.fila-enviado td {
-    background: rgba(56, 178, 110, .16);
+    background: rgba(56, 178, 110, .18);
 }
 
 html[data-theme="dark"] .market-table tbody tr.fila-enviado:hover td {
-    background: rgba(56, 178, 110, .24);
+    background: rgba(56, 178, 110, .26);
 }
 
 html[data-theme="dark"] .market-table tbody tr.fila-roja td {
-    background: rgba(214, 80, 70, .18);
+    background: rgba(214, 80, 70, .20);
     color: #f1a59c;
 }
 
