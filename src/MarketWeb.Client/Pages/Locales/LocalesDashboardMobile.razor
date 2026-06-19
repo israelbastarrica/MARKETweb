@@ -1,9 +1,11 @@
 @implements IDisposable
+@using System.Globalization
 @using MarketWeb.Shared.Dashboard
 @inject DashboardApi Api
 
-@* Vista mobile del dashboard de Locales (ventas): KPIs clave en tarjetas
-   verticales, con el tema de la app. Reusa el cálculo del dashboard de TV. *@
+@* Vista mobile del dashboard de Locales (ventas). Dos versiones, igual que la TV:
+   - cajero: enfocado en el AVANCE del día (tickets reales vs proyectados).
+   - admin: gerencial (ambos locales, top productos, cajeros). *@
 
 <div class="vm">
     <div class="vm-head">
@@ -25,42 +27,97 @@
     {
         @foreach (var l in _data.Locales)
         {
-            <div class="vm-card">
-                <div class="vm-card-head">
-                    <span class="vm-local">@l.Local</span>
-                    <span class="vm-monto">$ @Miles(l.Monto)</span>
-                </div>
-                <div class="vm-kpis">
-                    <div><span class="n">@l.Tickets</span><span class="t">Tickets</span></div>
-                    <div><span class="n">@Miles(l.Prendas)</span><span class="t">Prendas</span></div>
-                    <div><span class="n">$ @Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
-                </div>
+            @if (_data.Role == "cajero")
+            {
+                @* ---- Versión cajero: avance vs proyección ---- *@
+                <div class="vm-card">
+                    <div class="vm-card-head">
+                        <span class="vm-local">@l.Local</span>
+                        <span class="vm-monto">$ @Miles(l.Monto)</span>
+                    </div>
 
-                @if (l.TopArticulos.Count > 0)
-                {
-                    <div class="vm-sub">Top productos</div>
-                    <div class="vm-list">
-                        @foreach (var a in l.TopArticulos)
+                    @if (l.ProyTicketsAhora is int proyAhora)
+                    {
+                        var diff = l.Tickets - proyAhora;
+                        var ok = diff >= 0;
+                        <div class="vm-avance @(ok ? "ok" : "bad")">
+                            <span class="big">@l.Tickets</span>
+                            <span class="lab">tickets hoy</span>
+                            <span class="cmp">
+                                <i class="fa-solid @(ok ? "fa-arrow-trend-up" : "fa-arrow-trend-down")"></i>
+                                @(diff >= 0 ? "+" : "")@diff vs proyectado a esta hora (@proyAhora)
+                            </span>
+                        </div>
+                        @if (l.ProyTicketsDia is int proyDia && proyDia > 0)
                         {
-                            <div class="vm-row">
-                                <span class="d">@a.Descripcion</span>
-                                <span class="q">@Miles(a.Cantidad)</span>
+                            var pct = (double)l.Tickets / proyDia * 100;
+                            <div class="vm-prog"><span style="width:@(Math.Min(100, pct).ToString("0", CultureInfo.InvariantCulture))%"></span></div>
+                            <div class="vm-progleg">
+                                <span>@l.Tickets de @proyDia proyectados hoy</span>
+                                <span>@Pct(pct)</span>
                             </div>
                         }
-                    </div>
-                }
+                    }
+                    else
+                    {
+                        <div class="vm-avance">
+                            <span class="big">@l.Tickets</span>
+                            <span class="lab">tickets hoy</span>
+                            <span class="cmp">sin proyección cargada</span>
+                        </div>
+                    }
 
-                @if (l.Cajeros.Count > 0)
-                {
-                    <div class="vm-sub">Cajeros</div>
-                    <div class="vm-chips">
-                        @foreach (var c in l.Cajeros)
-                        {
-                            <span>@c.Nombre <b>@c.Tickets</b></span>
-                        }
+                    <div class="vm-kpis k2">
+                        <div><span class="n">@Miles(l.Prendas)</span><span class="t">Prendas</span></div>
+                        <div><span class="n">$ @Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
                     </div>
-                }
-            </div>
+
+                    @if (l.Cajeros.Count > 0)
+                    {
+                        <div class="vm-sub">Cajeros</div>
+                        <div class="vm-chips">
+                            @foreach (var c in l.Cajeros) { <span>@c.Nombre <b>@c.Tickets</b></span> }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                @* ---- Versión admin: gerencial ---- *@
+                <div class="vm-card">
+                    <div class="vm-card-head">
+                        <span class="vm-local">@l.Local</span>
+                        <span class="vm-monto">$ @Miles(l.Monto)</span>
+                    </div>
+                    <div class="vm-kpis">
+                        <div><span class="n">@l.Tickets</span><span class="t">Tickets</span></div>
+                        <div><span class="n">@Miles(l.Prendas)</span><span class="t">Prendas</span></div>
+                        <div><span class="n">$ @Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
+                    </div>
+
+                    @if (l.TopArticulos.Count > 0)
+                    {
+                        <div class="vm-sub">Top productos</div>
+                        <div class="vm-list">
+                            @foreach (var a in l.TopArticulos)
+                            {
+                                <div class="vm-row">
+                                    <span class="d">@a.Descripcion</span>
+                                    <span class="q">@Miles(a.Cantidad)</span>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (l.Cajeros.Count > 0)
+                    {
+                        <div class="vm-sub">Cajeros</div>
+                        <div class="vm-chips">
+                            @foreach (var c in l.Cajeros) { <span>@c.Nombre <b>@c.Tickets</b></span> }
+                        </div>
+                    }
+                </div>
+            }
         }
     }
 
@@ -109,11 +166,13 @@
 
     private static decimal TicketProm(VentaLocalResumenDto l) => l.Tickets > 0 ? l.Monto / l.Tickets : 0;
 
+    private static string Pct(double d) => $"{Math.Round(d)}%";
+
     // Entero con separador de miles "." sin depender de la cultura del navegador.
     private static string Miles(decimal n)
     {
         var neg = n < 0;
-        var e = ((long)Math.Truncate(Math.Abs(n))).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var e = ((long)Math.Truncate(Math.Abs(n))).ToString(CultureInfo.InvariantCulture);
         if (e.Length > 3)
         {
             var chars = e.ToCharArray();

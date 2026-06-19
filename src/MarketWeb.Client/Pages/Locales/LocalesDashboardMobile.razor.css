@@ -78,6 +78,65 @@
     color: var(--luro);
 }
 
+/* Avance del día (versión cajero) */
+.vm-avance {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2px;
+    padding: 6px 0 2px;
+}
+
+.vm-avance .big {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--mk-text-strong);
+}
+
+.vm-avance .lab {
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--mk-text-muted);
+    font-weight: 600;
+}
+
+.vm-avance .cmp {
+    font-size: .82rem;
+    font-weight: 700;
+    margin-top: 4px;
+}
+
+.vm-avance.ok .cmp { color: var(--luro); }
+.vm-avance.bad .cmp { color: #d8492f; }
+.vm-avance.ok .big { color: var(--luro); }
+
+.vm-prog {
+    height: 9px;
+    border-radius: 5px;
+    background: var(--mk-surface-2);
+    overflow: hidden;
+}
+
+.vm-prog span {
+    display: block;
+    height: 100%;
+    background: var(--luro);
+    border-radius: 5px;
+    transition: width .3s ease;
+}
+
+.vm-progleg {
+    display: flex;
+    justify-content: space-between;
+    font-size: .72rem;
+    color: var(--mk-text-muted);
+}
+
+.vm-progleg span:last-child { font-weight: 800; color: var(--mk-text-strong); }
+
 .vm-kpis {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -85,6 +144,8 @@
     border-top: 1px solid var(--mk-border);
     padding-top: 10px;
 }
+
+.vm-kpis.k2 { grid-template-columns: repeat(2, 1fr); }
 
 .vm-kpis > div {
     display: flex;

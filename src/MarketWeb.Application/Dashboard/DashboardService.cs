@@ -144,16 +144,36 @@ public sealed class DashboardService : IDashboardService
         var hoy = Fecha8(fecha);
         var dt = DateTime.ParseExact(hoy, "yyyyMMdd", null);
         var inicio = dt.AddDays(-6).ToString("yyyyMMdd");
+        var fechaSqlDate = dt.ToString("yyyy-MM-dd");
+
+        // Corte para "proyectado hasta ahora": si es hoy, la hora actual; si es un día pasado, el día completo.
+        var esHoy = hoy == DateTime.Today.ToString("yyyyMMdd");
+        var horaCorte = esHoy ? DateTime.Now.Hour : 23;
 
         using var cn = _db.Create();
 
+        // Proyección de tickets por local y hora (tabla Ventas de MARKET central).
+        var proy = new Dictionary<string, Dictionary<int, int>> { ["LURO"] = new(), ["PERALTA"] = new() };
+        try
+        {
+            var rows = await cn.QueryAsync($"SELECT Local, Fecha_Hora, PrediccionTickets FROM Ventas WHERE CAST(Fecha_Hora AS DATE) = '{fechaSqlDate}'");
+            foreach (var r in rows)
+            {
+                string l = ((string)(r.Local ?? "")).Trim().ToUpperInvariant();
+                if (!proy.ContainsKey(l)) continue;
+                var fh = (DateTime)r.Fecha_Hora;
+                proy[l][fh.Hour] = r.PrediccionTickets is null ? 0 : Convert.ToInt32(r.PrediccionTickets);
+            }
+        }
+        catch { /* sin proyecciones */ }
+
         var locales = new List<VentaLocalResumenDto>();
         if (rol == "cajero" && !string.IsNullOrEmpty(local))
-            locales.Add(await ResumenLocalAsync(cn, local, hoy, inicio, ct));
+            locales.Add(await ResumenLocalAsync(cn, local, hoy, inicio, proy.GetValueOrDefault(local.ToUpperInvariant()), horaCorte, ct));
         else
         {
-            locales.Add(await ResumenLocalAsync(cn, "LURO", hoy, inicio, ct));
-            locales.Add(await ResumenLocalAsync(cn, "PERALTA", hoy, inicio, ct));
+            locales.Add(await ResumenLocalAsync(cn, "LURO", hoy, inicio, proy["LURO"], horaCorte, ct));
+            locales.Add(await ResumenLocalAsync(cn, "PERALTA", hoy, inicio, proy["PERALTA"], horaCorte, ct));
         }
 
         return new DashboardVentasMobileDto
@@ -164,9 +184,19 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
-    private async Task<VentaLocalResumenDto> ResumenLocalAsync(SqlConnection cn, string local, string hoy, string inicio, CancellationToken ct)
+    private async Task<VentaLocalResumenDto> ResumenLocalAsync(
+        SqlConnection cn, string local, string hoy, string inicio,
+        Dictionary<int, int>? proyHoras, int horaCorte, CancellationToken ct)
     {
         var v = await VentaLocalAsync(cn, local, hoy, inicio, ct);
+
+        int? proyDia = null, proyAhora = null;
+        if (proyHoras is { Count: > 0 })
+        {
+            proyDia = proyHoras.Values.Sum();
+            proyAhora = proyHoras.Where(kv => kv.Key <= horaCorte).Sum(kv => kv.Value);
+        }
+
         return new VentaLocalResumenDto
         {
             Local = local,
@@ -181,7 +211,9 @@ public sealed class DashboardService : IDashboardService
                     Monto = a.Monto
                 }).ToList(),
             Cajeros = v.PorCajero.OrderByDescending(c => c.Value)
-                .Select(c => new CajeroTicketsDto { Nombre = c.Key, Tickets = c.Value }).ToList()
+                .Select(c => new CajeroTicketsDto { Nombre = c.Key, Tickets = c.Value }).ToList(),
+            ProyTicketsDia = proyDia,
+            ProyTicketsAhora = proyAhora
         };
     }
 

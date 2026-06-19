@@ -16,6 +16,12 @@ public sealed class VentaLocalResumenDto
     public decimal Prendas { get; set; }
     public List<TopArticuloDto> TopArticulos { get; set; } = new();
     public List<CajeroTicketsDto> Cajeros { get; set; } = new();
+
+    // Proyección (para la vista cajero): tickets proyectados del día y los
+    // acumulados hasta la hora actual (para saber si va adelantado o atrasado).
+    // null si no hay proyección cargada.
+    public int? ProyTicketsDia { get; set; }
+    public int? ProyTicketsAhora { get; set; }
 }
 
 public sealed class TopArticuloDto
