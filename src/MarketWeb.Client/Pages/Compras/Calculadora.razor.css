@@ -267,3 +267,36 @@
 }
 
 .limpiar-button:hover { background: var(--mk-surface-2); }
+
+/* ---------- Compacto en celular ---------- */
+@media (max-width: 768px) {
+    .calc-wrap { gap: 10px; }
+
+    /* Campos más bajos. OJO: el font-size del input se queda en 16px para que
+       iOS no haga zoom al enfocar. */
+    .field input {
+        height: 48px;
+        padding: 14px 12px 4px 12px;
+    }
+
+    .field input:focus {
+        padding: 13px 11px 3px 11px;
+    }
+
+    .field label { top: 14px; }
+
+    .field input:focus + label,
+    .field input:not(:placeholder-shown) + label { top: -8px; }
+
+    .calc-select { height: 44px; }
+
+    .segmented .seg { height: 40px; }
+
+    .resumen { padding: 14px 16px; }
+    .resumen-neto { font-size: 28px; }
+
+    .combo { padding: 16px; }
+    .combo-valor { font-size: 36px; }
+
+    .limpiar-button { height: 44px; }
+}
