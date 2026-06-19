@@ -4,12 +4,18 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="9.0.*" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.15" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.15" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PWA: el SW de dev no cachea; el publicado (service-worker.published.js) sí. -->
+    <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,9 +3,16 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>MARKET Web</title>
     <base href="/" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#161618" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MARKET" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -49,6 +56,12 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         };
+    </script>
+    <script>
+        // PWA: registra el service worker (instalable + arranque offline de assets).
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
+        }
     </script>
 </body>
 
