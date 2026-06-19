@@ -89,17 +89,20 @@
                                     </div>
                                 }
                             </td>
-                            <td>@u.Pc</td>
+                            <td>@if (EsWebRequest(u)) { <span class="text-muted">—</span> } else { @u.Pc }</td>
                             <td><span class="badge-perfil">@u.Perfil</span></td>
                             <td class="text-center text-nowrap acciones">
-                                @if (!string.IsNullOrWhiteSpace(u.Mail) && !u.MailAprobado)
+                                @* PC reclamada y pendiente: tilde directo (el perfil ya está bien).
+                                   Solicitud web: SIN tilde directo → hay que abrir y aprobar eligiendo el perfil. *@
+                                @if (!string.IsNullOrWhiteSpace(u.Mail) && !u.MailAprobado && !EsWebRequest(u))
                                 {
                                     <button class="btn btn-sm btn-outline-success me-1" title="Aprobar acceso"
                                             @onclick="() => Aprobar(u)">
                                         <i class="fa-solid fa-check"></i>
                                     </button>
                                 }
-                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar"
+                                <button class="btn btn-sm me-1 @(EsWebRequest(u) && !u.MailAprobado ? "btn-outline-success" : "btn-outline-primary")"
+                                        title="@(EsWebRequest(u) && !u.MailAprobado ? "Revisar y aprobar" : "Modificar")"
                                         @onclick="() => AbrirModificacion(u)">
                                     <i class="fa-solid fa-pen"></i>
                                 </button>
@@ -125,7 +128,7 @@
                 <EditForm Model="_editado" OnValidSubmit="Guardar">
                     <DataAnnotationsValidator />
                     <div class="modal-header">
-                        <h5 class="modal-title">@(_esAlta ? "Nueva PC" : "Modificar PC")</h5>
+                        <h5 class="modal-title">@(_esAlta ? "Nueva PC" : (_esWebRequest ? "Revisar solicitud web" : "Modificar PC"))</h5>
                         <button type="button" class="btn-close" @onclick="CerrarModal"></button>
                     </div>
                     <div class="modal-body">
@@ -133,11 +136,21 @@
                         {
                             <div class="alert alert-danger py-2">@_errorModal</div>
                         }
-                        <div class="mb-3">
-                            <label class="form-label">PC (nombre de la máquina)</label>
-                            <InputText class="form-control" @bind-Value="_editado.Pc" placeholder="Ej: DESKTOP-XXXXXX" />
-                            <ValidationMessage For="() => _editado.Pc" />
-                        </div>
+                        @if (_esWebRequest)
+                        {
+                            <div class="alert alert-info py-2 d-flex align-items-center">
+                                <i class="fa-solid fa-globe me-2"></i>
+                                <div>Solicitud por la web (sin PC). Revisá el <strong>perfil</strong> y aprobá.</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">PC (nombre de la máquina)</label>
+                                <InputText class="form-control" @bind-Value="_editado.Pc" placeholder="Ej: DESKTOP-XXXXXX" />
+                                <ValidationMessage For="() => _editado.Pc" />
+                            </div>
+                        }
                         <div class="mb-3">
                             <label class="form-label">Mail <span class="text-muted">(@@marketarg.com)</span></label>
                             <InputText class="form-control" type="email" @bind-Value="_editado.Mail"
@@ -161,7 +174,7 @@
                         <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
                         <button type="submit" class="btn btn-primary" disabled="@_guardando">
                             @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
-                            Guardar
+                            @(_esWebRequest ? "Aprobar" : "Guardar")
                         </button>
                     </div>
                 </EditForm>
@@ -181,10 +194,16 @@
 
     private bool _modalAbierto;
     private bool _esAlta;
+    private bool _esWebRequest;
     private bool _guardando;
     private int _idEditado;
     private string? _errorModal;
     private UsuarioPcSaveRequest _editado = new();
+
+    // Solicitud por la web: la guardo con PC = Mail (no tiene PC física). Esas hay
+    // que abrirlas y aprobarlas eligiendo el perfil (sin tilde de aprobación directa).
+    private static bool EsWebRequest(UsuarioPcDto u)
+        => !string.IsNullOrWhiteSpace(u.Mail) && string.Equals(u.Pc, u.Mail, StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -232,6 +251,7 @@
     private void AbrirAlta()
     {
         _esAlta = true;
+        _esWebRequest = false;
         _idEditado = 0;
         _editado = new UsuarioPcSaveRequest();
         _errorModal = null;
@@ -241,6 +261,7 @@
     private void AbrirModificacion(UsuarioPcDto u)
     {
         _esAlta = false;
+        _esWebRequest = EsWebRequest(u) && !u.MailAprobado;
         _idEditado = u.Id;
         _editado = new UsuarioPcSaveRequest { Pc = u.Pc, Perfil = u.Perfil, Mail = u.Mail };
         _errorModal = null;
@@ -267,7 +288,9 @@
         }
 
         _modalAbierto = false;
-        _mensaje = _esAlta ? "Registro agregado correctamente." : "Registro modificado correctamente.";
+        _mensaje = _esAlta ? "Registro agregado correctamente."
+            : _esWebRequest ? "Acceso aprobado correctamente."
+            : "Registro modificado correctamente.";
         await CargarPerfiles();
         await Cargar();
     }
