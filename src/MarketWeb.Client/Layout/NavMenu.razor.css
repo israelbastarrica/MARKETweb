@@ -208,7 +208,6 @@
         }
 
     .market-userbox .logout {
-        margin-left: auto;
         background: transparent;
         border: 0;
         color: #8a8a93;
@@ -219,6 +218,20 @@
 
         .market-userbox .logout:hover {
             color: #fff;
+        }
+
+    .market-userbox .theme-toggle {
+        margin-left: auto;
+        background: transparent;
+        border: 0;
+        color: #8a8a93;
+        cursor: pointer;
+        font-size: 1rem;
+        padding: .3rem;
+    }
+
+        .market-userbox .theme-toggle:hover {
+            color: #f59e0b;
         }
 
     .market-userbox .btn-google {

@@ -6,6 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>MARKET Web</title>
     <base href="/" />
+    <script>
+        // Tema (claro/oscuro): aplicar ANTES de cargar el CSS para que no parpadee.
+        // Preferencia guardada > preferencia del sistema. Se expone mkTema para el toggle.
+        (function () {
+            var t;
+            try { t = localStorage.getItem('marketweb.tema'); } catch (e) { }
+            if (t !== 'dark' && t !== 'light') {
+                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+            document.documentElement.setAttribute('data-bs-theme', t);
+            document.documentElement.style.background = (t === 'dark') ? '#151519' : '#f8f7f3';
+        })();
+        window.mkTema = {
+            get: function () { return document.documentElement.getAttribute('data-theme') || 'light'; },
+            set: function (t) {
+                document.documentElement.setAttribute('data-theme', t);
+                document.documentElement.setAttribute('data-bs-theme', t);
+                document.documentElement.style.background = (t === 'dark') ? '#151519' : '#f8f7f3';
+                try { localStorage.setItem('marketweb.tema', t); } catch (e) { }
+                return t;
+            },
+            toggle: function () { return window.mkTema.set(window.mkTema.get() === 'dark' ? 'light' : 'dark'); }
+        };
+    </script>
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#161618" />
     <meta name="mobile-web-app-capable" content="yes" />

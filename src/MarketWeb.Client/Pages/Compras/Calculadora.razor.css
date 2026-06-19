@@ -266,3 +266,15 @@
 }
 
 .limpiar-button:hover { background: #f3f1ec; }
+
+/* ---------- Tema oscuro ---------- */
+:global(html[data-theme="dark"]) .calc-wrap {
+    --tarjeta: #1e1e24;
+    --texto: #e3e3e7;
+    --texto-secundario: #9a9aa3;
+    --borde: #33333b;
+    --fondo: #151519;
+}
+
+:global(html[data-theme="dark"]) .field input:disabled { background: #26262d; }
+:global(html[data-theme="dark"]) .limpiar-button:hover { background: #26262d; }

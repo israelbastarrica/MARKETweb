@@ -46,6 +46,9 @@
                     <span class="n">@context.User.Identity?.Name</span>
                     <span class="p">@Perfil(context.User)</span>
                 </div>
+                <button class="theme-toggle" title="@(_tema == "dark" ? "Modo claro" : "Modo oscuro")" @onclick="ToggleTema">
+                    <i class="@(_tema == "dark" ? "fa-solid fa-sun" : "fa-solid fa-moon")"></i>
+                </button>
                 <button class="logout" title="Salir" @onclick="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
             </Authorized>
             <NotAuthorized>
@@ -59,9 +62,11 @@
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private string? _abierto;
     private string _perfil = "";
+    private string _tema = "light";
 
     private void Toggle(string titulo)
         => _abierto = _abierto == titulo ? null : titulo;
@@ -75,6 +80,20 @@
             _perfil = state.User.FindFirst("perfil")?.Value ?? "";
         }
         AbrirModuloDeRutaActual();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // El tema ya lo aplicó el script del index; acá solo reflejamos el ícono.
+            try { _tema = await JS.InvokeAsync<string>("mkTema.get"); StateHasChanged(); } catch { }
+        }
+    }
+
+    private async Task ToggleTema()
+    {
+        try { _tema = await JS.InvokeAsync<string>("mkTema.toggle"); } catch { }
     }
 
     // Módulos visibles por perfil (espejo de frmPrincipal). ADMIN ve todo; perfil desconocido, nada.

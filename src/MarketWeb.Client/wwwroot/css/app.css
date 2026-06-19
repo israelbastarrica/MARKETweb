@@ -1,7 +1,38 @@
+/* ===== Tokens de tema (claro por defecto, override oscuro) =====
+   La barra lateral es oscura en ambos temas; estos tokens visten el contenido. */
+:root {
+    --mk-bg: #f8f7f3;
+    --mk-surface: #ffffff;
+    --mk-surface-2: #faf9f6;
+    --mk-border: #ececea;
+    --mk-border-soft: #f3f1ec;
+    --mk-text: #2b2b30;
+    --mk-text-strong: #1f2430;
+    --mk-text-muted: #8d8a82;
+    --mk-row-hover: #fdf6e9;
+    --mk-subtotal: #f1efe8;
+    --mk-empty-text: #888;
+}
+
+html[data-theme="dark"] {
+    --mk-bg: #151519;
+    --mk-surface: #1e1e24;
+    --mk-surface-2: #26262d;
+    --mk-border: #33333b;
+    --mk-border-soft: #2c2c33;
+    --mk-text: #e3e3e7;
+    --mk-text-strong: #f1f1f4;
+    --mk-text-muted: #9a9aa3;
+    --mk-row-hover: #2a2a31;
+    --mk-subtotal: #2c2c33;
+    --mk-empty-text: #9a9aa3;
+}
+
 html, body {
     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
-    color: #2b2b30;
+    color: var(--mk-text);
+    background: var(--mk-bg);
 }
 
 h1:focus {
@@ -232,13 +263,13 @@ code {
     font-size: 1.65rem;
     font-weight: 700;
     letter-spacing: -.02em;
-    color: #1f2430;
+    color: var(--mk-text-strong);
 }
 
 .market-subtitle {
     font-size: 1.05rem;
     font-weight: 600;
-    color: #44464d;
+    color: var(--mk-text);
     margin: .5rem 0 .75rem;
 }
 
@@ -286,11 +317,11 @@ code {
 .art-cod {
     font-size: 1.3rem;
     font-weight: 700;
-    color: #1f2430;
+    color: var(--mk-text-strong);
 }
 
 .art-desc {
-    color: #44464d;
+    color: var(--mk-text);
     font-size: 1rem;
 }
 
@@ -326,10 +357,10 @@ code {
 
 .market-empty {
     text-align: center;
-    color: #888;
+    color: var(--mk-empty-text);
     padding: 3rem 1rem;
-    background: #fff;
-    border: 1px dashed #d8d6cf;
+    background: var(--mk-surface);
+    border: 1px dashed var(--mk-border);
     border-radius: 14px;
 }
 
@@ -337,13 +368,13 @@ code {
         font-size: 2.5rem;
         margin-bottom: .75rem;
         display: block;
-        color: #c9c6bd;
+        color: var(--mk-text-muted);
     }
 
 /* ---- Tarjeta + grilla con onda ---- */
 .market-card {
-    background: #fff;
-    border: 1px solid #ececea;
+    background: var(--mk-surface);
+    border: 1px solid var(--mk-border);
     border-radius: 14px;
     box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
     overflow: hidden;
@@ -357,24 +388,24 @@ code {
 }
 
     .market-table thead th {
-        background: #faf9f6;
+        background: var(--mk-surface-2);
         text-transform: uppercase;
         font-size: .72rem;
         letter-spacing: .06em;
         font-weight: 600;
-        color: #8d8a82;
+        color: var(--mk-text-muted);
         border: 0;
-        border-bottom: 1px solid #eeece7;
+        border-bottom: 1px solid var(--mk-border);
         padding: .85rem 1.1rem;
         white-space: nowrap;
     }
 
     .market-table tbody td {
         border: 0;
-        border-bottom: 1px solid #f3f1ec;
+        border-bottom: 1px solid var(--mk-border-soft);
         padding: .72rem 1.1rem;
         vertical-align: middle;
-        color: #3a3a40;
+        color: var(--mk-text);
     }
 
     .market-table tbody tr:last-child td {
@@ -387,7 +418,7 @@ code {
     }
 
     .market-table tbody tr:hover {
-        background: #fdf6e9;
+        background: var(--mk-row-hover);
     }
 
 .market-user {
@@ -398,12 +429,12 @@ code {
 
     .market-user .nombre {
         font-weight: 600;
-        color: #2b2b30;
+        color: var(--mk-text);
     }
 
     .market-user .sub {
         font-size: .78rem;
-        color: #8d8a82;
+        color: var(--mk-text-muted);
     }
 
 .badge-perfil {
@@ -429,7 +460,7 @@ code {
 }
 
 .market-table tbody tr.fila-subtotal td {
-    background: #f1efe8;
+    background: var(--mk-subtotal);
     font-weight: 700;
 }
 
@@ -453,6 +484,26 @@ code {
     .market-table tbody tr.fila-enviado:hover {
         background: #dff5e8;
     }
+
+/* En oscuro, las filas de estado pasan a tintes translúcidos (si no, quedaría
+   texto claro sobre pastel claro). El texto lo da el tema. */
+html[data-theme="dark"] .market-table tbody tr.fila-verde td,
+html[data-theme="dark"] .market-table tbody tr.fila-enviado td {
+    background: rgba(56, 178, 110, .16);
+}
+
+html[data-theme="dark"] .market-table tbody tr.fila-enviado:hover td {
+    background: rgba(56, 178, 110, .24);
+}
+
+html[data-theme="dark"] .market-table tbody tr.fila-roja td {
+    background: rgba(214, 80, 70, .18);
+    color: #f1a59c;
+}
+
+html[data-theme="dark"] .market-table tbody tr.texto-rojo td {
+    color: #f1a59c;
+}
 
 .badge-pend {
     display: inline-block;

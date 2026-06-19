@@ -7,7 +7,7 @@
     flex: 1;
     min-width: 0;
     padding: 1.5rem 2rem;
-    background: #f8f7f3;
+    background: var(--mk-bg);
 }
 
 /* Topbar (con el botón hamburguesa): SOLO en celular. En desktop el sidebar
@@ -23,9 +23,9 @@
     width: 40px;
     height: 40px;
     border-radius: 9px;
-    border: 1px solid #e6e4dd;
-    background: #fff;
-    color: #555;
+    border: 1px solid var(--mk-border);
+    background: var(--mk-surface);
+    color: var(--mk-text-muted);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -36,14 +36,14 @@
 }
 
 .market-burger:hover {
-    background: #faf9f6;
-    color: #1f2430;
+    background: var(--mk-surface-2);
+    color: var(--mk-text-strong);
 }
 
 .market-topbar-brand {
     font-weight: 800;
     letter-spacing: .12em;
-    color: #1f2430;
+    color: var(--mk-text-strong);
     font-size: 1.05rem;
 }
 

@@ -36,7 +36,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .02em;
-    color: #1f2430;
+    color: var(--mk-text-strong);
     margin: 0;
     line-height: 1.15;
 }
