@@ -40,3 +40,26 @@
     margin: 0;
     line-height: 1.15;
 }
+
+/* En celular el encabezado se achica para no comer pantalla. */
+@media (max-width: 768px) {
+    .header {
+        gap: .6rem;
+        margin-bottom: .9rem;
+    }
+
+    .icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        font-size: .95rem;
+    }
+
+    .eyebrow {
+        font-size: .6rem;
+    }
+
+    .title {
+        font-size: 1.15rem;
+    }
+}
