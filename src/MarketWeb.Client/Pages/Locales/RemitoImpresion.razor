@@ -138,6 +138,10 @@
     .badge-imp { background: #198754; }
     .badge-pen { background: #0d6efd; }
     .badge-err { background: #dc3545; }
+
+    /* Modo oscuro: tintes oscuros legibles (el pastel claro no se leía con texto claro). */
+    html[data-theme="dark"] tr.fila-pen { background: rgba(56, 130, 246, .16) !important; }
+    html[data-theme="dark"] tr.fila-err { background: rgba(214, 80, 70, .18) !important; }
 </style>
 
 @code {

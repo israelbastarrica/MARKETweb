@@ -240,7 +240,7 @@
 }
 
 <style>
-    .leyenda { display: inline-flex; align-items: center; gap: 6px; color: #555; }
+    .leyenda { display: inline-flex; align-items: center; gap: 6px; color: var(--mk-text-muted); }
     .leyenda .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
     .dot-rec { background: #c6efce; border: 1px solid #7bc97f; }
     .dot-tra { background: #ffeb9c; border: 1px solid #e6c34a; }
@@ -251,6 +251,12 @@
     .badge-rec { background: #198754; }
     .badge-tra { background: #d39e00; color: #1f2430; }
     .badge-pen { background: #dc3545; }
+
+    /* Modo oscuro: el pastel claro de la fila + el texto claro del tema no se leía;
+       lo pasamos a tintes oscuros translúcidos sobre la superficie oscura. */
+    html[data-theme="dark"] tr.fila-rec { background: rgba(56, 178, 110, .16) !important; }
+    html[data-theme="dark"] tr.fila-tra { background: rgba(245, 191, 36, .15) !important; }
+    html[data-theme="dark"] tr.fila-pen { background: rgba(214, 80, 70, .18) !important; }
 </style>
 
 @code {

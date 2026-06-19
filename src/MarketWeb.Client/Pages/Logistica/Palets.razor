@@ -181,6 +181,9 @@
 <style>
     tr.fila-desarmado { background: #fdeaea !important; color: #9b3030; }
     .art-lista { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Modo oscuro: tinte rojo oscuro legible en vez del rosa claro. */
+    html[data-theme="dark"] tr.fila-desarmado { background: rgba(214, 80, 70, .18) !important; color: #f1a59c !important; }
 </style>
 
 @code {
