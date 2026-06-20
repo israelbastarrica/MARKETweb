@@ -296,6 +296,68 @@ public sealed class InsumosService : IInsumosService
         }
     }
 
+    private sealed record ArmadoRow(int PedidoId, int NroPedido, string Local, string ArtCod, string Descripcion, int Cantidad);
+
+    public async Task<ArmadoInsumosDto> ImprimirArmadoAsync(int? ubicacionId, string usuario, CancellationToken ct = default)
+    {
+        var modoUbic = ubicacionId is null ? "TODOS" : (ubicacionId == -1 ? "LOCALES" : "ID");
+        var idLoc = ubicacionId is > 0 ? ubicacionId.Value : 0;
+
+        using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        using var tx = cn.BeginTransaction();
+        try
+        {
+            // Pedidos pendientes (sin imprimir ni enviar) con detalle, del filtro de ubicación.
+            const string sqlSel = """
+                SELECT P.ID AS PedidoId, P.NroPedido AS NroPedido, ISNULL(U.Descripcion,'SIN ASIGNAR') AS Local,
+                       RTRIM(D.ARTCOD) AS ArtCod, ISNULL(RTRIM(ART.ARTDES),'Sin descripción') AS Descripcion, D.Cantidad AS Cantidad
+                FROM PedidosInsumos P
+                LEFT JOIN Ubicaciones U ON P.IDLocal = U.ID
+                INNER JOIN PedidosInsumosDetalle D ON D.IDPedido = P.ID AND D.Eliminado = 0
+                LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART ART WITH(NOLOCK) ON RTRIM(ART.ARTCOD) = RTRIM(D.ARTCOD)
+                WHERE P.Eliminado = 0 AND P.FechaImpresion IS NULL AND P.FechaEnviado IS NULL
+                  AND (@modoUbic='TODOS'
+                       OR (@modoUbic='LOCALES' AND P.IDLocal IN (2,3))
+                       OR (@modoUbic='ID' AND P.IDLocal=@idLoc))
+                ORDER BY P.NroPedido, D.ID;
+                """;
+            var rows = (await cn.QueryAsync<ArmadoRow>(new CommandDefinition(
+                sqlSel, new { modoUbic, idLoc }, tx, commandTimeout: 60, cancellationToken: ct))).ToList();
+
+            var pedidos = rows
+                .GroupBy(r => new { r.PedidoId, r.NroPedido, r.Local })
+                .Select(g => new ArmadoPedidoDto
+                {
+                    Id = g.Key.PedidoId,
+                    NroPedido = g.Key.NroPedido,
+                    Local = g.Key.Local,
+                    Renglones = g.Select(x => new ArmadoRenglonDto { ArtCod = x.ArtCod, Descripcion = x.Descripcion, Cantidad = x.Cantidad }).ToList()
+                })
+                .ToList();
+
+            if (pedidos.Count > 0)
+            {
+                var ids = pedidos.Select(p => p.Id).ToArray();
+                var audit = $"Impreso armado (EN ARMADO) | {usuario} | {DateTime.Now}";
+                await cn.ExecuteAsync(new CommandDefinition(
+                    """
+                    UPDATE PedidosInsumos SET FechaImpresion = GETDATE(), Auditoria = @audit
+                    WHERE ID IN @ids AND FechaImpresion IS NULL AND FechaEnviado IS NULL AND Eliminado = 0;
+                    """,
+                    new { ids, audit }, tx, cancellationToken: ct));
+            }
+
+            tx.Commit();
+            return new ArmadoInsumosDto { Pedidos = pedidos };
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+
     public async Task<bool> EliminarPedidoAsync(int idPedido, string usuario, CancellationToken ct = default)
     {
         using var cn = _db.Create();

@@ -6,6 +6,7 @@
 <PageTitle>Insumos · Pedidos</PageTitle>
 
 <div class="market-page">
+    <div class="no-print">
     <PageHeader Modulo="Insumos" Titulo="Pedidos" Icono="fa-solid fa-boxes-stacked" />
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
@@ -31,6 +32,12 @@
         <button class="btn btn-outline-secondary" @onclick="Cargar">
             <i class="fa-solid fa-rotate me-1"></i> Actualizar
         </button>
+        @if (_esDeposito)
+        {
+            <button class="btn btn-outline-dark" @onclick="ImprimirArmado" title="Imprimir hoja de ruta de armado (marca EN ARMADO)">
+                <i class="fa-solid fa-print me-1"></i> Imprimir armado
+            </button>
+        }
         @if (_puedeABM)
         {
             <button class="btn btn-primary" @onclick="NuevoPedido" title="Crear un pedido nuevo">
@@ -111,7 +118,40 @@
         </div>
         <p class="text-muted small">@_pedidos.Count pedido(s).</p>
     }
+    </div>
+
+    @* Hoja de ruta de armado: solo se ve al imprimir (clase solo-print global). *@
+    @if (_armado is not null)
+    {
+        <div class="solo-print">
+            @foreach (var p in _armado.Pedidos)
+            {
+                <div class="armado-pedido">
+                    <h3>ARMADO DE INSUMOS</h3>
+                    <div class="armado-sub">Local: <strong>@p.Local</strong> · Pedido N° <strong>@p.NroPedido</strong> · @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</div>
+                    <table class="armado-tabla">
+                        <thead><tr><th>Código</th><th>Descripción</th><th class="r">Cant.</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in p.Renglones)
+                            {
+                                <tr><td>@r.ArtCod</td><td>@r.Descripcion</td><td class="r">@r.Cantidad</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
 </div>
+
+<style>
+    .armado-pedido { break-inside: avoid; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 2px solid #000; }
+    .armado-sub { font-size: 9pt; margin-bottom: 8px; }
+    .solo-print h3 { font-size: 14pt; margin: 0 0 4px; }
+    .armado-tabla { width: 100%; border-collapse: collapse; font-size: 9pt; }
+    .armado-tabla th, .armado-tabla td { border-bottom: 1px solid #999; padding: 3px 6px; text-align: left; }
+    .armado-tabla th.r, .armado-tabla td.r { text-align: right; }
+</style>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
@@ -125,8 +165,10 @@
 
     private string _perfil = "";
     private bool _puedeABM;          // LURO/PERALTA/ADMIN pueden ABM
+    private bool _esDeposito;        // LOGISTICA/ADMIN: pueden imprimir el armado
     private bool _ubicacionFija;     // local con ubicación bloqueada
     private int _idLocalPedir;       // local con el que se crea un pedido (2/3)
+    private ArmadoInsumosDto? _armado;   // hoja de ruta para imprimir
 
     protected override async Task OnInitializedAsync()
     {
@@ -140,7 +182,9 @@
         var esLuro = string.Equals(_perfil, "LURO", StringComparison.OrdinalIgnoreCase);
         var esPeralta = string.Equals(_perfil, "PERALTA", StringComparison.OrdinalIgnoreCase);
         var esAdmin = string.Equals(_perfil, "ADMIN", StringComparison.OrdinalIgnoreCase);
+        var esLogistica = string.Equals(_perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase);
         _puedeABM = esLuro || esPeralta || esAdmin;
+        _esDeposito = esLogistica || esAdmin;   // depósito imprime el armado
 
         if (esLuro) { _ubicacionSel = 2; _ubicacionFija = true; _idLocalPedir = 2; }
         else if (esPeralta) { _ubicacionSel = 3; _ubicacionFija = true; _idLocalPedir = 3; }
@@ -203,6 +247,30 @@
     }
 
     private void Abrir(PedidoInsumoDto p) => Nav.NavigateTo($"/insumos/pedidos/{p.Id}");
+
+    // Depósito: imprime la hoja de ruta de los pendientes del filtro y los marca EN ARMADO.
+    private async Task ImprimirArmado()
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            "Se va a imprimir el armado de los pedidos pendientes del filtro y quedarán EN ARMADO (cerrados para el local). ¿Continuar?");
+        if (!ok) return;
+        try
+        {
+            int? ubic = _ubicacionSel == 0 ? null : _ubicacionSel;
+            _armado = await Api.ImprimirArmadoAsync(ubic);
+            if (_armado.Pedidos.Count == 0)
+            {
+                _armado = null;
+                await JS.InvokeVoidAsync("alert", "No hay pedidos pendientes para imprimir en este filtro.");
+                return;
+            }
+            StateHasChanged();
+            await Task.Delay(120);                 // dejar que se renderice la hoja solo-print
+            try { await JS.InvokeVoidAsync("print"); } catch { }
+            await Cargar();                         // refrescar: ahora quedan EN ARMADO
+        }
+        catch (Exception ex) { await JS.InvokeVoidAsync("alert", ex.Message); Console.Error.WriteLine(ex); }
+    }
 
     private async Task Eliminar(PedidoInsumoDto p)
     {

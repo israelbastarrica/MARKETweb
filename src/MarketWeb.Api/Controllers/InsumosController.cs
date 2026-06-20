@@ -72,4 +72,15 @@ public sealed class InsumosController : ControllerBase
         var ok = await _service.EliminarPedidoAsync(id, User.Identity?.Name ?? "WEB", ct);
         return ok ? NoContent() : BadRequest("No se puede eliminar un pedido enviado. Comuníquese con Logística.");
     }
+
+    // ---- DEPÓSITO / LOGÍSTICA ----
+
+    [HttpPost("pedido/imprimir-armado")]
+    public async Task<ActionResult<ArmadoInsumosDto>> ImprimirArmado([FromBody] ImprimirArmadoRequest req, CancellationToken ct)
+    {
+        var usuario = User.Identity?.Name ?? "WEB";
+        return Ok(await _service.ImprimirArmadoAsync(req?.UbicacionId, usuario, ct));
+    }
+
+    public sealed record ImprimirArmadoRequest(int? UbicacionId);
 }

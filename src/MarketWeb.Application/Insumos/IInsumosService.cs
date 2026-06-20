@@ -46,4 +46,13 @@ public interface IInsumosService
 
     /// <summary>Borra (lógico) un pedido entero (cabecera + renglones). Devuelve false si no se permite (ENVIADO).</summary>
     Task<bool> EliminarPedidoAsync(int idPedido, string usuario, CancellationToken ct = default);
+
+    // ---- DEPÓSITO / LOGÍSTICA ----
+
+    /// <summary>
+    /// Hoja de ruta de armado: toma los pedidos PENDIENTES (sin imprimir ni enviar) del
+    /// filtro de ubicación, los marca EN ARMADO (FechaImpresion) — cerrándolos para el local —
+    /// y devuelve su detalle para imprimir. Transaccional.
+    /// </summary>
+    Task<ArmadoInsumosDto> ImprimirArmadoAsync(int? ubicacionId, string usuario, CancellationToken ct = default);
 }

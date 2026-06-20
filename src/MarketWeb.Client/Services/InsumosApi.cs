@@ -64,4 +64,14 @@ public sealed class InsumosApi
         var resp = await _http.DeleteAsync($"api/insumos/pedido/{idPedido}");
         return resp.IsSuccessStatusCode;
     }
+
+    // ---- DEPÓSITO / LOGÍSTICA ----
+
+    /// <summary>Imprime el armado: marca EN ARMADO los pendientes del filtro y devuelve su detalle.</summary>
+    public async Task<ArmadoInsumosDto> ImprimirArmadoAsync(int? ubicacionId)
+    {
+        var resp = await _http.PostAsJsonAsync("api/insumos/pedido/imprimir-armado", new { ubicacionId });
+        resp.EnsureSuccessStatusCode();
+        return (await resp.Content.ReadFromJsonAsync<ArmadoInsumosDto>()) ?? new();
+    }
 }
