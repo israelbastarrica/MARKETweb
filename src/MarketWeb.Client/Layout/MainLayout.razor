@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UsoApi Uso
 
 <div class="market-shell @(_menuAbierto ? "menu-abierto" : null)">
     <NavMenu />
@@ -21,15 +22,27 @@
     // En desktop el sidebar está siempre visible (este estado no aplica).
     private bool _menuAbierto;
 
-    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        RegistrarUso();   // página inicial
+    }
 
     private void ToggleMenu() => _menuAbierto = !_menuAbierto;
     private void CerrarMenu() => _menuAbierto = false;
 
-    // Al navegar (tocar un link del menú en mobile) se cierra solo.
+    // Al navegar (tocar un link del menú en mobile) se cierra solo + se registra el uso.
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         if (_menuAbierto) { _menuAbierto = false; StateHasChanged(); }
+        RegistrarUso();
+    }
+
+    // Cuenta la visita a una pantalla conocida (best-effort, no bloquea la navegación).
+    private void RegistrarUso()
+    {
+        var acceso = MarketWeb.Client.Util.Accesos.Normalizar("/" + Nav.ToBaseRelativePath(Nav.Uri));
+        if (acceso is not null) _ = Uso.RegistrarAsync(acceso.Ruta);
     }
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;

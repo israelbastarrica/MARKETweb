@@ -1,4 +1,5 @@
 @page "/"
+@inject UsoApi Uso
 
 <PageTitle>MARKET Web</PageTitle>
 
@@ -14,11 +15,11 @@
 
     @if (_tiles.Length > 0)
     {
-        <h2 class="home-sec">Accesos rápidos</h2>
+        <h2 class="home-sec">@(_personalizado ? "Tus accesos más usados" : "Accesos rápidos")</h2>
         <div class="home-tiles">
             @foreach (var t in _tiles)
             {
-                <a class="home-tile" href="@t.Href">
+                <a class="home-tile" href="@t.Ruta">
                     <i class="@t.Icono"></i>
                     <span>@t.Etiqueta</span>
                 </a>
@@ -36,9 +37,8 @@
 
     private string _nombre = "";
     private string _perfil = "";
-    private Tile[] _tiles = Array.Empty<Tile>();
-
-    private sealed record Tile(string Etiqueta, string Icono, string Href);
+    private Acceso[] _tiles = Array.Empty<Acceso>();
+    private bool _personalizado;   // hay historial propio (no solo sugeridos por perfil)
 
     protected override async Task OnInitializedAsync()
     {
@@ -48,7 +48,25 @@
             _nombre = PrimerNombre(user.Identity?.Name);
             _perfil = user.FindFirst("perfil")?.Value ?? "";
         }
-        _tiles = TilesPara(_perfil);
+        await ArmarAccesos();
+    }
+
+    private async Task ArmarAccesos()
+    {
+        var orden = new List<string>();
+
+        // 1) Lo más usado por el usuario (estadística real).
+        var top = await Uso.TopAsync(8);
+        foreach (var r in top)
+            if (Accesos.PorRuta(r) is not null && !orden.Contains(r)) orden.Add(r);
+
+        _personalizado = orden.Count > 0;
+
+        // 2) Completar con sugeridos por perfil (para usuarios nuevos / pocas visitas).
+        foreach (var r in SugeridosPorPerfil(_perfil))
+            if (!orden.Contains(r)) orden.Add(r);
+
+        _tiles = orden.Take(6).Select(r => Accesos.PorRuta(r)!).Where(a => a is not null).ToArray();
     }
 
     private string Saludo => DateTime.Now.Hour switch
@@ -81,34 +99,14 @@
         return char.ToUpperInvariant(w[0]) + (w.Length > 1 ? w[1..].ToLowerInvariant() : "");
     }
 
-    // Accesos rápidos curados por perfil (lo que más se usa). El menú sigue teniendo todo.
-    private static Tile[] TilesPara(string perfil) => perfil.ToUpperInvariant() switch
+    // Sugeridos por perfil (rutas canónicas). Se usan para completar cuando no hay
+    // historial suficiente. El menú sigue teniendo todo.
+    private static string[] SugeridosPorPerfil(string perfil) => perfil.ToUpperInvariant() switch
     {
-        "ADMIN" => new[]
-        {
-            new Tile("Dashboard", "fa-solid fa-gauge-high", "/locales/dashboard"),
-            new Tile("Insumos", "fa-solid fa-boxes-stacked", "/administracion/insumos"),
-            new Tile("Usuarios", "fa-solid fa-users", "/configuracion/usuarios"),
-            new Tile("Calculadora", "fa-solid fa-calculator", "/compras/calculadora"),
-        },
-        "LURO" or "PERALTA" => new[]
-        {
-            new Tile("Dashboard", "fa-solid fa-gauge-high", "/locales/dashboard"),
-            new Tile("Insumos", "fa-solid fa-boxes-stacked", "/insumos/pedidos"),
-            new Tile("Consulta Artículo", "fa-solid fa-barcode", "/consulta-articulo"),
-            new Tile("Despachos", "fa-solid fa-qrcode", "/locales/despachos"),
-        },
-        "LOGISTICA" => new[]
-        {
-            new Tile("Dashboard", "fa-solid fa-gauge-high", "/logistica/dashboard"),
-            new Tile("Palets", "fa-solid fa-pallet", "/logistica/palets"),
-            new Tile("Despachos", "fa-solid fa-qrcode", "/logistica/despachos"),
-            new Tile("Remito Impresión", "fa-solid fa-print", "/logistica/remito-impresion"),
-        },
-        "COMPRAS" => new[]
-        {
-            new Tile("Calculadora", "fa-solid fa-calculator", "/compras/calculadora"),
-        },
-        _ => Array.Empty<Tile>()
+        "ADMIN" => new[] { "/locales/dashboard", "/administracion/insumos", "/configuracion/usuarios", "/compras/calculadora" },
+        "LURO" or "PERALTA" => new[] { "/locales/dashboard", "/insumos/pedidos", "/consulta-articulo", "/locales/despachos" },
+        "LOGISTICA" => new[] { "/logistica/dashboard", "/logistica/palets", "/logistica/despachos", "/logistica/remito-impresion" },
+        "COMPRAS" => new[] { "/compras/calculadora" },
+        _ => Array.Empty<string>()
     };
 }

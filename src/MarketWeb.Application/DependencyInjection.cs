@@ -10,6 +10,7 @@ using MarketWeb.Application.Mapeo;
 using MarketWeb.Application.Palets;
 using MarketWeb.Application.RemitoImpresion;
 using MarketWeb.Application.TiposLocal;
+using MarketWeb.Application.Uso;
 using MarketWeb.Application.UsuariosPc;
 using MarketWeb.Application.Ventas;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,6 +44,7 @@ public static class DependencyInjection
         services.AddSingleton(new BackgroundCache<MarketWeb.Application.LogisticaDashboard.ReposFast> { Ttl = TimeSpan.FromSeconds(60) });
         services.AddSingleton(new BackgroundCache<Dictionary<string, MarketWeb.Shared.LogisticaDashboard.RepoAbastDto>> { Ttl = TimeSpan.FromHours(1) });
         services.AddScoped<ILogisticaDashboardService, LogisticaDashboardService>();
+        services.AddScoped<IUsoService, UsoService>();
 
         return services;
     }
