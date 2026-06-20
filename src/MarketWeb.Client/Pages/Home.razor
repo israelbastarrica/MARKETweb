@@ -3,12 +3,112 @@
 <PageTitle>MARKET Web</PageTitle>
 
 <div class="market-page">
-    <h1 class="market-page-title">MARKET <span class="text-muted">Web</span></h1>
-    <p class="lead">Migración progresiva del sistema de escritorio. Elegí un módulo del menú de la izquierda.</p>
-
-    <div class="alert alert-info mt-4" role="alert">
-        <i class="fa-solid fa-circle-info me-2"></i>
-        Pantalla disponible: <strong>Configuración → Locales</strong>. El resto del menú está mapeado
-        y se irá migrando una pantalla a la vez.
+    <div class="home-hero">
+        <div class="home-brand">MARKET <span>WEB</span></div>
+        <div class="home-greet">@Saludo@(string.IsNullOrEmpty(_nombre) ? "" : ", ")<strong>@_nombre</strong></div>
+        <div class="home-meta">
+            @if (!string.IsNullOrEmpty(_perfil)) { <span class="home-badge">@_perfil</span> }
+            <span class="home-fecha">@Fecha</span>
+        </div>
     </div>
+
+    @if (_tiles.Length > 0)
+    {
+        <h2 class="home-sec">Accesos rápidos</h2>
+        <div class="home-tiles">
+            @foreach (var t in _tiles)
+            {
+                <a class="home-tile" href="@t.Href">
+                    <i class="@t.Icono"></i>
+                    <span>@t.Etiqueta</span>
+                </a>
+            }
+        </div>
+    }
+    else
+    {
+        <p class="text-muted home-vacio">Elegí un módulo del menú para empezar.</p>
+    }
 </div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _nombre = "";
+    private string _perfil = "";
+    private Tile[] _tiles = Array.Empty<Tile>();
+
+    private sealed record Tile(string Etiqueta, string Icono, string Href);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var user = (await AuthState).User;
+            _nombre = PrimerNombre(user.Identity?.Name);
+            _perfil = user.FindFirst("perfil")?.Value ?? "";
+        }
+        _tiles = TilesPara(_perfil);
+    }
+
+    private string Saludo => DateTime.Now.Hour switch
+    {
+        >= 6 and < 13 => "Buen día",
+        >= 13 and < 20 => "Buenas tardes",
+        _ => "Buenas noches"
+    };
+
+    private static readonly string[] _dias = { "domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado" };
+    private static readonly string[] _meses = { "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre" };
+
+    private static string Fecha
+    {
+        get
+        {
+            var d = DateTime.Now;
+            var s = $"{_dias[(int)d.DayOfWeek]} {d.Day} de {_meses[d.Month - 1]}";
+            return char.ToUpperInvariant(s[0]) + s[1..];
+        }
+    }
+
+    private static string PrimerNombre(string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return "";
+        var n = nombre.Contains('@') ? nombre.Split('@')[0] : nombre;
+        var p = n.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries);
+        if (p.Length == 0) return "";
+        var w = p[0];
+        return char.ToUpperInvariant(w[0]) + (w.Length > 1 ? w[1..].ToLowerInvariant() : "");
+    }
+
+    // Accesos rápidos curados por perfil (lo que más se usa). El menú sigue teniendo todo.
+    private static Tile[] TilesPara(string perfil) => perfil.ToUpperInvariant() switch
+    {
+        "ADMIN" => new[]
+        {
+            new Tile("Dashboard", "fa-solid fa-gauge-high", "/locales/dashboard"),
+            new Tile("Insumos", "fa-solid fa-boxes-stacked", "/administracion/insumos"),
+            new Tile("Usuarios", "fa-solid fa-users", "/configuracion/usuarios"),
+            new Tile("Calculadora", "fa-solid fa-calculator", "/compras/calculadora"),
+        },
+        "LURO" or "PERALTA" => new[]
+        {
+            new Tile("Dashboard", "fa-solid fa-gauge-high", "/locales/dashboard"),
+            new Tile("Insumos", "fa-solid fa-boxes-stacked", "/insumos/pedidos"),
+            new Tile("Consulta Artículo", "fa-solid fa-barcode", "/consulta-articulo"),
+            new Tile("Despachos", "fa-solid fa-qrcode", "/locales/despachos"),
+        },
+        "LOGISTICA" => new[]
+        {
+            new Tile("Dashboard", "fa-solid fa-gauge-high", "/logistica/dashboard"),
+            new Tile("Palets", "fa-solid fa-pallet", "/logistica/palets"),
+            new Tile("Despachos", "fa-solid fa-qrcode", "/logistica/despachos"),
+            new Tile("Remito Impresión", "fa-solid fa-print", "/logistica/remito-impresion"),
+        },
+        "COMPRAS" => new[]
+        {
+            new Tile("Calculadora", "fa-solid fa-calculator", "/compras/calculadora"),
+        },
+        _ => Array.Empty<Tile>()
+    };
+}
