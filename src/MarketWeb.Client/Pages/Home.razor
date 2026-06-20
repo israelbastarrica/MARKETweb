@@ -13,6 +13,20 @@
         </div>
     </div>
 
+    @if (_recientes.Count > 0)
+    {
+        <h2 class="home-sec"><i class="fa-solid fa-clock-rotate-left me-2"></i>Seguir trabajando</h2>
+        <div class="home-recientes">
+            @foreach (var r in _recientes)
+            {
+                <a class="home-reciente" href="@r.Ruta">
+                    <span class="t">@r.Titulo</span>
+                    <span class="h">@Hace(r.UltimoUso)</span>
+                </a>
+            }
+        </div>
+    }
+
     @if (_tiles.Length > 0)
     {
         <h2 class="home-sec">@(_personalizado ? "Tus accesos más usados" : "Accesos rápidos")</h2>
@@ -39,6 +53,7 @@
     private string _perfil = "";
     private Acceso[] _tiles = Array.Empty<Acceso>();
     private bool _personalizado;   // hay historial propio (no solo sugeridos por perfil)
+    private List<RegistroRecienteDto> _recientes = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -48,7 +63,19 @@
             _nombre = PrimerNombre(user.Identity?.Name);
             _perfil = user.FindFirst("perfil")?.Value ?? "";
         }
+        _recientes = await Uso.RecientesAsync(5);
         await ArmarAccesos();
+    }
+
+    // Tiempo relativo simple para "Seguir trabajando".
+    private static string Hace(DateTime cuando)
+    {
+        var d = DateTime.Now - cuando;
+        if (d.TotalMinutes < 1) return "recién";
+        if (d.TotalMinutes < 60) return $"hace {(int)d.TotalMinutes} min";
+        if (d.TotalHours < 24) return $"hace {(int)d.TotalHours} h";
+        if (d.TotalDays < 2) return "ayer";
+        return $"hace {(int)d.TotalDays} días";
     }
 
     private async Task ArmarAccesos()

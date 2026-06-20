@@ -105,6 +105,50 @@
     margin-top: .5rem;
 }
 
+/* Seguir trabajando: últimos registros abiertos (recencia). */
+.home-recientes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.6rem;
+}
+
+.home-reciente {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: .8rem 1rem;
+    background: var(--mk-surface);
+    border: 1px solid var(--mk-border);
+    border-left: 3px solid #f59e0b;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.home-reciente:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 24, 40, .12);
+    text-decoration: none;
+}
+
+.home-reciente .t {
+    font-weight: 600;
+    color: var(--mk-text-strong);
+    font-size: .92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-reciente .h {
+    font-size: .72rem;
+    color: var(--mk-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
     .home-hero {
         padding: 1.3rem 1.3rem;

@@ -2,6 +2,7 @@
 @inject InsumosApi Api
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject MarketWeb.Client.Services.UsoApi Uso
 
 <PageTitle>Pedido de Insumos</PageTitle>
 
@@ -192,6 +193,10 @@
                 _editable = _cab is not null && !_cab.Cerrado;
             }
             _titulo = _cab is null ? "Pedido" : _esNuevo ? "Nuevo pedido" : $"Pedido N° {_cab.NroPedido}";
+
+            // "Seguir trabajando": registra el acceso a este pedido puntual (solo existentes).
+            if (!_esNuevo && _cab is not null)
+                _ = Uso.RegistrarRegistroAsync($"/insumos/pedidos/{Id}", $"Pedido N° {_cab.NroPedido} · {_cab.LocalNombre}");
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); _cab = null; }
         finally { _cargando = false; }
