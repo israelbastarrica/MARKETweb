@@ -41,6 +41,13 @@ public sealed class ReemplazosApi
         catch { return (false, "No se pudo guardar."); }
     }
 
+    public async Task<MarcarProcesadosResultadoDto?> MarcarProcesadosAsync(int idUbicacion)
+    {
+        var resp = await _http.PostAsJsonAsync("api/reemplazos/marcar-procesados", new { idUbicacion });
+        if (!resp.IsSuccessStatusCode) return null;
+        return await resp.Content.ReadFromJsonAsync<MarcarProcesadosResultadoDto>();
+    }
+
     public async Task<bool> EliminarAsync(int id)
     {
         var resp = await _http.DeleteAsync($"api/reemplazos/{id}");

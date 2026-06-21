@@ -28,6 +28,9 @@ public interface IReemplazosService
     /// <summary>Alta/modificación: resuelve IDMapeoLocal/Logistica y valida duplicados.</summary>
     Task GuardarAsync(ReemplazoSaveRequest req, string usuario, CancellationToken ct = default);
 
+    /// <summary>Marca como procesados los no procesados del filtro (con reemplazo) y avisa por mail a los locales.</summary>
+    Task<MarcarProcesadosResultadoDto> MarcarProcesadosAsync(int idUbicacion, string usuario, CancellationToken ct = default);
+
     /// <summary>Baja lógica.</summary>
     Task EliminarAsync(int id, string usuario, CancellationToken ct = default);
 }

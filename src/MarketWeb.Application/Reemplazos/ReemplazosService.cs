@@ -12,7 +12,8 @@ namespace MarketWeb.Application.Reemplazos;
 public sealed class ReemplazosService : IReemplazosService
 {
     private readonly ISqlConnectionFactory _db;
-    public ReemplazosService(ISqlConnectionFactory db) => _db = db;
+    private readonly ISmtpSender _smtp;
+    public ReemplazosService(ISqlConnectionFactory db, ISmtpSender smtp) { _db = db; _smtp = smtp; }
 
     public async Task<IReadOnlyList<LocalReemplazoDto>> ListarLocalesAsync(CancellationToken ct = default)
     {
@@ -275,6 +276,107 @@ public sealed class ReemplazosService : IReemplazosService
                 idMapLog = idMapeoLogistica, idMapLoc = idMapeoLocal, audit, accion, id = req.Id
             }, cancellationToken: ct));
         }
+    }
+
+    private sealed record FilaMail(int Id, string Ubicacion, string ArtCod, string DescArt, string ComboOrig,
+        string ArtReemp, string DescReemp, string ComboReemp, string PosLocal, string MuebleLocal, string Accion);
+
+    public async Task<MarcarProcesadosResultadoDto> MarcarProcesadosAsync(int idUbicacion, string usuario, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+
+        // Todos los no procesados del filtro (con datos para el mail).
+        const string sel = """
+            SELECT R.ID AS Id, RTRIM(ISNULL(U.Descripcion,'')) AS Ubicacion, RTRIM(ISNULL(R.ARTCOD,'')) AS ArtCod,
+                   RTRIM(ISNULL(A1.ARTDES,'')) AS DescArt, RTRIM(ISNULL(A1.CLASIFART,'')) AS ComboOrig,
+                   RTRIM(ISNULL(R.ARTCODReemplazo,'')) AS ArtReemp, RTRIM(ISNULL(A2.ARTDES,'')) AS DescReemp,
+                   RTRIM(ISNULL(A2.CLASIFART,'')) AS ComboReemp,
+                   RTRIM(ISNULL(MAP2.Modulo,'')) AS PosLocal, RTRIM(ISNULL(MAP2.Mobiliario,'')) AS MuebleLocal,
+                   ISNULL(R.Accion,'') AS Accion
+            FROM RepoReemplazos R
+            LEFT JOIN Ubicaciones U ON R.IDUbicacion = U.ID
+            LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART A1 ON R.ARTCOD = A1.ARTCOD
+            LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART A2 ON R.ARTCODReemplazo = A2.ARTCOD
+            LEFT JOIN Mapeo MAP2 ON MAP2.ID = R.IDMapeoLocal
+            WHERE R.Eliminado = 0 AND U.Eliminado = 0 AND ISNULL(R.Procesado,0) = 0
+              AND (@idUbic = 0 OR R.IDUbicacion = @idUbic)
+            ORDER BY R.Fecha DESC;
+            """;
+        var filas = (await cn.QueryAsync<FilaMail>(new CommandDefinition(sel, new { idUbic = idUbicacion }, commandTimeout: 90, cancellationToken: ct))).ToList();
+
+        // Solo se procesan los que tienen artículo de reemplazo definido (igual que el .Net).
+        var conReemp = filas.Where(f => !string.IsNullOrWhiteSpace(f.ArtReemp)).ToList();
+        var saltados = filas.Count - conReemp.Count;
+        if (conReemp.Count == 0)
+            return new MarcarProcesadosResultadoDto { Procesados = 0, Saltados = saltados, SmtpConfigurado = _smtp.Configurado };
+
+        var ids = conReemp.Select(f => f.Id).ToArray();
+        var audit = $"Marca como procesado | {usuario} | {DateTime.Now}";
+        var afectadas = await cn.ExecuteAsync(new CommandDefinition(
+            "UPDATE RepoReemplazos SET Procesado = 1, FechaHoraProceso = GETDATE(), Auditoria = @audit WHERE ID IN @ids AND (Procesado = 0 OR Procesado IS NULL);",
+            new { ids, audit }, cancellationToken: ct));
+
+        // Un mail por local (LURO/PERALTA), con copia a logística. Resalta diferencias de combo.
+        int mails = 0; string? mailErr = null;
+        try
+        {
+            foreach (var grupo in conReemp.GroupBy(f => f.Ubicacion.Trim().ToUpperInvariant()))
+            {
+                var to = grupo.Key == "LURO" ? "luro@marketarg.com;logistica@marketarg.com"
+                       : grupo.Key == "PERALTA" ? "peralta@marketarg.com;logistica@marketarg.com" : "";
+                if (to.Length == 0) continue;
+                var html = ConstruirHtmlAviso(grupo.Key, grupo.ToList());
+                if (await _smtp.EnviarAsync(to, $"Nuevos Reemplazos Asignados - {DateTime.Now:dd/MM/yyyy}", html, ct)) mails++;
+            }
+        }
+        catch (Exception ex) { mailErr = ex.Message; }
+
+        return new MarcarProcesadosResultadoDto
+        {
+            Procesados = afectadas,
+            Saltados = saltados,
+            MailsEnviados = mails,
+            SmtpConfigurado = _smtp.Configurado,
+            MailError = mailErr
+        };
+    }
+
+    // Tabla HTML del aviso a un local (port de EnviarAvisosPorCorreo). Resalta combos distintos.
+    private static string ConstruirHtmlAviso(string local, List<FilaMail> filas)
+    {
+        string Enc(string? s) => System.Net.WebUtility.HtmlEncode(s ?? "");
+        var mostrarCombos = filas.Any(f => !string.Equals(f.ComboOrig?.Trim(), f.ComboReemp?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<h2 style='color:#2c3e50; font-family:Arial;'>Aviso de Reemplazos</h2>");
+        if (mostrarCombos)
+            sb.Append("<p style='font-family:Arial; color:#c0392b;'><b>¡ATENCIÓN!</b> Algunos artículos de este envío tienen precios de combo diferentes. Revisar la tabla.</p>");
+        sb.Append($"<p style='font-family:Arial;'>Hola equipo de <b>{Enc(local)}</b>, por favor procesen los siguientes artículos:</p>");
+        sb.Append("<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; font-family:Arial; font-size: 12px; width: 100%;'>");
+        sb.Append("<tr style='background-color:#f2f2f2; font-weight:bold;'>");
+        sb.Append("<td>Cód. Original</td><td>Descripción</td>");
+        if (mostrarCombos) sb.Append("<td style='background-color:#ffeaa7;'>Combo Orig.</td>");
+        sb.Append("<td>Posición Local</td><td>Mobiliario Local</td><td>Acción</td><td>Cód. Reemplazo</td><td>Descripción Reemplazo</td>");
+        if (mostrarCombos) sb.Append("<td style='background-color:#ffeaa7;'>Combo Reemp.</td>");
+        sb.Append("</tr>");
+
+        foreach (var f in filas)
+        {
+            var distinto = !string.Equals(f.ComboOrig?.Trim(), f.ComboReemp?.Trim(), StringComparison.OrdinalIgnoreCase);
+            sb.Append("<tr>");
+            sb.Append($"<td>{Enc(f.ArtCod)}</td><td>{Enc(f.DescArt)}</td>");
+            if (mostrarCombos) sb.Append($"<td>{Enc(f.ComboOrig)}</td>");
+            sb.Append($"<td>{Enc(f.PosLocal)}</td><td>{Enc(f.MuebleLocal)}</td><td>{Enc(f.Accion)}</td>");
+            sb.Append($"<td>{Enc(f.ArtReemp)}</td><td>{Enc(f.DescReemp)}</td>");
+            if (mostrarCombos)
+                sb.Append(distinto
+                    ? $"<td style='color:#c0392b; font-weight:bold;'>{Enc(f.ComboReemp)}</td>"
+                    : $"<td>{Enc(f.ComboReemp)}</td>");
+            sb.Append("</tr>");
+        }
+        sb.Append("</table>");
+        sb.Append("<br><p style='font-family:Arial; color:#7f8c8d; font-size:11px;'>Generado automáticamente por Logística.</p>");
+        return sb.ToString();
     }
 
     public async Task EliminarAsync(int id, string usuario, CancellationToken ct = default)

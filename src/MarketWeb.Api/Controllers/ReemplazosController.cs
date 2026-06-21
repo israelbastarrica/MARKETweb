@@ -64,6 +64,15 @@ public sealed class ReemplazosController : ControllerBase
         catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
+    [HttpPost("marcar-procesados")]
+    public async Task<ActionResult<MarcarProcesadosResultadoDto>> MarcarProcesados([FromBody] MarcarProcesadosRequest req, CancellationToken ct)
+    {
+        var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+        return Ok(await _service.MarcarProcesadosAsync(req?.IdUbicacion ?? 0, usuario, ct));
+    }
+
+    public sealed record MarcarProcesadosRequest(int IdUbicacion);
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Eliminar(int id, CancellationToken ct)
     {

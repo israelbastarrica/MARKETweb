@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<ILogisticaDashboardService, LogisticaDashboardService>();
         services.AddScoped<IUsoService, UsoService>();
         services.AddScoped<IReemplazosService, ReemplazosService>();
+        services.AddScoped<Common.ISmtpSender, Common.SmtpSender>();
 
         return services;
     }

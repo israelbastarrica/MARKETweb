@@ -21,7 +21,20 @@
         </div>
         <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
         <button class="btn btn-primary" @onclick="AbrirAlta"><i class="fa-solid fa-plus me-1"></i> Nuevo reemplazo</button>
+        <button class="btn btn-success" @onclick="MarcarProcesados" disabled="@(_items.Count == 0 || _procesando)" title="Marcar procesados y avisar a los locales">
+            @if (_procesando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            else { <i class="fa-solid fa-check me-1"></i> }
+            Marcar procesado
+        </button>
     </div>
+
+    @if (_flash is not null)
+    {
+        <div class="alert alert-success alert-dismissible d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i><div class="flex-grow-1">@_flash</div>
+            <button type="button" class="btn-close" @onclick="() => _flash = null"></button>
+        </div>
+    }
 
     @if (_error is not null)
     {
@@ -245,7 +258,9 @@
     private bool _verTodos;
     private List<ReemplazoDto> _items = new();
     private bool _cargando = true;
+    private bool _procesando;
     private string? _error;
+    private string? _flash;
 
     // ABM
     private bool _modalAbm, _esAlta, _guardando;
@@ -383,6 +398,27 @@
         if (!ok) { _errorModal = err; return; }
         _modalAbm = false;
         await Cargar();
+    }
+
+    private async Task MarcarProcesados()
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "¿Marcar TODOS los reemplazos visibles como procesados y notificar a los locales?");
+        if (!ok) return;
+        _procesando = true; _error = null; _flash = null;
+        try
+        {
+            var res = await Api.MarcarProcesadosAsync(_filtroLocal);
+            if (res is null) { _error = "No se pudo procesar."; return; }
+            var msg = $"Se procesaron {res.Procesados} reemplazo(s).";
+            if (res.Saltados > 0) msg += $" Se saltaron {res.Saltados} sin reemplazo definido.";
+            if (!res.SmtpConfigurado) msg += " (Mails NO enviados: el SMTP no está configurado en el servidor.)";
+            else if (res.MailError is not null) msg += $" Atención: error al enviar mails: {res.MailError}";
+            else msg += $" Mails enviados: {res.MailsEnviados}.";
+            _flash = msg;
+            await Cargar();
+        }
+        catch (Exception ex) { _error = "No se pudo procesar."; Console.Error.WriteLine(ex); }
+        finally { _procesando = false; }
     }
 
     private async Task Eliminar(ReemplazoDto r)

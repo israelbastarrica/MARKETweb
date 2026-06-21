@@ -61,6 +61,16 @@ public sealed class ValidacionReemplazoDto
     public string Mensaje { get; set; } = "";
 }
 
+/// <summary>Resultado de marcar procesados + notificar a los locales.</summary>
+public sealed class MarcarProcesadosResultadoDto
+{
+    public int Procesados { get; set; }
+    public int Saltados { get; set; }          // sin artículo de reemplazo definido
+    public int MailsEnviados { get; set; }
+    public bool SmtpConfigurado { get; set; }
+    public string? MailError { get; set; }
+}
+
 /// <summary>Un candidato del buscador automático de reemplazo (título de grupo o ítem).</summary>
 public sealed class ReemplazoCandidatoDto
 {
