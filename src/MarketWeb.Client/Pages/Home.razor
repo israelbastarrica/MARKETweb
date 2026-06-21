@@ -35,6 +35,7 @@
             {
                 <a class="home-tile" href="@t.Ruta">
                     <i class="@t.Icono"></i>
+                    @if (!string.IsNullOrEmpty(t.Area)) { <span class="area">@t.Area</span> }
                     <span>@t.Etiqueta</span>
                 </a>
             }
