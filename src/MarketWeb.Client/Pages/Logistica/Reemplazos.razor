@@ -1,0 +1,395 @@
+@page "/logistica/reemplazos"
+@inject ReemplazosApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Reemplazos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Reemplazos" Icono="fa-solid fa-retweet" />
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" style="min-width: 200px" @bind="_filtroLocal" @bind:after="Cargar">
+                <option value="0">TODOS</option>
+                @foreach (var l in _locales) { <option value="@l.Id">@l.Descripcion</option> }
+            </select>
+        </div>
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="chkTodos" @bind="_verTodos" @bind:after="Cargar" />
+            <label class="form-check-label small" for="chkTodos">Ver todos (incluye procesados)</label>
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+        <button class="btn btn-primary" @onclick="AbrirAlta"><i class="fa-solid fa-plus me-1"></i> Nuevo reemplazo</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i><div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-retweet"></i><p>No hay reemplazos para el filtro.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Local</th>
+                        <th>Cód. Art.</th>
+                        <th>Descripción</th>
+                        <th>Posición local</th>
+                        <th>Mueble local</th>
+                        <th>Cód. Reemplazo</th>
+                        <th>Descripción reemplazo</th>
+                        <th>Ubic. depósito</th>
+                        <th>Acción</th>
+                        <th class="text-center" style="width: 96px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _items)
+                    {
+                        <tr class="@(r.Procesado ? "fila-verde" : null)" @ondblclick="() => AbrirModif(r)">
+                            <td class="small">@(r.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            <td>@r.Ubicacion</td>
+                            <td><ArticuloLink Codigo="@r.ArtCod" /></td>
+                            <td>@r.DescripcionArt</td>
+                            <td>@r.UbicacionLocal</td>
+                            <td>@r.MobiliarioLocal</td>
+                            <td><ArticuloLink Codigo="@r.ArtCodReemplazo" /></td>
+                            <td>@r.DescripcionArtReemplazo</td>
+                            <td>@r.UbicacionDeposito</td>
+                            <td><span class="badge-perfil">@r.Accion</span></td>
+                            <td class="text-center text-nowrap acciones">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModif(r)">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(r)">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_items.Count reemplazo(s).</p>
+    }
+</div>
+
+@* ---------- Modal ABM ---------- *@
+@if (_modalAbm)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_esAlta ? "Nuevo reemplazo" : "Modificar reemplazo")</h5>
+                    <button type="button" class="btn-close" @onclick="CerrarAbm"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_errorModal is not null)
+                    {
+                        <div class="alert alert-danger py-2">@_errorModal</div>
+                    }
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted mb-1">Local</label>
+                            <select class="form-select" @bind="_abmLocal" @bind:after="OnCambioLocal">
+                                <option value="0">— Elegí el local —</option>
+                                @foreach (var l in _locales) { <option value="@l.Id">@l.Descripcion</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted mb-1">Acción</label>
+                            <select class="form-select" @bind="_abmAccion">
+                                <option value="">— Elegí la acción —</option>
+                                @foreach (var a in AccionesDisponibles) { <option value="@a">@a</option> }
+                            </select>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1" /><div class="fw-semibold small text-muted">ARTÍCULO A REEMPLAZAR</div></div>
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted mb-1">Código</label>
+                            <input class="form-control" @bind="_abmArtCod" @bind:after="BuscarDescOrig" placeholder="Código del artículo" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small text-muted mb-1">Descripción</label>
+                            <input class="form-control" value="@_abmDescArt" readonly />
+                            @if (_validOrig is not null)
+                            {
+                                <span class="badge @(_validOrig.Ok ? "bg-success" : "bg-danger") mt-1">@_validOrig.Mensaje</span>
+                            }
+                            @if (!string.IsNullOrEmpty(_abmComboOrig)) { <span class="text-muted small ms-2">Combo: @_abmComboOrig</span> }
+                        </div>
+
+                        <div class="col-12">
+                            <hr class="my-1" />
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="fw-semibold small text-muted">ARTÍCULO DE REEMPLAZO</div>
+                                <button class="btn btn-sm btn-outline-info" @onclick="BuscarReemplazo">
+                                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar reemplazo
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted mb-1">Código</label>
+                            <input class="form-control" @bind="_abmArtReemp" @bind:after="BuscarDescReemp" placeholder="Código del reemplazo" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small text-muted mb-1">Descripción</label>
+                            <input class="form-control" value="@_abmDescReemp" readonly />
+                            @if (!string.IsNullOrEmpty(_abmComboReemp))
+                            {
+                                <span class="small ms-2 @(ComboDistinto ? "text-danger fw-semibold" : "text-muted")">
+                                    Combo: @_abmComboReemp @(ComboDistinto ? "(distinto al original)" : "")
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarAbm">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                        @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ---------- Modal buscador de candidatos ---------- *@
+@if (_modalCand)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1060">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Elegí el reemplazo @(_candEsPerchero ? "(en Perchero del local)" : "(propuestas del depósito)")</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalCand = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_candCargando)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Buscando...</p>
+                    }
+                    else if (_candidatos.Count == 0)
+                    {
+                        <p class="text-muted">No se encontraron reemplazos posibles.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="market-table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Cód. Art.</th><th>Descripción</th><th>Combo</th>
+                                        @if (_candEsPerchero) { <th>Mueble</th><th>Módulo</th> }
+                                        <th class="text-end">Stock</th>
+                                        <th class="text-center" style="width:80px"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var x in _candidatos)
+                                    {
+                                        @if (x.EsTitulo)
+                                        {
+                                            <tr class="fila-subtotal"><td colspan="@(_candEsPerchero ? 7 : 5)" class="fw-semibold">@x.Descripcion</td></tr>
+                                        }
+                                        else
+                                        {
+                                            <tr>
+                                                <td class="fw-semibold">@x.ArtCod</td>
+                                                <td>@x.Descripcion</td>
+                                                <td class="small text-muted">@x.Combo</td>
+                                                @if (_candEsPerchero) { <td>@x.Mobiliario</td><td>@x.Modulo</td> }
+                                                <td class="text-end @(x.Stock > 0 ? "" : "text-danger")">@x.Stock</td>
+                                                <td class="text-center">
+                                                    <button class="btn btn-sm btn-success" @onclick="() => ElegirCandidato(x)">Elegir</button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalCand = false">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" style="z-index: 1055"></div>
+}
+
+@code {
+    private List<LocalReemplazoDto> _locales = new();
+    private int _filtroLocal;
+    private bool _verTodos;
+    private List<ReemplazoDto> _items = new();
+    private bool _cargando = true;
+    private string? _error;
+
+    // ABM
+    private bool _modalAbm, _esAlta, _guardando;
+    private int _editId, _abmLocal;
+    private string _abmArtCod = "", _abmDescArt = "", _abmArtReemp = "", _abmDescReemp = "", _abmAccion = "", _abmComboOrig = "", _abmComboReemp = "";
+    private ValidacionReemplazoDto? _validOrig;
+    private string? _errorModal;
+
+    // Candidatos
+    private bool _modalCand, _candCargando, _candEsPerchero;
+    private List<ReemplazoCandidatoDto> _candidatos = new();
+
+    private static readonly string[] _accionesBase =
+    {
+        "DEFINIR REEMPLAZO", "ENVIAR A LOCAL", "ENVIAR A LOGÍSTICA", "PASAR A PERCHERO",
+        "PASAR DE PERCHERO A PERCHERO DISCONTINUO", "UNIFICAR EN MEDIA MESA", "REEMPLAZO DE PANEL"
+    };
+
+    private bool ComboDistinto => !string.IsNullOrEmpty(_abmComboReemp) && !string.Equals(_abmComboOrig?.Trim(), _abmComboReemp?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    // "ENVIAR A LOCAL" se vuelve "ENVIAR A PERALTA"/"ENVIAR A LURO" según el local (como en el .Net).
+    private IEnumerable<string> AccionesDisponibles
+    {
+        get
+        {
+            var ln = LocalNombre(_abmLocal).ToUpperInvariant();
+            var lista = _accionesBase.Select(a =>
+                a == "ENVIAR A LOCAL" ? (ln == "LURO" ? "ENVIAR A PERALTA" : ln == "PERALTA" ? "ENVIAR A LURO" : "ENVIAR A LOCAL") : a).ToList();
+            // Si la acción guardada no figura (caso edición), la agregamos para no perderla.
+            if (!string.IsNullOrEmpty(_abmAccion) && !lista.Contains(_abmAccion)) lista.Insert(0, _abmAccion);
+            return lista;
+        }
+    }
+
+    private string LocalNombre(int id) => _locales.FirstOrDefault(l => l.Id == id)?.Descripcion ?? "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _locales = await Api.LocalesAsync(); } catch { _locales = new(); }
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true; _error = null;
+        try { _items = await Api.ListarAsync(_filtroLocal, _verTodos); }
+        catch (Exception ex) { _items = new(); _error = "No se pudieron cargar los reemplazos."; Console.Error.WriteLine(ex); }
+        finally { _cargando = false; }
+    }
+
+    private void AbrirAlta()
+    {
+        _esAlta = true; _editId = 0;
+        _abmLocal = _filtroLocal; // si hay un local filtrado, lo pre-cargamos
+        _abmArtCod = ""; _abmDescArt = ""; _abmArtReemp = ""; _abmDescReemp = ""; _abmAccion = "";
+        _abmComboOrig = ""; _abmComboReemp = ""; _validOrig = null; _errorModal = null;
+        _modalAbm = true;
+    }
+
+    private async Task AbrirModif(ReemplazoDto r)
+    {
+        _errorModal = null;
+        var ed = await Api.ObtenerAsync(r.Id);
+        if (ed is null) { _error = "No se encontró el reemplazo."; return; }
+        _esAlta = false; _editId = ed.Id; _abmLocal = ed.IdUbicacion;
+        _abmArtCod = ed.ArtCod; _abmDescArt = ed.DescripcionArt;
+        _abmArtReemp = ed.ArtCodReemplazo; _abmDescReemp = ed.DescripcionArtReemplazo;
+        _abmAccion = ed.Accion;
+        var a1 = await Api.ArticuloAsync(ed.ArtCod); _abmComboOrig = a1?.Combo ?? "";
+        var a2 = string.IsNullOrEmpty(ed.ArtCodReemplazo) ? null : await Api.ArticuloAsync(ed.ArtCodReemplazo); _abmComboReemp = a2?.Combo ?? "";
+        if (_abmLocal > 0 && !string.IsNullOrEmpty(ed.ArtCod)) _validOrig = await Api.ValidarAsync(_abmLocal, ed.ArtCod);
+        _modalAbm = true;
+    }
+
+    private void CerrarAbm() => _modalAbm = false;
+
+    private async Task OnCambioLocal()
+    {
+        // Revalida el original con el nuevo local.
+        if (_abmLocal > 0 && !string.IsNullOrWhiteSpace(_abmArtCod))
+            _validOrig = await Api.ValidarAsync(_abmLocal, _abmArtCod.Trim());
+        else _validOrig = null;
+    }
+
+    private async Task BuscarDescOrig()
+    {
+        _abmDescArt = ""; _abmComboOrig = ""; _validOrig = null; _errorModal = null;
+        var c = (_abmArtCod ?? "").Trim();
+        if (c.Length == 0) return;
+        var a = await Api.ArticuloAsync(c);
+        if (a is null || string.IsNullOrEmpty(a.Descripcion)) { _errorModal = "El código de artículo a reemplazar no es válido."; return; }
+        _abmDescArt = a.Descripcion; _abmComboOrig = a.Combo;
+        if (_abmLocal > 0) _validOrig = await Api.ValidarAsync(_abmLocal, c);
+    }
+
+    private async Task BuscarDescReemp()
+    {
+        _abmDescReemp = ""; _abmComboReemp = "";
+        var c = (_abmArtReemp ?? "").Trim();
+        if (c.Length == 0) return;
+        var a = await Api.ArticuloAsync(c);
+        if (a is null || string.IsNullOrEmpty(a.Descripcion)) { _errorModal = "El código de artículo de reemplazo no es válido."; return; }
+        _abmDescReemp = a.Descripcion; _abmComboReemp = a.Combo;
+    }
+
+    private async Task BuscarReemplazo()
+    {
+        _errorModal = null;
+        var c = (_abmArtCod ?? "").Trim();
+        if (c.Length == 0) { _errorModal = "Primero ingresá el artículo a reemplazar."; return; }
+        if (_abmLocal <= 0) { _errorModal = "Elegí el local."; return; }
+        _candEsPerchero = _abmAccion == "PASAR A PERCHERO";
+        _modalCand = true; _candCargando = true; _candidatos = new();
+        try { _candidatos = _candEsPerchero ? await Api.CandidatosPercheroAsync(_abmLocal, c) : await Api.CandidatosAsync(_abmLocal, c); }
+        catch (Exception ex) { _candidatos = new(); Console.Error.WriteLine(ex); }
+        finally { _candCargando = false; }
+    }
+
+    private void ElegirCandidato(ReemplazoCandidatoDto x)
+    {
+        if (x.EsTitulo) return;
+        _abmArtReemp = x.ArtCod; _abmDescReemp = x.Descripcion; _abmComboReemp = x.Combo;
+        _modalCand = false;
+    }
+
+    private async Task Guardar()
+    {
+        _guardando = true; _errorModal = null;
+        var (ok, err) = await Api.GuardarAsync(new ReemplazoSaveRequest
+        {
+            Id = _editId, IdUbicacion = _abmLocal,
+            ArtCod = _abmArtCod, ArtCodReemplazo = _abmArtReemp, Accion = _abmAccion
+        });
+        _guardando = false;
+        if (!ok) { _errorModal = err; return; }
+        _modalAbm = false;
+        await Cargar();
+    }
+
+    private async Task Eliminar(ReemplazoDto r)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el reemplazo de {r.ArtCod} en {r.Ubicacion}?");
+        if (!ok) return;
+        await Api.EliminarAsync(r.Id);
+        await Cargar();
+    }
+}
