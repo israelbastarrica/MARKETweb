@@ -93,7 +93,12 @@
                         <tr>
                             <th style="width:130px">Código</th>
                             <th>Descripción</th>
-                            <th class="text-end" style="width:120px">Cantidad</th>
+                            <th class="text-end" style="width:110px">@(_esDeposito ? "Pedida" : "Cantidad")</th>
+                            @if (_esDeposito)
+                            {
+                                <th class="text-center" style="width:80px">Stock</th>
+                                <th class="text-end" style="width:110px">Enviada</th>
+                            }
                             @if (_editable)
                             {
                                 <th class="text-center" style="width:60px"></th>
@@ -117,6 +122,24 @@
                                         @Fmt.Miles(r.Cantidad)
                                     }
                                 </td>
+                                @if (_esDeposito)
+                                {
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input" checked="@r.Existencia"
+                                               @onchange="e => CambiarExistencia(r, e.Value)" disabled="@(!_editable)" title="Hay stock para enviar" />
+                                    </td>
+                                    <td class="text-end">
+                                        @if (_editable && r.Existencia)
+                                        {
+                                            <input type="number" min="0" class="form-control form-control-sm text-end" style="width:90px; display:inline-block"
+                                                   value="@(r.CantidadEnviada ?? r.Cantidad)" @onchange="e => CambiarCantEnviada(r, e.Value?.ToString())" />
+                                        }
+                                        else
+                                        {
+                                            @(r.Existencia ? Fmt.Miles(r.CantidadEnviada ?? r.Cantidad) : "0")
+                                        }
+                                    </td>
+                                }
                                 @if (_editable)
                                 {
                                     <td class="text-center acciones">
@@ -152,14 +175,26 @@
 @code {
     [Parameter] public int Id { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "local")] public int Local { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private PedidoCabeceraDto? _cab;
     private List<PedidoRenglonDto> _renglones = new();   // SOLO en memoria hasta Guardar
     private bool _cargando = true;
     private bool _editable;
     private bool _esNuevo;
+    private bool _esDeposito;     // LOGISTICA/ADMIN: edita aunque esté EN ARMADO + marca stock/enviada
     private bool _guardando;
     private string _titulo = "Pedido";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var perfil = (await AuthState).User.FindFirst("perfil")?.Value ?? "";
+            _esDeposito = string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(perfil, "ADMIN", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     // Alta de renglón
     private string _busqueda = "";
@@ -189,8 +224,9 @@
                 var ped = await Api.ObtenerPedidoAsync(Id);
                 _cab = ped?.Cabecera;
                 _renglones = ped?.Renglones ?? new();
-                // El local edita hasta que DEPÓSITO lo imprime/envía (Cerrado). El 1/15 es solo para CREAR.
-                _editable = _cab is not null && !_cab.Cerrado;
+                // Local: edita hasta que DEPÓSITO imprime/envía (Cerrado).
+                // Depósito: edita aunque esté EN ARMADO; solo se bloquea si ya está ENVIADO.
+                _editable = _cab is not null && !_cab.Enviado && (_esDeposito || !_cab.Cerrado);
             }
             _titulo = _cab is null ? "Pedido" : _esNuevo ? "Nuevo pedido" : $"Pedido N° {_cab.NroPedido}";
 
@@ -235,7 +271,15 @@
             var seguir = await JS.InvokeAsync<bool>("confirm", "El artículo no tiene stock en depósito. ¿Agregarlo igual?");
             if (!seguir) return;
         }
-        _renglones.Add(new PedidoRenglonDto { Id = 0, ArtCod = _artSel.ArtCod, Descripcion = _artSel.ArtDes, Cantidad = _nuevaCant });
+        _renglones.Add(new PedidoRenglonDto
+        {
+            Id = 0,
+            ArtCod = _artSel.ArtCod,
+            Descripcion = _artSel.ArtDes,
+            Cantidad = _nuevaCant,
+            Existencia = true,
+            CantidadEnviada = _esDeposito ? _nuevaCant : null
+        });
         _artSel = null; _busqueda = ""; _nuevaCant = 1; _resultados = new();
     }
 
@@ -243,6 +287,19 @@
     {
         if (int.TryParse(valor, out var cant) && cant > 0) r.Cantidad = cant;
         // valor inválido → re-render deja el valor anterior
+    }
+
+    // Depósito: marca si hay stock; sin stock → enviada 0.
+    private void CambiarExistencia(PedidoRenglonDto r, object? val)
+    {
+        r.Existencia = val is bool b && b;
+        if (!r.Existencia) r.CantidadEnviada = 0;
+        else if ((r.CantidadEnviada ?? 0) == 0) r.CantidadEnviada = r.Cantidad;
+    }
+
+    private void CambiarCantEnviada(PedidoRenglonDto r, string? valor)
+    {
+        if (int.TryParse(valor, out var c) && c >= 0) r.CantidadEnviada = c;
     }
 
     private async Task QuitarRenglon(PedidoRenglonDto r)
@@ -265,7 +322,7 @@
             {
                 Id = _esNuevo ? 0 : Id,
                 IdLocal = _cab!.IDLocal,
-                Renglones = _renglones.Select(r => new RenglonInput { ArtCod = r.ArtCod, Cantidad = r.Cantidad }).ToList()
+                Renglones = _renglones.Select(r => new RenglonInput { ArtCod = r.ArtCod, Cantidad = r.Cantidad, Existencia = r.Existencia, CantidadEnviada = r.CantidadEnviada }).ToList()
             };
             var res = await Api.GuardarPedidoAsync(req);
             await JS.InvokeVoidAsync("alert", $"Pedido N° {res.NroPedido} guardado correctamente.");

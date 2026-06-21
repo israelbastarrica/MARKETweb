@@ -21,6 +21,10 @@ public sealed class PedidoRenglonDto
     public string ArtCod { get; set; } = "";
     public string Descripcion { get; set; } = "";
     public int Cantidad { get; set; }
+    /// <summary>Depósito: hay stock para enviar (1) o no (0). Default sí.</summary>
+    public bool Existencia { get; set; } = true;
+    /// <summary>Depósito: cantidad realmente enviada (null = igual a la pedida).</summary>
+    public int? CantidadEnviada { get; set; }
 }
 
 /// <summary>Pedido completo para el editor (cabecera + renglones).</summary>
@@ -39,11 +43,13 @@ public sealed class ArticuloInsumoDto
     public string? UnidadMedida { get; set; }
 }
 
-/// <summary>Un renglón a guardar (solo artículo + cantidad).</summary>
+/// <summary>Un renglón a guardar. Existencia/CantidadEnviada solo las usa el depósito.</summary>
 public sealed class RenglonInput
 {
     public string ArtCod { get; set; } = "";
     public int Cantidad { get; set; }
+    public bool Existencia { get; set; } = true;
+    public int? CantidadEnviada { get; set; }
 }
 
 /// <summary>

@@ -196,7 +196,9 @@ public sealed class InsumosService : IInsumosService
         const string sqlDet = """
             SELECT D.ID AS Id, RTRIM(D.ARTCOD) AS ArtCod,
                    ISNULL(RTRIM(ART.ARTDES),'Sin descripción') AS Descripcion,
-                   D.Cantidad AS Cantidad
+                   D.Cantidad AS Cantidad,
+                   CAST(CASE WHEN ISNULL(D.Existencia,1) = 0 THEN 0 ELSE 1 END AS BIT) AS Existencia,
+                   D.CantidadEnviada AS CantidadEnviada
             FROM PedidosInsumosDetalle D
             LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART ART WITH(NOLOCK) ON RTRIM(ART.ARTCOD) = RTRIM(D.ARTCOD)
             WHERE D.IDPedido = @idPedido AND D.Eliminado = 0
@@ -226,20 +228,30 @@ public sealed class InsumosService : IInsumosService
         return rows.ToList();
     }
 
-    public async Task<CrearPedidoResultado> GuardarPedidoAsync(GuardarPedidoRequest req, string usuario, CancellationToken ct = default)
+    public async Task<CrearPedidoResultado> GuardarPedidoAsync(GuardarPedidoRequest req, string usuario, bool esDeposito, CancellationToken ct = default)
     {
         var renglones = (req.Renglones ?? new())
             .Where(r => !string.IsNullOrWhiteSpace(r.ArtCod) && r.Cantidad > 0)
-            .Select(r => new { Art = r.ArtCod.Trim(), r.Cantidad })
+            .Select(r => new
+            {
+                Art = r.ArtCod.Trim(),
+                r.Cantidad,
+                Existencia = r.Existencia ? 1 : 0,
+                // Sin stock → 0 enviado; si no, lo indicado (o la pedida si no se tocó).
+                CantEnv = !r.Existencia ? 0 : (r.CantidadEnviada ?? r.Cantidad)
+            })
             .ToList();
         if (renglones.Count == 0) throw new InvalidOperationException("El pedido debe tener al menos un insumo.");
 
-        // El alta re-valida la regla 1/15 (cinturón server-side).
+        // El alta re-valida la regla 1/15 (solo aplica al local; el depósito no crea con esa regla).
         if (req.Id == 0)
         {
             if (req.IdLocal != 2 && req.IdLocal != 3) throw new InvalidOperationException("Local inválido para pedido de insumos.");
-            var val = await ValidarFechaPedidoAsync(req.IdLocal, ct);
-            if (val.Resultado == "BLOQUEADO") throw new InvalidOperationException(val.Mensaje);
+            if (!esDeposito)
+            {
+                var val = await ValidarFechaPedidoAsync(req.IdLocal, ct);
+                if (val.Resultado == "BLOQUEADO") throw new InvalidOperationException(val.Mensaje);
+            }
         }
 
         using var cn = _db.Create();
@@ -261,11 +273,16 @@ public sealed class InsumosService : IInsumosService
             }
             else
             {
-                // Existente: el local solo puede modificar mientras DEPÓSITO no lo imprimió/envió.
-                var cerrado = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
-                    "SELECT 1 FROM PedidosInsumos WHERE ID=@id AND (FechaImpresion IS NOT NULL OR FechaEnviado IS NOT NULL) AND Eliminado=0;",
-                    new { id = req.Id }, tx, cancellationToken: ct));
-                if (cerrado is not null) throw new InvalidOperationException("El pedido ya fue tomado por Depósito (en armado/enviado): cerrado para el local.");
+                // Local: bloquea desde que DEPÓSITO imprimió (EN ARMADO) o envió.
+                // Depósito: puede editar EN ARMADO; solo se bloquea si ya está ENVIADO.
+                var lockSql = esDeposito
+                    ? "SELECT 1 FROM PedidosInsumos WHERE ID=@id AND FechaEnviado IS NOT NULL AND Eliminado=0;"
+                    : "SELECT 1 FROM PedidosInsumos WHERE ID=@id AND (FechaImpresion IS NOT NULL OR FechaEnviado IS NOT NULL) AND Eliminado=0;";
+                var cerrado = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(lockSql, new { id = req.Id }, tx, cancellationToken: ct));
+                if (cerrado is not null)
+                    throw new InvalidOperationException(esDeposito
+                        ? "El pedido ya fue ENVIADO: no se puede modificar."
+                        : "El pedido ya fue tomado por Depósito (en armado/enviado): cerrado para el local.");
 
                 var auditH = $"Modificación Pedido Insumos | {usuario} | {DateTime.Now}";
                 // Reemplazo de renglones: baja lógica de los actuales + re-inserta los confirmados.
@@ -279,12 +296,25 @@ public sealed class InsumosService : IInsumosService
             }
 
             var auditD = $"Alta registro | {usuario} | {DateTime.Now}";
-            const string ins = """
+            // Local: sin existencia/cant enviada (las marca el depósito después).
+            const string insLocal = """
                 INSERT INTO PedidosInsumosDetalle (IDPedido, ARTCOD, Cantidad, Eliminado, Auditoria, NoRequiereConsumo)
                 VALUES (@id, @art, @cant, 0, @audit, 0);
                 """;
+            // Depósito: persiste lo marcado por renglón (existencia + cantidad enviada).
+            const string insDeposito = """
+                INSERT INTO PedidosInsumosDetalle (IDPedido, ARTCOD, Cantidad, Existencia, CantidadEnviada, Eliminado, Auditoria, NoRequiereConsumo)
+                VALUES (@id, @art, @cant, @existencia, @cantEnv, 0, @audit, 0);
+                """;
             foreach (var r in renglones)
-                await cn.ExecuteAsync(new CommandDefinition(ins, new { id, art = r.Art, cant = r.Cantidad, audit = auditD }, tx, cancellationToken: ct));
+            {
+                if (esDeposito)
+                    await cn.ExecuteAsync(new CommandDefinition(insDeposito,
+                        new { id, art = r.Art, cant = r.Cantidad, existencia = r.Existencia, cantEnv = r.CantEnv, audit = auditD }, tx, cancellationToken: ct));
+                else
+                    await cn.ExecuteAsync(new CommandDefinition(insLocal,
+                        new { id, art = r.Art, cant = r.Cantidad, audit = auditD }, tx, cancellationToken: ct));
+            }
 
             tx.Commit();
             return new CrearPedidoResultado { Id = id, NroPedido = nro };

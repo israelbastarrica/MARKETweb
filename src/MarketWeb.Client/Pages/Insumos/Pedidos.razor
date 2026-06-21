@@ -79,7 +79,7 @@
                         <th class="text-end" style="width: 90px">Cantidad</th>
                         <th class="text-end" style="width: 90px">Art. Env.</th>
                         <th class="text-end" style="width: 100px">Cant. Env.</th>
-                        @if (_puedeABM)
+                        @if (_puedeABM || _esDeposito)
                         {
                             <th class="text-center" style="width: 96px">Acciones</th>
                         }
@@ -96,14 +96,14 @@
                             <td class="text-end">@Fmt.Miles(p.CantidadTotal)</td>
                             <td class="text-end">@Fmt.Miles(p.CantArtEnviada)</td>
                             <td class="text-end">@Fmt.Miles(p.CantidadTotalEnviada)</td>
-                            @if (_puedeABM)
+                            @if (_puedeABM || _esDeposito)
                             {
                                 <td class="text-center acciones">
-                                    <button class="btn btn-sm btn-outline-secondary" title="@(p.Cerrado ? "Ver" : "Abrir / Modificar")"
+                                    <button class="btn btn-sm btn-outline-secondary" title="@(SoloLectura(p) ? "Ver" : "Abrir / Modificar")"
                                             @onclick="() => Abrir(p)">
-                                        <i class="fa-solid @(p.Cerrado ? "fa-eye" : "fa-pen")"></i>
+                                        <i class="fa-solid @(SoloLectura(p) ? "fa-eye" : "fa-pen")"></i>
                                     </button>
-                                    @if (!p.Cerrado)
+                                    @if (_puedeABM && !p.Cerrado)
                                     {
                                         <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(p)">
                                             <i class="fa-solid fa-trash"></i>
@@ -247,6 +247,10 @@
     }
 
     private void Abrir(PedidoInsumoDto p) => Nav.NavigateTo($"/insumos/pedidos/{p.Id}");
+
+    // Solo lectura si está enviado; o si es el local y ya quedó cerrado (EN ARMADO).
+    // El depósito puede editar EN ARMADO, así que para él no es solo lectura hasta ENVIADO.
+    private bool SoloLectura(PedidoInsumoDto p) => p.Enviado || (!_esDeposito && p.Cerrado);
 
     // Depósito: imprime la hoja de ruta de los pendientes del filtro y los marca EN ARMADO.
     private async Task ImprimirArmado()

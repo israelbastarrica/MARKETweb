@@ -42,7 +42,7 @@ public interface IInsumosService
     /// Guarda el pedido COMPLETO en una transacción (cabecera + renglones). Id=0 crea; Id&gt;0 reemplaza renglones.
     /// Re-valida 1/15 en altas. Devuelve id + nro. Nada se persiste hasta este llamado.
     /// </summary>
-    Task<CrearPedidoResultado> GuardarPedidoAsync(GuardarPedidoRequest req, string usuario, CancellationToken ct = default);
+    Task<CrearPedidoResultado> GuardarPedidoAsync(GuardarPedidoRequest req, string usuario, bool esDeposito, CancellationToken ct = default);
 
     /// <summary>Borra (lógico) un pedido entero (cabecera + renglones). Devuelve false si no se permite (ENVIADO).</summary>
     Task<bool> EliminarPedidoAsync(int idPedido, string usuario, CancellationToken ct = default);

@@ -61,7 +61,10 @@ public sealed class InsumosController : ControllerBase
         try
         {
             var usuario = User.Identity?.Name ?? "WEB";
-            return Ok(await _service.GuardarPedidoAsync(req, usuario, ct));
+            // El rol decide el lock y si se persiste existencia/cant. enviada (no se confía en el cliente).
+            var perfil = (User.FindFirst("perfil")?.Value ?? "").Trim().ToUpperInvariant();
+            var esDeposito = perfil is "LOGISTICA" or "ADMIN";
+            return Ok(await _service.GuardarPedidoAsync(req, usuario, esDeposito, ct));
         }
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
