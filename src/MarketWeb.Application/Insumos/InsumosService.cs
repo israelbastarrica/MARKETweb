@@ -198,7 +198,8 @@ public sealed class InsumosService : IInsumosService
                    ISNULL(RTRIM(ART.ARTDES),'Sin descripción') AS Descripcion,
                    D.Cantidad AS Cantidad,
                    CAST(CASE WHEN ISNULL(D.Existencia,1) = 0 THEN 0 ELSE 1 END AS BIT) AS Existencia,
-                   D.CantidadEnviada AS CantidadEnviada
+                   D.CantidadEnviada AS CantidadEnviada,
+                   CAST(CASE WHEN ISNULL(D.NoRequiereConsumo,0) = 1 THEN 1 ELSE 0 END AS BIT) AS NoRequiereConsumo
             FROM PedidosInsumosDetalle D
             LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART ART WITH(NOLOCK) ON RTRIM(ART.ARTCOD) = RTRIM(D.ARTCOD)
             WHERE D.IDPedido = @idPedido AND D.Eliminado = 0
@@ -230,6 +231,11 @@ public sealed class InsumosService : IInsumosService
 
     public async Task<CrearPedidoResultado> GuardarPedidoAsync(GuardarPedidoRequest req, string usuario, bool esDeposito, CancellationToken ct = default)
     {
+        // El depósito modifica un pedido existente: actualiza POR RENGLÓN (idéntico al .Net).
+        // Solo toca Existencia / CantidadEnviada / NoRequiereConsumo; la cantidad pedida no.
+        if (esDeposito && req.Id != 0)
+            return await GuardarDepositoAsync(req, usuario, ct);
+
         var renglones = (req.Renglones ?? new())
             .Where(r => !string.IsNullOrWhiteSpace(r.ArtCod) && r.Cantidad > 0)
             .Select(r => new
@@ -318,6 +324,61 @@ public sealed class InsumosService : IInsumosService
 
             tx.Commit();
             return new CrearPedidoResultado { Id = id, NroPedido = nro };
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+
+    // Guardado del DEPÓSITO sobre un pedido existente (idéntico al .Net): por renglón,
+    // solo Existencia / CantidadEnviada / NoRequiereConsumo (no la cantidad pedida ni el ARTCOD).
+    // Los renglones que el depósito quitó van a baja lógica. Solo se bloquea si ya está ENVIADO.
+    private async Task<CrearPedidoResultado> GuardarDepositoAsync(GuardarPedidoRequest req, string usuario, CancellationToken ct)
+    {
+        var presentes = (req.Renglones ?? new()).Where(r => r.Id > 0).ToList();
+        if (presentes.Count == 0) throw new InvalidOperationException("El pedido debe tener al menos un insumo.");
+
+        using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        using var tx = cn.BeginTransaction();
+        try
+        {
+            var enviado = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
+                "SELECT 1 FROM PedidosInsumos WHERE ID=@id AND FechaEnviado IS NOT NULL AND Eliminado=0;",
+                new { id = req.Id }, tx, cancellationToken: ct));
+            if (enviado is not null) throw new InvalidOperationException("El pedido ya fue ENVIADO: no se puede modificar.");
+
+            var audit = $"Modificación depósito | {usuario} | {DateTime.Now}";
+            var ids = presentes.Select(r => r.Id).ToArray();
+
+            // Renglones que el depósito quitó (existían y ya no vienen) → baja lógica.
+            await cn.ExecuteAsync(new CommandDefinition(
+                "UPDATE PedidosInsumosDetalle SET Eliminado=1, Auditoria=@audit WHERE IDPedido=@id AND Eliminado=0 AND ID NOT IN @ids;",
+                new { id = req.Id, audit, ids }, tx, cancellationToken: ct));
+
+            const string upd = """
+                UPDATE PedidosInsumosDetalle
+                SET Existencia=@ex, CantidadEnviada=@cantEnv, NoRequiereConsumo=@nrc, Auditoria=@audit
+                WHERE ID=@idDet AND IDPedido=@idPed AND Eliminado=0;
+                """;
+            foreach (var r in presentes)
+            {
+                var ex = r.Existencia ? 1 : 0;
+                var cantEnv = !r.Existencia ? 0 : (r.CantidadEnviada ?? r.Cantidad);
+                await cn.ExecuteAsync(new CommandDefinition(upd,
+                    new { idDet = r.Id, idPed = req.Id, ex, cantEnv, nrc = r.NoRequiereConsumo ? 1 : 0, audit }, tx, cancellationToken: ct));
+            }
+
+            // Cabecera: solo auditoría (sigue EN ARMADO; no cambia local/fecha).
+            await cn.ExecuteAsync(new CommandDefinition(
+                "UPDATE PedidosInsumos SET Auditoria=@audit WHERE ID=@id;", new { id = req.Id, audit }, tx, cancellationToken: ct));
+
+            var nro = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT NroPedido FROM PedidosInsumos WHERE ID=@id;", new { id = req.Id }, tx, cancellationToken: ct));
+            tx.Commit();
+            return new CrearPedidoResultado { Id = req.Id, NroPedido = nro };
         }
         catch
         {
