@@ -1,5 +1,6 @@
 @page "/logistica/reemplazos"
 @inject ReemplazosApi Api
+@inject NavigationManager Nav
 @inject IJSRuntime JS
 
 <PageTitle>Reemplazos</PageTitle>
@@ -25,6 +26,9 @@
             @if (_procesando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
             else { <i class="fa-solid fa-check me-1"></i> }
             Marcar procesado
+        </button>
+        <button class="btn btn-outline-dark ms-auto" @onclick='() => Nav.NavigateTo("/logistica/reemplazos-mueble")' title="Bloqueos de artículos por mueble">
+            <i class="fa-solid fa-ban me-1"></i> Bloqueos por mueble
         </button>
     </div>
 

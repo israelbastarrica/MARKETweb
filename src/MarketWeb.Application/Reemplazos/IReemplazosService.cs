@@ -33,4 +33,19 @@ public interface IReemplazosService
 
     /// <summary>Baja lógica.</summary>
     Task EliminarAsync(int id, string usuario, CancellationToken ct = default);
+
+    // ---- Reemplazo por Mueble (bloqueos) ----
+
+    /// <summary>Mobiliarios distintos vigentes en Mapeo (para el combo).</summary>
+    Task<IReadOnlyList<string>> ListarMobiliariosAsync(CancellationToken ct = default);
+
+    /// <summary>Listado de bloqueos por mueble. local/mobiliario "" o "TODOS" = sin filtro; artCod = LIKE.</summary>
+    Task<IReadOnlyList<BloqueoMuebleDto>> ListarBloqueosAsync(string local, string mobiliario, string artCod, CancellationToken ct = default);
+
+    Task<BloqueoMuebleEditorDto?> ObtenerBloqueoAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Alta/modificación de un bloqueo (resuelve IDUbicacion; dedup por local+mueble+artículo en alta).</summary>
+    Task GuardarBloqueoAsync(BloqueoMuebleSaveRequest req, string usuario, CancellationToken ct = default);
+
+    Task EliminarBloqueoAsync(int id, string usuario, CancellationToken ct = default);
 }

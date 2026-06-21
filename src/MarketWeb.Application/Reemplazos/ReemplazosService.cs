@@ -387,4 +387,97 @@ public sealed class ReemplazosService : IReemplazosService
             "UPDATE RepoReemplazos SET Eliminado=1, Auditoria=@audit WHERE ID=@id AND Eliminado=0;",
             new { id, audit }, cancellationToken: ct));
     }
+
+    // ===================== Reemplazo por Mueble (bloqueos) =====================
+
+    public async Task<IReadOnlyList<string>> ListarMobiliariosAsync(CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT DISTINCT RTRIM(Mobiliario) AS Mobiliario
+            FROM MARKET.dbo.Mapeo
+            WHERE Eliminado = 0 AND Mobiliario IS NOT NULL AND RTRIM(Mobiliario) <> ''
+            ORDER BY Mobiliario;
+            """;
+        using var cn = _db.Create();
+        return (await cn.QueryAsync<string>(new CommandDefinition(sql, commandTimeout: 60, cancellationToken: ct))).ToList();
+    }
+
+    public async Task<IReadOnlyList<BloqueoMuebleDto>> ListarBloqueosAsync(string local, string mobiliario, string artCod, CancellationToken ct = default)
+    {
+        var l = (local ?? "").Trim();
+        var m = (mobiliario ?? "").Trim();
+        var a = (artCod ?? "").Trim();
+        const string sql = """
+            SELECT R.ID AS Id, R.Fecha, RTRIM(R.Local) AS Local, RTRIM(ISNULL(R.Mobiliario,'')) AS Mobiliario,
+                   RTRIM(R.ARTCOD) AS ArtCod, ISNULL(RTRIM(ART.ARTDES), '(sin descripción)') AS ArtDes
+            FROM MARKET.dbo.RepoReemplazoMueble R
+            LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART ART ON RTRIM(ART.ARTCOD) = RTRIM(R.ARTCOD)
+            WHERE R.Eliminado = 0
+              AND (@l = '' OR @l = 'TODOS' OR UPPER(RTRIM(R.Local)) = UPPER(@l))
+              AND (@m = '' OR @m = 'TODOS' OR UPPER(RTRIM(R.Mobiliario)) = UPPER(@m))
+              AND (@a = '' OR RTRIM(R.ARTCOD) LIKE '%' + @a + '%')
+            ORDER BY R.Local, R.Mobiliario, R.ARTCOD;
+            """;
+        using var cn = _db.Create();
+        return (await cn.QueryAsync<BloqueoMuebleDto>(new CommandDefinition(sql, new { l, m, a }, commandTimeout: 90, cancellationToken: ct))).ToList();
+    }
+
+    public async Task<BloqueoMuebleEditorDto?> ObtenerBloqueoAsync(int id, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT R.ID AS Id, RTRIM(R.Local) AS Local, RTRIM(ISNULL(R.Mobiliario,'')) AS Mobiliario,
+                   RTRIM(R.ARTCOD) AS ArtCod, ISNULL(RTRIM(ART.ARTDES),'') AS ArtDes
+            FROM MARKET.dbo.RepoReemplazoMueble R
+            LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART ART ON RTRIM(ART.ARTCOD) = RTRIM(R.ARTCOD)
+            WHERE R.ID = @id;
+            """;
+        using var cn = _db.Create();
+        return await cn.QuerySingleOrDefaultAsync<BloqueoMuebleEditorDto>(new CommandDefinition(sql, new { id }, commandTimeout: 60, cancellationToken: ct));
+    }
+
+    public async Task GuardarBloqueoAsync(BloqueoMuebleSaveRequest req, string usuario, CancellationToken ct = default)
+    {
+        var local = (req.Local ?? "").Trim();
+        var mob = (req.Mobiliario ?? "").Trim();
+        var art = (req.ArtCod ?? "").Trim().ToUpperInvariant();
+        if (local.Length == 0) throw new BusinessException("Seleccioná un local.");
+        if (mob.Length == 0) throw new BusinessException("Seleccioná un mobiliario.");
+        if (art.Length == 0) throw new BusinessException("Ingresá un ARTCOD.");
+
+        using var cn = _db.Create();
+
+        // El local se guarda como nombre + IDUbicacion (el SP filtra por IDUbicacion).
+        var idUbi = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT TOP 1 ID FROM Ubicaciones WHERE RTRIM(Descripcion) = @l AND Eliminado = 0 ORDER BY ID;",
+            new { l = local }, cancellationToken: ct));
+        if (idUbi is null or <= 0) throw new BusinessException($"No se pudo resolver el local '{local}'.");
+
+        if (req.Id == 0)
+        {
+            var existe = await cn.ExecuteScalarAsync<int?>(new CommandDefinition("""
+                SELECT TOP 1 ID FROM MARKET.dbo.RepoReemplazoMueble
+                WHERE Eliminado = 0 AND IDUbicacion = @idu
+                  AND UPPER(RTRIM(Mobiliario)) = UPPER(@m) AND UPPER(RTRIM(ARTCOD)) = UPPER(@a);
+                """, new { idu = idUbi.Value, m = mob, a = art }, cancellationToken: ct));
+            if (existe is not null) throw new BusinessException("Ya existe un bloqueo vigente para esa combinación de local + mobiliario + artículo.");
+
+            await cn.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO MARKET.dbo.RepoReemplazoMueble (IDUbicacion, Local, Mobiliario, ARTCOD) VALUES (@idu, @l, @m, @a);",
+                new { idu = idUbi.Value, l = local, m = mob, a = art }, cancellationToken: ct));
+        }
+        else
+        {
+            await cn.ExecuteAsync(new CommandDefinition(
+                "UPDATE MARKET.dbo.RepoReemplazoMueble SET IDUbicacion=@idu, Local=@l, Mobiliario=@m, ARTCOD=@a WHERE ID=@id;",
+                new { idu = idUbi.Value, l = local, m = mob, a = art, id = req.Id }, cancellationToken: ct));
+        }
+    }
+
+    public async Task EliminarBloqueoAsync(int id, string usuario, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+        await cn.ExecuteAsync(new CommandDefinition(
+            "UPDATE MARKET.dbo.RepoReemplazoMueble SET Eliminado = 1 WHERE ID = @id AND Eliminado = 0;",
+            new { id }, cancellationToken: ct));
+    }
 }

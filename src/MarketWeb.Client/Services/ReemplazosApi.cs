@@ -54,5 +54,31 @@ public sealed class ReemplazosApi
         return resp.IsSuccessStatusCode;
     }
 
+    // ---- Reemplazo por Mueble (bloqueos) ----
+
+    public async Task<List<string>> MobiliariosAsync()
+        => await _http.GetFromJsonAsync<List<string>>("api/reemplazos/mueble/mobiliarios") ?? new();
+
+    public async Task<List<BloqueoMuebleDto>> ListarBloqueosAsync(string local, string mobiliario, string artCod)
+        => await _http.GetFromJsonAsync<List<BloqueoMuebleDto>>(
+            $"api/reemplazos/mueble?local={Uri.EscapeDataString(local)}&mobiliario={Uri.EscapeDataString(mobiliario)}&artCod={Uri.EscapeDataString(artCod)}") ?? new();
+
+    public async Task<BloqueoMuebleEditorDto?> ObtenerBloqueoAsync(int id)
+        => await _http.GetFromJsonAsync<BloqueoMuebleEditorDto>($"api/reemplazos/mueble/{id}");
+
+    public async Task<(bool Ok, string? Error)> GuardarBloqueoAsync(BloqueoMuebleSaveRequest req)
+    {
+        var resp = await _http.PostAsJsonAsync("api/reemplazos/mueble/guardar", req);
+        if (resp.IsSuccessStatusCode) return (true, null);
+        try { var e = await resp.Content.ReadFromJsonAsync<ErrorResp>(); return (false, e?.Mensaje ?? "No se pudo guardar."); }
+        catch { return (false, "No se pudo guardar."); }
+    }
+
+    public async Task<bool> EliminarBloqueoAsync(int id)
+    {
+        var resp = await _http.DeleteAsync($"api/reemplazos/mueble/{id}");
+        return resp.IsSuccessStatusCode;
+    }
+
     private sealed class ErrorResp { public string? Mensaje { get; set; } }
 }

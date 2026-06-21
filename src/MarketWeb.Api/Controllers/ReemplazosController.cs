@@ -80,4 +80,42 @@ public sealed class ReemplazosController : ControllerBase
         await _service.EliminarAsync(id, usuario, ct);
         return NoContent();
     }
+
+    // ---- Reemplazo por Mueble (bloqueos) ----
+
+    [HttpGet("mueble/mobiliarios")]
+    public async Task<ActionResult<IReadOnlyList<string>>> Mobiliarios(CancellationToken ct)
+        => Ok(await _service.ListarMobiliariosAsync(ct));
+
+    [HttpGet("mueble")]
+    public async Task<ActionResult<IReadOnlyList<BloqueoMuebleDto>>> Bloqueos(
+        [FromQuery] string local = "", [FromQuery] string mobiliario = "", [FromQuery] string artCod = "", CancellationToken ct = default)
+        => Ok(await _service.ListarBloqueosAsync(local ?? "", mobiliario ?? "", artCod ?? "", ct));
+
+    [HttpGet("mueble/{id:int}")]
+    public async Task<ActionResult<BloqueoMuebleEditorDto>> ObtenerBloqueo(int id, CancellationToken ct)
+    {
+        var b = await _service.ObtenerBloqueoAsync(id, ct);
+        return b is null ? NotFound() : Ok(b);
+    }
+
+    [HttpPost("mueble/guardar")]
+    public async Task<IActionResult> GuardarBloqueo([FromBody] BloqueoMuebleSaveRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+            await _service.GuardarBloqueoAsync(req, usuario, ct);
+            return Ok();
+        }
+        catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
+    }
+
+    [HttpDelete("mueble/{id:int}")]
+    public async Task<IActionResult> EliminarBloqueo(int id, CancellationToken ct)
+    {
+        var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+        await _service.EliminarBloqueoAsync(id, usuario, ct);
+        return NoContent();
+    }
 }

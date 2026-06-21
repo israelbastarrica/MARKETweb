@@ -1,0 +1,209 @@
+@page "/logistica/reemplazos-mueble"
+@inject ReemplazosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Bloqueos por mueble</PageTitle>
+
+<div class="market-page">
+    <button class="btn-volver" @onclick='() => Nav.NavigateTo("/logistica/reemplazos")'>
+        <span class="ico"><i class="fa-solid fa-arrow-left"></i></span><span>Volver a Reemplazos</span>
+    </button>
+    <PageHeader Modulo="Logística" Titulo="Bloqueos por mueble" Icono="fa-solid fa-ban" />
+
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Excluyen un <strong>artículo</strong> de la reposición cuando vive en cierto <strong>mueble</strong> de un local.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" @bind="_fLocal" @bind:after="Cargar">
+                <option value="TODOS">TODOS</option>
+                <option value="LURO">LURO</option>
+                <option value="PERALTA">PERALTA</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Mobiliario</label>
+            <select class="form-select" style="min-width: 200px" @bind="_fMobiliario" @bind:after="Cargar">
+                <option value="TODOS">TODOS</option>
+                @foreach (var m in _mobiliarios) { <option value="@m">@m</option> }
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Artículo</label>
+            <input class="form-control" placeholder="Código..." @bind="_fArtCod" @bind:event="oninput" @onkeyup="OnKey" />
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-magnifying-glass me-1"></i> Buscar</button>
+        <button class="btn btn-primary" @onclick="AbrirAlta"><i class="fa-solid fa-plus me-1"></i> Nuevo bloqueo</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i><div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-ban"></i><p>No hay bloqueos para el filtro.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Fecha</th><th>Local</th><th>Mobiliario</th><th>Cód. Art.</th><th>Descripción</th>
+                        <th class="text-center" style="width: 96px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in _items)
+                    {
+                        <tr @ondblclick="() => AbrirModif(b)">
+                            <td class="small">@(b.Fecha?.ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                            <td>@b.Local</td>
+                            <td>@b.Mobiliario</td>
+                            <td><ArticuloLink Codigo="@b.ArtCod" /></td>
+                            <td>@b.ArtDes</td>
+                            <td class="text-center text-nowrap acciones">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModif(b)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(b)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_items.Count bloqueo(s).</p>
+    }
+</div>
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_esAlta ? "Nuevo bloqueo" : "Modificar bloqueo")</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
+                    <div class="mb-3">
+                        <label class="form-label">Local</label>
+                        <select class="form-select" @bind="_abmLocal">
+                            <option value="LURO">LURO</option>
+                            <option value="PERALTA">PERALTA</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mobiliario</label>
+                        <select class="form-select" @bind="_abmMobiliario">
+                            <option value="">— Elegí el mobiliario —</option>
+                            @foreach (var m in _mobiliarios) { <option value="@m">@m</option> }
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Artículo (código)</label>
+                        <input class="form-control" @bind="_abmArtCod" @bind:after="BuscarDesc" placeholder="ARTCOD" />
+                        @if (!string.IsNullOrEmpty(_abmDesc)) { <div class="small text-muted mt-1">@_abmDesc</div> }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                        @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<string> _mobiliarios = new();
+    private List<BloqueoMuebleDto> _items = new();
+    private string _fLocal = "TODOS", _fMobiliario = "TODOS", _fArtCod = "";
+    private bool _cargando = true;
+    private string? _error;
+
+    private bool _modal, _esAlta, _guardando;
+    private int _editId;
+    private string _abmLocal = "LURO", _abmMobiliario = "", _abmArtCod = "", _abmDesc = "";
+    private string? _errorModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _mobiliarios = await Api.MobiliariosAsync(); } catch { _mobiliarios = new(); }
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true; _error = null;
+        try { _items = await Api.ListarBloqueosAsync(_fLocal, _fMobiliario, _fArtCod.Trim()); }
+        catch (Exception ex) { _items = new(); _error = "No se pudieron cargar los bloqueos."; Console.Error.WriteLine(ex); }
+        finally { _cargando = false; }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Cargar(); }
+
+    private void AbrirAlta()
+    {
+        _esAlta = true; _editId = 0;
+        _abmLocal = _fLocal is "LURO" or "PERALTA" ? _fLocal : "LURO";
+        _abmMobiliario = ""; _abmArtCod = ""; _abmDesc = ""; _errorModal = null;
+        _modal = true;
+    }
+
+    private async Task AbrirModif(BloqueoMuebleDto b)
+    {
+        _errorModal = null;
+        var ed = await Api.ObtenerBloqueoAsync(b.Id);
+        if (ed is null) { _error = "No se encontró el bloqueo."; return; }
+        _esAlta = false; _editId = ed.Id;
+        _abmLocal = ed.Local; _abmMobiliario = ed.Mobiliario; _abmArtCod = ed.ArtCod; _abmDesc = ed.ArtDes;
+        _modal = true;
+    }
+
+    private async Task BuscarDesc()
+    {
+        _abmDesc = "";
+        var c = (_abmArtCod ?? "").Trim();
+        if (c.Length == 0) return;
+        var a = await Api.ArticuloAsync(c);
+        _abmDesc = a is null || string.IsNullOrEmpty(a.Descripcion) ? "(no existe en Dragonfish)" : a.Descripcion;
+    }
+
+    private async Task Guardar()
+    {
+        _guardando = true; _errorModal = null;
+        var (ok, err) = await Api.GuardarBloqueoAsync(new BloqueoMuebleSaveRequest
+        {
+            Id = _editId, Local = _abmLocal, Mobiliario = _abmMobiliario, ArtCod = _abmArtCod
+        });
+        _guardando = false;
+        if (!ok) { _errorModal = err; return; }
+        _modal = false;
+        await Cargar();
+    }
+
+    private async Task Eliminar(BloqueoMuebleDto b)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el bloqueo de {b.ArtCod} en {b.Mobiliario} ({b.Local})?");
+        if (!ok) return;
+        await Api.EliminarBloqueoAsync(b.Id);
+        await Cargar();
+    }
+}

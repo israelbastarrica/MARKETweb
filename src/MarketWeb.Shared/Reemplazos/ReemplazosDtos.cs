@@ -61,6 +61,36 @@ public sealed class ValidacionReemplazoDto
     public string Mensaje { get; set; } = "";
 }
 
+/// <summary>Un bloqueo por mueble (RepoReemplazoMueble): excluye un artículo de la repo en un mueble del local.</summary>
+public sealed class BloqueoMuebleDto
+{
+    public int Id { get; set; }
+    public DateTime? Fecha { get; set; }
+    public string Local { get; set; } = "";
+    public string Mobiliario { get; set; } = "";
+    public string ArtCod { get; set; } = "";
+    public string ArtDes { get; set; } = "";
+}
+
+/// <summary>Bloqueo por mueble para el editor.</summary>
+public sealed class BloqueoMuebleEditorDto
+{
+    public int Id { get; set; }
+    public string Local { get; set; } = "";
+    public string Mobiliario { get; set; } = "";
+    public string ArtCod { get; set; } = "";
+    public string ArtDes { get; set; } = "";
+}
+
+/// <summary>Alta/modificación de un bloqueo por mueble.</summary>
+public sealed class BloqueoMuebleSaveRequest
+{
+    public int Id { get; set; }
+    public string Local { get; set; } = "";
+    public string Mobiliario { get; set; } = "";
+    public string ArtCod { get; set; } = "";
+}
+
 /// <summary>Resultado de marcar procesados + notificar a los locales.</summary>
 public sealed class MarcarProcesadosResultadoDto
 {
