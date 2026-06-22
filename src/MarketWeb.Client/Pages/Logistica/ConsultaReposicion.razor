@@ -2,6 +2,7 @@
 @using MarketWeb.Shared.Reposicion
 @inject ReposicionApi Api
 @inject EventosApi EventosApi
+@inject PageStateService State
 @inject IJSRuntime JS
 
 <PageTitle>Consulta Reposición</PageTitle>
@@ -212,6 +213,28 @@
     private ExplicarMovimientoDto? _resetMov;
     private string _resetComentario = "";
 
+    private const string StateKey = "consulta-reposicion";
+
+    private sealed class Snap
+    {
+        public string Local = "LURO";
+        public string ArtCod = "";
+        public ExplicarDto? D;
+        public bool Busco;
+    }
+
+    protected override void OnInitialized()
+    {
+        // Restaura la última consulta al volver (ej. desde la ficha del artículo) sin re-correr el SP.
+        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        {
+            _local = s.Local;
+            _artCod = s.ArtCod;
+            _d = s.D;
+            _busco = s.Busco;
+        }
+    }
+
     private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
 
     private async Task Buscar()
@@ -221,6 +244,7 @@
         try { _d = await Api.ExplicarAsync(_local, _artCod.Trim()); }
         catch { _d = null; }
         finally { _cargando = false; }
+        State.Save(StateKey, new Snap { Local = _local, ArtCod = _artCod, D = _d, Busco = _busco }, 0);
     }
 
     private async Task AbrirEvento(ExplicarMovimientoDto m)
