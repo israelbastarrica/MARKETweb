@@ -261,21 +261,36 @@ public sealed class ReposicionPdf : IReposicionPdf
 
     private async Task<int> VentasDiaAsync(string local, DateTime dia, CancellationToken ct)
     {
-        // EN VIVO por OPENQUERY contra el local (mismo camino que LogisticaDashboardService).
-        // Si el local no tiene host conocido o no responde, devolvemos -1 → el PDF omite el dato
-        // (preferimos no mostrarlo antes que mostrar el número atrasado de la réplica).
         var loc = local.Trim();
-        if (!LocalHosts.TryGetValue(loc, out var host) || !HostVivo(host)) return -1;
-        try
+        var db = "DRAGONFISH_" + loc.ToUpperInvariant();
+        var desde = dia.Date.ToString("yyyy-MM-dd");
+        var hasta = dia.Date.AddDays(1).ToString("yyyy-MM-dd");
+
+        // 1) EN VIVO por OPENQUERY contra el local (la réplica está ~2 días atrasada y sub-cuenta).
+        //    Los insumos (Z) no entran porque sólo se mueven por remito (FLETRA 'R'), ya excluido.
+        if (LocalHosts.TryGetValue(loc, out var host) && HostVivo(host))
         {
-            var db = "DRAGONFISH_" + loc.ToUpperInvariant();
-            var desde = dia.Date.ToString("yyyy-MM-dd");
-            var hasta = dia.Date.AddDays(1).ToString("yyyy-MM-dd");
             var inner =
                 "SELECT ISNULL(SUM(D.FCANT*C.SIGNOMOV),0) AS n " +
                 $"FROM {db}.Zoologic.COMPROBANTEV C JOIN {db}.Zoologic.COMPROBANTEVDET D ON C.CODIGO=D.CODIGO " +
                 $"WHERE C.ANULADO=0 AND C.FLETRA NOT IN ('R','X') AND C.FFCH >= '{desde}' AND C.FFCH < '{hasta}'";
-            var sql = $"SELECT * FROM OPENQUERY([{host}], '{inner.Replace("'", "''")}')";
+            var vivo = await EscalarVentasAsync($"SELECT * FROM OPENQUERY([{host}], '{inner.Replace("'", "''")}')", ct);
+            if (vivo >= 0) return vivo;
+        }
+
+        // 2) Fallback: réplica DRAGONFISH_<local> si el local no responde (atrasada, pero mejor que nada).
+        var sqlRep =
+            "SELECT ISNULL(SUM(D.FCANT*C.SIGNOMOV),0) " +
+            $"FROM {db}.Zoologic.COMPROBANTEV C WITH(NOLOCK) " +
+            $"INNER JOIN {db}.Zoologic.COMPROBANTEVDET D WITH(NOLOCK) ON C.CODIGO=D.CODIGO " +
+            $"WHERE C.ANULADO=0 AND C.FLETRA NOT IN ('R','X') AND C.FFCH >= '{desde}' AND C.FFCH < '{hasta}'";
+        return await EscalarVentasAsync(sqlRep, ct);
+    }
+
+    private async Task<int> EscalarVentasAsync(string sql, CancellationToken ct)
+    {
+        try
+        {
             await using var cn = _db.Create();
             await cn.OpenAsync(ct);
             await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 30 };
