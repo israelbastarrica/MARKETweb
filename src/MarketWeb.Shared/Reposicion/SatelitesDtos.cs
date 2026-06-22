@@ -33,6 +33,8 @@ public sealed class EventoDetalleDto
     public int Id { get; set; }
     public DateTime Fecha { get; set; }
     public string Local { get; set; } = "";
+    public string ArtCod { get; set; } = "";
+    public string Accion { get; set; } = "";   // RESETEAR VENTA / ENVIAR REFUERZO / ESPERAR VENTA / ""
     public string TipoCodigo { get; set; } = "";
     public string TipoDiferencia { get; set; } = "";
     public string CodigoEscaneado { get; set; } = "";

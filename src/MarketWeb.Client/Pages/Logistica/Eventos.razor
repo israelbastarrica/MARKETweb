@@ -1,6 +1,7 @@
 @page "/logistica/eventos"
 @using MarketWeb.Shared.Reposicion
 @inject EventosApi Api
+@inject ReposicionApi RepoApi
 @inject IJSRuntime JS
 
 <PageTitle>Eventos reposición</PageTitle>
@@ -137,6 +138,37 @@
                             }
                         </div>
                     </div>
+
+                    @if (!_det.Eliminado && !string.IsNullOrEmpty(_det.ArtCod) && (_det.Local == "LURO" || _det.Local == "PERALTA"))
+                    {
+                        <hr />
+                        <div class="d-flex flex-wrap align-items-end gap-2">
+                            <div>
+                                <label class="form-label small text-muted mb-1">Acción del encargado</label>
+                                <select class="form-select form-select-sm" style="min-width:200px" @bind="_accion" @bind:after="GuardarAccion">
+                                    <option value="">— sin decidir —</option>
+                                    <option value="RESETEAR VENTA">RESETEAR VENTA</option>
+                                    <option value="ENVIAR REFUERZO">ENVIAR REFUERZO</option>
+                                    <option value="ESPERAR VENTA">ESPERAR VENTA</option>
+                                </select>
+                            </div>
+                            @if (_accion == "RESETEAR VENTA")
+                            {
+                                <div class="flex-grow-1" style="min-width:160px">
+                                    <label class="form-label small text-muted mb-1">Comentario (opcional)</label>
+                                    <input class="form-control form-control-sm" @bind="_accionComentario" maxlength="400" placeholder="Motivo..." />
+                                </div>
+                                <button class="btn btn-danger btn-sm" @onclick="AplicarReset" disabled="@_accionando">
+                                    @if (_accionando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                                    Aplicar reset
+                                </button>
+                            }
+                        </div>
+                        @if (_accion == "RESETEAR VENTA")
+                        {
+                            <div class="form-text">Re-ancla el artículo al último remito y pone el pendiente en cero. FALTANTE suma packs, SOBRANTE los resta.</div>
+                        }
+                    }
                 </div>
                 <div class="modal-footer">
                     @if (_det.Eliminado)
@@ -179,6 +211,7 @@
 
     private bool _modal, _accionando;
     private EventoDetalleDto? _det;
+    private string _accion = "", _accionComentario = "";
 
     protected override async Task OnInitializedAsync() => await Cargar();
 
@@ -200,7 +233,31 @@
     private async Task AbrirDetalle(int id)
     {
         _det = await Api.DetalleAsync(id);
-        if (_det is not null) _modal = true;
+        if (_det is not null)
+        {
+            _accion = _det.Accion;
+            _accionComentario = "";
+            _modal = true;
+        }
+    }
+
+    private async Task GuardarAccion()
+    {
+        if (_det is null) return;
+        await Api.GuardarAccionAsync(_det.Id, _accion);
+        _det.Accion = _accion;
+    }
+
+    private async Task AplicarReset()
+    {
+        if (_det is null) return;
+        if (!await JS.InvokeAsync<bool>("confirm",
+            $"¿Resetear {_det.ArtCod} en {_det.Local} desde el último remito? Re-ancla la cuenta de reposición.")) return;
+        _accionando = true;
+        var res = await RepoApi.ResetearDesdeEventoAsync(_det.Id, _accionComentario);
+        _accionando = false;
+        await JS.InvokeVoidAsync("alert", res.Mensaje);
+        if (res.Ok) await Cargar();
     }
 
     private async Task MarcarProcesado()

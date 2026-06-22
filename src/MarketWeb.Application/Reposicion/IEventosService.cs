@@ -16,6 +16,9 @@ public interface IEventosService
     /// <summary>Marca el evento como atendido (Procesado=1). NO es baja.</summary>
     Task MarcarProcesadoAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Guarda la acción decidida por el encargado (EventosReposicion.Accion). Vacío = NULL.</summary>
+    Task GuardarAccionAsync(int id, string accion, CancellationToken ct = default);
+
     /// <summary>Soft-delete (Eliminado=1) — para cargas erradas, distinto de procesar.</summary>
     Task EliminarAsync(int id, CancellationToken ct = default);
 }

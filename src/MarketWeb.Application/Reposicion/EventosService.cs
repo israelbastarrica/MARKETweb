@@ -79,6 +79,7 @@ public sealed class EventosService : IEventosService
         string remitoCodigo, origen;
         const string sql =
             "SELECT ER.FechaEvento, RTRIM(ER.Local) AS Local, RTRIM(ER.TipoCodigo) AS TipoCodigo, " +
+            "       RTRIM(ISNULL(ER.ARTCOD,'')) AS ARTCOD, RTRIM(ISNULL(ER.Accion,'')) AS Accion, " +
             "       ER.CodigoEscaneado, ER.DescripcionArt, ER.RemitoCODIGO, ER.RemitoDisplay, " +
             "       RTRIM(ER.TipoDiferencia) AS TipoDiferencia, ER.CantidadPacks, " +
             "       ER.Procesado, ER.Eliminado, ER.UsuarioApp, " +
@@ -98,6 +99,8 @@ public sealed class EventosService : IEventosService
                 Id = id,
                 Fecha = Convert.ToDateTime(rdr["FechaEvento"]),
                 Local = Str(rdr, "Local"),
+                ArtCod = Str(rdr, "ARTCOD"),
+                Accion = Str(rdr, "Accion"),
                 TipoCodigo = Str(rdr, "TipoCodigo"),
                 TipoDiferencia = Str(rdr, "TipoDiferencia"),
                 CodigoEscaneado = Str(rdr, "CodigoEscaneado"),
@@ -186,6 +189,17 @@ public sealed class EventosService : IEventosService
 
     public async Task MarcarProcesadoAsync(int id, CancellationToken ct = default)
         => await EjecutarAsync("UPDATE MARKET.dbo.EventosReposicion SET Procesado = 1 WHERE ID = @ID", id, ct);
+
+    public async Task GuardarAccionAsync(int id, string accion, CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            "UPDATE MARKET.dbo.EventosReposicion SET Accion = NULLIF(@a, '') WHERE ID = @ID", cn);
+        cmd.Parameters.Add("@ID", SqlDbType.Int).Value = id;
+        cmd.Parameters.Add("@a", SqlDbType.NVarChar, 20).Value = (accion ?? "").Trim();
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 
     public async Task EliminarAsync(int id, CancellationToken ct = default)
         => await EjecutarAsync("UPDATE MARKET.dbo.EventosReposicion SET Eliminado = 1 WHERE ID = @ID", id, ct);

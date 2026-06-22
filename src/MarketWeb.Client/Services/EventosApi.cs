@@ -21,6 +21,9 @@ public sealed class EventosApi
     public async Task<bool> MarcarProcesadoAsync(int id)
         => (await _http.PostAsync($"api/eventos/{id}/procesar", null)).IsSuccessStatusCode;
 
+    public async Task<bool> GuardarAccionAsync(int id, string accion)
+        => (await _http.PostAsJsonAsync($"api/eventos/{id}/accion", new { accion })).IsSuccessStatusCode;
+
     public async Task<bool> EliminarAsync(int id)
         => (await _http.DeleteAsync($"api/eventos/{id}")).IsSuccessStatusCode;
 }

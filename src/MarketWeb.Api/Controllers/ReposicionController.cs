@@ -69,6 +69,19 @@ public sealed class ReposicionController : ControllerBase
         return Ok(await svc.ResetearDesdeRemitoAsync(req, usuario, ct));
     }
 
+    public sealed record ResetEventoRequest(int IdEvento, string? Comentario);
+
+    // Reset firmado desde un evento de piso (packs con signo, ancla al último remito). Escribe en producción.
+    [HttpPost("resetear-evento")]
+    public async Task<ActionResult<ResetResultadoDto>> ResetearEvento(
+        [FromServices] IReposicionService svc, [FromBody] ResetEventoRequest req, CancellationToken ct)
+    {
+        var mail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+        var pc = Request.Headers["X-Pc"].ToString();
+        var usuario = string.IsNullOrWhiteSpace(pc) ? mail : $"{mail} ({pc})";
+        return Ok(await svc.ResetearDesdeEventoAsync(req.IdEvento, req.Comentario ?? "", usuario, ct));
+    }
+
     // Reimprime el PDF de una corrida pasada (reconstruye desde el snapshot; read-only).
     [HttpGet("historial/{id:int}/pdf")]
     public async Task<IActionResult> HistorialPdf(int id, [FromServices] IReposicionService svc, CancellationToken ct)

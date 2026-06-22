@@ -44,6 +44,15 @@ public sealed class EventosController : ControllerBase
         return NoContent();
     }
 
+    public sealed record AccionRequest(string Accion);
+
+    [HttpPost("{id:int}/accion")]
+    public async Task<IActionResult> Accion(int id, [FromBody] AccionRequest req, CancellationToken ct)
+    {
+        await _service.GuardarAccionAsync(id, req?.Accion ?? "", ct);
+        return NoContent();
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Eliminar(int id, CancellationToken ct)
     {

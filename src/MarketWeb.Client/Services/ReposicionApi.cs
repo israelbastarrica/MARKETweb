@@ -43,5 +43,14 @@ public sealed class ReposicionApi
         return new ResetResultadoDto { Ok = false, Mensaje = "No se pudo resetear." };
     }
 
+    /// <summary>Reset firmado desde un evento de piso (packs con signo, ancla al último remito).</summary>
+    public async Task<ResetResultadoDto> ResetearDesdeEventoAsync(int idEvento, string comentario)
+    {
+        var resp = await _http.PostAsJsonAsync("api/reposicion/resetear-evento", new { idEvento, comentario });
+        if (resp.IsSuccessStatusCode)
+            return await resp.Content.ReadFromJsonAsync<ResetResultadoDto>() ?? new ResetResultadoDto { Ok = false, Mensaje = "Sin respuesta." };
+        return new ResetResultadoDto { Ok = false, Mensaje = "No se pudo resetear." };
+    }
+
     private sealed class JobStart { public string JobId { get; set; } = ""; }
 }

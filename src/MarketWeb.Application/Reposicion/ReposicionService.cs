@@ -432,10 +432,56 @@ public sealed class ReposicionService : IReposicionService
         var cantPack = req.CantPack > 0 ? req.CantPack : 1;
         var packs = Math.Max(1, (int)Math.Round(Math.Abs(req.Cantidad) / (double)cantPack));
 
+        return await AplicarResetAsync(local, artCod, fechaCompleta, packs, req.Comentario, usuario, ct);
+    }
+
+    public async Task<ResetResultadoDto> ResetearDesdeEventoAsync(int idEvento, string comentario, string usuario, CancellationToken ct = default)
+    {
+        // Datos del evento: artículo, local, tipo (signo) y packs reportados.
+        string artCod, local, tipoDif;
+        int cantPacks;
+        await using (var cn = _db.Create())
+        {
+            await cn.OpenAsync(ct);
+            await using var cmd = new SqlCommand(
+                "SELECT RTRIM(ISNULL(ARTCOD,'')) AS ARTCOD, RTRIM(Local) AS Local, RTRIM(ISNULL(TipoDiferencia,'')) AS TipoDiferencia, " +
+                "ISNULL(CantidadPacks,0) AS CantidadPacks FROM MARKET.dbo.EventosReposicion WHERE ID = @id AND Eliminado = 0", cn);
+            cmd.Parameters.Add("@id", SqlDbType.Int).Value = idEvento;
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            if (!await rdr.ReadAsync(ct)) return new ResetResultadoDto { Ok = false, Mensaje = "No se encontró el evento." };
+            artCod = rdr["ARTCOD"].ToString()!.Trim();
+            local = rdr["Local"].ToString()!.Trim();
+            tipoDif = rdr["TipoDiferencia"].ToString()!.Trim();
+            cantPacks = Convert.ToInt32(rdr["CantidadPacks"]);
+        }
+
+        if (string.IsNullOrEmpty(artCod))
+            return new ResetResultadoDto { Ok = false, Mensaje = "El evento no tiene un artículo único; no se puede resetear desde acá." };
+        if (!string.Equals(local, "LURO", StringComparison.OrdinalIgnoreCase) && !string.Equals(local, "PERALTA", StringComparison.OrdinalIgnoreCase))
+            return new ResetResultadoDto { Ok = false, Mensaje = "El evento no es de un local con reposición (LURO/PERALTA)." };
+        if (cantPacks <= 0)
+            return new ResetResultadoDto { Ok = false, Mensaje = "El evento no tiene cantidad de packs para aplicar el reset." };
+
+        // El reset por evento se ancla al ÚLTIMO REMITO (lo trae el explain del SP, igual que el desktop).
+        var exp = await ExplicarAsync(local, artCod, ct);
+        if (exp.Resumen.UltRemitoFecha is null)
+            return new ResetResultadoDto { Ok = false, Mensaje = "No hay último remito para este artículo/local; no se puede anclar el reset." };
+
+        // Packs CON SIGNO: FALTANTE positivo (demanda/cobertura), SOBRANTE negativo (sobre-envío, v51).
+        var packs = string.Equals(tipoDif, "SOBRANTE", StringComparison.OrdinalIgnoreCase) ? -cantPacks : cantPacks;
+
+        return await AplicarResetAsync(local, artCod, exp.Resumen.UltRemitoFecha.Value, packs, comentario, usuario, ct);
+    }
+
+    // Reset centralizado (porteo de AplicarResetVenta): idempotencia + transacción que re-ancla RepoResto
+    // (FechaAncla + AnclaHora + Pendiente/Resto=0) y registra en RepoReposicionArticulosReseteados.
+    private async Task<ResetResultadoDto> AplicarResetAsync(string local, string artCod, DateTime fechaCompleta,
+        int packs, string? comentExtra, string usuario, CancellationToken ct)
+    {
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
 
-        // Idempotencia: si ya hay un reset vigente con fecha >= la del remito, no insertamos.
+        // Idempotencia: si ya hay un reset vigente con fecha >= la del ancla, no insertamos.
         await using (var cmdChk = new SqlCommand(
             "SELECT TOP 1 Fecha, PacksDetectados, Comentario FROM MARKET.dbo.RepoReposicionArticulosReseteados " +
             "WHERE Local = @l AND RTRIM(ARTCOD) = @a AND Eliminado = 0 AND CAST(Fecha AS DATE) >= CAST(@f AS DATE) ORDER BY Fecha DESC", cn))
@@ -456,7 +502,7 @@ public sealed class ReposicionService : IReposicionService
         }
 
         var comentFinal = $"RESETEO VENTA · {usuario} · {DateTime.Now:dd/MM/yyyy HH:mm}";
-        if (!string.IsNullOrWhiteSpace(req.Comentario)) comentFinal += " — " + req.Comentario.Trim();
+        if (!string.IsNullOrWhiteSpace(comentExtra)) comentFinal += " — " + comentExtra.Trim();
         if (comentFinal.Length > 500) comentFinal = comentFinal[..500];
 
         var fechaAncla = fechaCompleta.Date;

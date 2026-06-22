@@ -21,4 +21,7 @@ public interface IReposicionService
 
     /// <summary>Resetea un artículo DESDE un remito: re-ancla RepoResto a esa fecha/hora (Pendiente=0) y registra el reset. Idempotente.</summary>
     Task<ResetResultadoDto> ResetearDesdeRemitoAsync(ResetRemitoRequest req, string usuario, CancellationToken ct = default);
+
+    /// <summary>Reset firmado desde un EVENTO de piso: ancla al último remito; packs con signo (FALTANTE+ / SOBRANTE−). Idempotente.</summary>
+    Task<ResetResultadoDto> ResetearDesdeEventoAsync(int idEvento, string comentario, string usuario, CancellationToken ct = default);
 }
