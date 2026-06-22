@@ -283,4 +283,135 @@ public sealed class ReposicionService : IReposicionService
             TotalPrendas = repo.Sum(f => f.Packs * f.CantPack)
         };
     }
+
+    public async Task<ExplicarDto> ExplicarAsync(string local, string artCod, CancellationToken ct = default)
+    {
+        local = (local ?? "").Trim();
+        artCod = (artCod ?? "").Trim();
+        var dto = new ExplicarDto { Local = local, ArtCod = artCod };
+
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+
+        // Descripción (el SP no la trae).
+        await using (var cmdArt = new SqlCommand(
+            "SELECT TOP 1 ISNULL(RTRIM(ARTDES), 'Sin descripción') FROM DRAGONFISH_CENTRAL.Zoologic.ART WITH(NOLOCK) WHERE RTRIM(ARTCOD) = @cod", cn))
+        {
+            cmdArt.Parameters.AddWithValue("@cod", artCod);
+            var o = await cmdArt.ExecuteScalarAsync(ct);
+            dto.ArtDes = o is null or DBNull ? "SIN DESCRIPCIÓN" : o.ToString()!;
+        }
+
+        await using var cmd = new SqlCommand("MARKET.dbo.SP_RepoExplicarArticulo", cn)
+        {
+            CommandType = CommandType.StoredProcedure,
+            CommandTimeout = 60
+        };
+        cmd.Parameters.Add("@Local", SqlDbType.NVarChar, 20).Value = local;
+        cmd.Parameters.Add("@ARTCOD", SqlDbType.VarChar, 20).Value = artCod;
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        // --- RS1: resumen / veredicto (lectura defensiva por nombre) ---
+        if (await rdr.ReadAsync(ct))
+        {
+            var cols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < rdr.FieldCount; i++) cols.Add(rdr.GetName(i));
+            int GetI(string n) => cols.Contains(n) && rdr[n] is not (DBNull or null) ? Convert.ToInt32(rdr[n]) : 0;
+            string GetS(string n) => cols.Contains(n) && rdr[n] is not (DBNull or null) ? rdr[n].ToString()!.Trim() : "";
+            DateTime? GetD(string n) => cols.Contains(n) && rdr[n] is not (DBNull or null) ? Convert.ToDateTime(rdr[n]) : null;
+
+            dto.Resumen = new ExplicarResumenDto
+            {
+                HayDatos = true,
+                Explicacion = GetS("Explicacion"),
+                Clasificacion = GetS("Clasificacion"),
+                CantPack = cols.Contains("CantPack") && rdr["CantPack"] is not (DBNull or null) ? Convert.ToInt32(rdr["CantPack"]) : 1,
+                Venta = GetI("Venta"),
+                FallasRotacion = GetI("FallasRotacion"),
+                Ajuste = GetI("Ajuste"),
+                ReposEnviadas = GetI("ReposEnviadas"),
+                Pendiente = GetI("Pendiente"),
+                Packs = GetI("Packs"),
+                Ancla = GetD("Ancla"),
+                UltRemitoCant = GetI("UltRemitoCant"),
+                UltRemitoFecha = GetD("UltRemitoFecha"),
+                EventosPendientes = GetI("EventosPendientes"),
+                EventosSobrantePacks = GetI("EventosSobrantePacks"),
+                EventosFaltantePacks = GetI("EventosFaltantePacks"),
+                SobranteAplicadoPacks = GetI("SobranteAplicadoPacks"),
+                SobranteAplicadoUnidades = GetI("SobranteAplicadoUnidades")
+            };
+        }
+
+        // --- RS2: ubicaciones ---
+        if (await rdr.NextResultAsync(ct))
+        {
+            while (await rdr.ReadAsync(ct))
+            {
+                var ubi = Str(rdr, "Ubicacion");
+                dto.Ubicaciones.Add(new ExplicarUbicacionDto
+                {
+                    Ubicacion = ubi,
+                    Modulo = Str(rdr, "Modulo"),
+                    Mobiliario = Str(rdr, "Mobiliario"),
+                    Pasillo = rdr["OrdenPasillo"] is DBNull or null ? "" : rdr["OrdenPasillo"].ToString()!,
+                    Fila = rdr["Fila"] is DBNull or null ? "" : rdr["Fila"].ToString()!,
+                    Posicion = rdr["Posicion"] is DBNull or null ? "" : rdr["Posicion"].ToString()!,
+                    FechaHora = rdr["FechaHora"] is DBNull or null ? null : Convert.ToDateTime(rdr["FechaHora"]),
+                    EsDeposito = ubi.ToUpperInvariant() == "DEPOSITO"
+                });
+            }
+        }
+
+        // --- RS3: movimientos con saldo corrido ---
+        var pendiente = dto.Resumen.Pendiente;
+        if (await rdr.NextResultAsync(ct))
+        {
+            var saldo = 0;
+            while (await rdr.ReadAsync(ct))
+            {
+                var orden = Convert.ToInt32(rdr["Orden"]);
+                var delta = rdr["SaldoDelta"] is DBNull or null ? 0 : (int)Math.Truncate(Convert.ToDecimal(rdr["SaldoDelta"]));
+                saldo += delta;
+                var remito = Str(rdr, "Remito");
+                var mov = new ExplicarMovimientoDto
+                {
+                    Fecha = rdr["Fecha"] is DBNull or null ? null : Convert.ToDateTime(rdr["Fecha"]),
+                    Hora = Str(rdr, "Hora"),
+                    Remito = remito,
+                    Motivo = Str(rdr, "Motivo"),
+                    Cantidad = rdr["Cantidad"] is DBNull or null ? null : Convert.ToDecimal(rdr["Cantidad"]),
+                    Orden = orden,
+                    SaldoDelta = delta,
+                    Saldo = orden < 8 ? saldo : null,
+                    Origen = Str(rdr, "Origen"),
+                    Tipo = Str(rdr, "Tipo")
+                };
+                if (orden == 6)
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(remito, @"EVT\s*#(\d+)");
+                    if (m.Success && int.TryParse(m.Groups[1].Value, out var evtId)) mov.EventoId = evtId;
+                }
+                dto.Movimientos.Add(mov);
+            }
+            dto.SaldoCuadra = !dto.Resumen.HayDatos || saldo == pendiente;
+        }
+
+        // --- RS4: eventos de piso pendientes (ID → TieneFoto) ---
+        if (await rdr.NextResultAsync(ct))
+        {
+            var fotos = new Dictionary<int, bool>();
+            while (await rdr.ReadAsync(ct))
+            {
+                var id = rdr["ID"] is DBNull or null ? 0 : Convert.ToInt32(rdr["ID"]);
+                var tf = rdr["TieneFoto"] is not (DBNull or null) && Convert.ToInt32(rdr["TieneFoto"]) == 1;
+                if (id > 0) fotos[id] = tf;
+            }
+            foreach (var mv in dto.Movimientos)
+                if (mv.EventoId > 0 && fotos.TryGetValue(mv.EventoId, out var tf)) mv.EventoTieneFoto = tf;
+        }
+
+        return dto;
+    }
 }

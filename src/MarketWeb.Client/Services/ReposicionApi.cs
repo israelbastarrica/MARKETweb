@@ -29,5 +29,10 @@ public sealed class ReposicionApi
     public async Task<List<CorridaDto>> ListarCorridasAsync()
         => await _http.GetFromJsonAsync<List<CorridaDto>>("api/reposicion/historial") ?? new();
 
+    /// <summary>"Explain" de un artículo en un local (por qué repone lo que repone).</summary>
+    public async Task<ExplicarDto?> ExplicarAsync(string local, string artCod)
+        => await _http.GetFromJsonAsync<ExplicarDto>(
+            $"api/reposicion/explicar?local={Uri.EscapeDataString(local)}&artCod={Uri.EscapeDataString(artCod)}");
+
     private sealed class JobStart { public string JobId { get; set; } = ""; }
 }

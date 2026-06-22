@@ -27,6 +27,7 @@ public static class Accesos
         new("/logistica/palets", "Palets", "fa-solid fa-pallet", "Logística"),
         new("/logistica/reemplazos", "Reemplazos", "fa-solid fa-retweet", "Logística"),
         new("/logistica/reposicion", "Reposición", "fa-solid fa-clipboard-check", "Logística"),
+        new("/logistica/consulta-reposicion", "Consulta Reposición", "fa-solid fa-magnifying-glass-chart", "Logística"),
         new("/logistica/eventos", "Eventos", "fa-solid fa-triangle-exclamation", "Logística"),
         new("/logistica/reseteados", "Reseteados", "fa-solid fa-rotate-left", "Logística"),
         new("/logistica/control-remitos", "Control de Remitos", "fa-solid fa-truck-ramp-box", "Logística"),

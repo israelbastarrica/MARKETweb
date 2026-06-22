@@ -1,0 +1,258 @@
+@page "/logistica/consulta-reposicion"
+@using MarketWeb.Shared.Reposicion
+@inject ReposicionApi Api
+@inject EventosApi EventosApi
+@inject IJSRuntime JS
+
+<PageTitle>Consulta Reposición</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Consulta Reposición" Icono="fa-solid fa-magnifying-glass-chart" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Por qué el sistema repone lo que repone: veredicto, ubicaciones y el detalle de movimientos con el saldo corrido desde el ancla.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" @bind="_local">
+                <option value="LURO">LURO</option>
+                <option value="PERALTA">PERALTA</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Artículo</label>
+            <input class="form-control" placeholder="ARTCOD" @bind="_artCod" @onkeyup="OnKey" style="min-width:180px" />
+        </div>
+        <button class="btn btn-primary" @onclick="Buscar" disabled="@_cargando">
+            @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            else { <i class="fa-solid fa-magnifying-glass me-1"></i> }
+            Consultar
+        </button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Calculando...</p>
+    }
+    else if (_d is not null)
+    {
+        var r = _d.Resumen;
+        <div class="cr-art mb-3"><span class="cod">@_d.ArtCod</span> · @_d.ArtDes</div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-lg-7">
+                <div class="cr-banner @(EsAtencion(r) ? "cr-banner-warn" : "")">
+                    <div class="cr-banner-t">EXPLICACIÓN</div>
+                    <div>@BannerTexto(r)</div>
+                </div>
+            </div>
+            <div class="col-lg-2 col-6">
+                <div class="cr-card cr-veredicto @VeredictoClase(r)">
+                    <div class="cr-vtxt">@VeredictoTexto(r)</div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-6">
+                <div class="cr-mini">
+                    <div class="cr-mini-row"><span>Pack</span><b class="@(PackRoto(r) ? "cr-rojo" : "")">@r.CantPack</b></div>
+                    <div class="cr-mini-sub">@PackSub(r)</div>
+                    <div class="cr-mini-row"><span>Pendiente</span><b>@r.Pendiente.ToString("N0")</b></div>
+                    <div class="cr-mini-sub">Vendido @(r.Ancla is null ? "desde el ancla" : "desde " + r.Ancla.Value.ToString("dd/MM/yyyy")): @r.Venta.ToString("N0")@(r.FallasRotacion > 0 ? " · Fallas+Rot: " + r.FallasRotacion.ToString("N0") : "")</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cr-footer mb-3">@FooterTexto(r)</div>
+
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <h6 class="cr-h">Ubicaciones</h6>
+                @if (_d.Ubicaciones.Count == 0)
+                {
+                    <p class="text-muted small">Sin ubicaciones mapeadas.</p>
+                }
+                else
+                {
+                    <div class="market-card table-responsive">
+                        <table class="market-table align-middle cr-ubi">
+                            <thead><tr><th>Ubicación</th><th>Mobiliario</th><th>Módulo</th><th class="text-center">Pas.</th><th class="text-center">Fila</th><th class="text-center">Pos.</th></tr></thead>
+                            <tbody>
+                                @foreach (var u in _d.Ubicaciones)
+                                {
+                                    <tr class="@(u.EsDeposito ? "cr-dep" : "cr-loc")">
+                                        <td>@u.Ubicacion</td><td>@u.Mobiliario</td><td>@u.Modulo</td>
+                                        <td class="text-center">@u.Pasillo</td><td class="text-center">@u.Fila</td><td class="text-center">@u.Posicion</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+            <div class="col-lg-7">
+                <h6 class="cr-h">
+                    Movimientos desde el ancla
+                    @if (!_d.SaldoCuadra) { <span class="badge text-bg-danger ms-2" title="El saldo acumulado no cierra con el Pendiente del SP">saldo no cuadra</span> }
+                </h6>
+                <div class="market-card table-responsive cr-mov">
+                    <table class="market-table align-middle">
+                        <thead><tr><th>Fecha</th><th>Hora</th><th>Comprob.</th><th>Mot.</th><th class="text-end">Cant.</th><th class="text-end">Saldo</th><th>Origen</th><th>Movimiento</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in _d.Movimientos)
+                            {
+                                <tr class="@MovClase(m, r.CantPack)" @onclick="() => AbrirEvento(m)" style="@(m.EventoId > 0 ? "cursor:pointer" : "")">
+                                    <td class="small">@(m.Fecha?.ToString("dd/MM/yyyy") ?? "")</td>
+                                    <td class="small">@m.Hora</td>
+                                    <td class="small">@m.Remito</td>
+                                    <td class="text-center small">@m.Motivo</td>
+                                    <td class="text-end fw-bold @(m.Cantidad < 0 ? "cr-rojo" : "")">@(m.Cantidad is null ? "" : ((int)m.Cantidad).ToString("N0"))</td>
+                                    <td class="text-end fw-bold @SaldoClase(m, r.CantPack)">@(m.Saldo?.ToString("N0") ?? "")</td>
+                                    <td class="text-center small">@m.Origen</td>
+                                    <td class="small">@m.Tipo @if (m.EventoId > 0) { <i class="fa-solid fa-image ms-1 text-muted" title="Ver detalle/foto del evento"></i> }</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_busco)
+    {
+        <div class="market-empty"><i class="fa-solid fa-magnifying-glass-chart"></i><p>Sin datos para ese artículo en ese local.</p></div>
+    }
+</div>
+
+@if (_modalEvt && _evt is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Evento de piso: @_evt.TipoDiferencia — @_evt.Local</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalEvt = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="small text-muted mb-3">
+                        <span>Fecha: @_evt.Fecha.ToString("dd/MM/yyyy HH:mm")</span>
+                        @if (!string.IsNullOrEmpty(_evt.CantidadPacks)) { <span> · Cant. packs: @_evt.CantidadPacks</span> }
+                        @if (!string.IsNullOrEmpty(_evt.Usuario)) { <span> · Usuario: @_evt.Usuario</span> }
+                        <span> · @(_evt.Procesado ? "PROCESADO" : "PENDIENTE")</span>
+                    </div>
+                    @if (_evt.TieneFoto)
+                    {
+                        <a href="@($"api/eventos/{_evt.Id}/foto")" target="_blank" rel="noopener">
+                            <img src="@($"api/eventos/{_evt.Id}/foto")" class="cr-foto" alt="Foto del evento" />
+                        </a>
+                    }
+                    else
+                    {
+                        <p class="text-muted small">Sin foto.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private string _local = "LURO";
+    private string _artCod = "";
+    private bool _cargando, _busco;
+    private ExplicarDto? _d;
+
+    private bool _modalEvt;
+    private EventoDetalleDto? _evt;
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
+
+    private async Task Buscar()
+    {
+        if (string.IsNullOrWhiteSpace(_artCod)) return;
+        _cargando = true; _busco = true;
+        try { _d = await Api.ExplicarAsync(_local, _artCod.Trim()); }
+        catch { _d = null; }
+        finally { _cargando = false; }
+        if (_d is not null && !_d.Resumen.HayDatos) { /* mostramos igual con SIN DATOS */ }
+    }
+
+    private async Task AbrirEvento(ExplicarMovimientoDto m)
+    {
+        if (m.EventoId <= 0) return;
+        _evt = await EventosApi.DetalleAsync(m.EventoId);
+        if (_evt is not null) _modalEvt = true;
+    }
+
+    // ---- Presentación (porteo de frmRepoConsultaArticulo) ----
+
+    private static bool EsAtencion(ExplicarResumenDto r)
+        => r.Clasificacion.ToUpperInvariant().StartsWith("REEMPLAZO") || r.EventosPendientes > 0;
+
+    private static string BannerTexto(ExplicarResumenDto r)
+    {
+        var t = r.HayDatos ? r.Explicacion : "Sin datos para este artículo en este local.";
+        if (r.EventosPendientes > 0)
+        {
+            var p = new List<string>();
+            if (r.EventosSobrantePacks > 0) p.Add($"sobrante {r.EventosSobrantePacks:N0} pack(s)");
+            if (r.EventosFaltantePacks > 0) p.Add($"faltante {r.EventosFaltantePacks:N0} pack(s)");
+            t += $"  ⚠ {r.EventosPendientes:N0} evento(s) de piso sin atender";
+            if (p.Count > 0) t += " (" + string.Join(" · ", p) + ")";
+            t += ".";
+        }
+        return t;
+    }
+
+    private static string VeredictoTexto(ExplicarResumenDto r)
+    {
+        if (!r.HayDatos) return "SIN DATOS";
+        if (r.Packs > 0)
+        {
+            var verbo = r.Clasificacion.ToUpperInvariant().StartsWith("REEMPLAZO") ? "REEMPLAZAR" : "REPONER";
+            return $"{verbo} {r.Packs} PACK" + (r.Packs == 1 ? "" : "S");
+        }
+        return "STOCK OK";
+    }
+
+    private static string VeredictoClase(ExplicarResumenDto r)
+        => !r.HayDatos ? "cr-v-sin" : r.Packs > 0 ? "cr-v-rep" : "cr-v-ok";
+
+    private static bool PackRoto(ExplicarResumenDto r)
+        => r.UltRemitoCant > 0 && r.CantPack > 0 && (r.UltRemitoCant % r.CantPack) != 0;
+
+    private static string PackSub(ExplicarResumenDto r)
+        => PackRoto(r) ? $"Últ. remito: {r.UltRemitoCant:N0} u." : $"(Repo neto: {r.ReposEnviadas})";
+
+    private static string FooterTexto(ExplicarResumenDto r)
+    {
+        var p = new List<string> { "VENDIDO: " + r.Venta };
+        if (r.FallasRotacion != 0) p.Add("FALLAS+ROT: " + r.FallasRotacion);
+        if (r.Ajuste != 0) p.Add("AJUSTE: " + r.Ajuste);
+        if (r.ReposEnviadas != 0) p.Add("REPOS NETO: " + r.ReposEnviadas);
+        if (r.SobranteAplicadoUnidades > 0)
+            p.Add($"SOBRANTE LOCAL: -{r.SobranteAplicadoUnidades:N0} ({r.SobranteAplicadoPacks:N0} pack{(r.SobranteAplicadoPacks == 1 ? "" : "s")})");
+        return string.Join(" · ", p) + "   →   PENDIENTE: " + r.Pendiente;
+    }
+
+    private static string MovClase(ExplicarMovimientoDto m, int cantPack) => m.Orden switch
+    {
+        0 => "cr-m-ancla",
+        1 => m.Tipo.Contains("Refuerzo dia", StringComparison.OrdinalIgnoreCase) ? "cr-m-refuerzo" : "cr-m-noche",
+        2 => m.SaldoDelta == 0 ? "cr-m-rot-huerfana" : "cr-m-rot",
+        3 => "cr-m-falla",
+        5 => "cr-m-ajuste",
+        6 => m.Tipo.Contains("[sin visar]", StringComparison.OrdinalIgnoreCase) ? "cr-m-evt-pend" : "cr-m-evt",
+        8 or 9 => "cr-m-resumen",
+        _ => ""
+    };
+
+    private static string SaldoClase(ExplicarMovimientoDto m, int cantPack)
+    {
+        if (m.Saldo is null) return "";
+        if (cantPack > 0 && m.Saldo >= cantPack) return "cr-rojo";
+        if (m.Saldo > 0) return "cr-verde";
+        if (m.Saldo < 0) return "text-muted";
+        return "";
+    }
+}

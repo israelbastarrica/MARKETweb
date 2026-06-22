@@ -52,6 +52,12 @@ public sealed class ReposicionController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CorridaDto>>> Historial([FromServices] IReposicionService svc, CancellationToken ct)
         => Ok(await svc.ListarCorridasAsync(ct));
 
+    // "Explain": por qué el sistema repone lo que repone (SP_RepoExplicarArticulo). Read-only.
+    [HttpGet("explicar")]
+    public async Task<ActionResult<ExplicarDto>> Explicar(
+        [FromServices] IReposicionService svc, [FromQuery] string local, [FromQuery] string artCod, CancellationToken ct)
+        => Ok(await svc.ExplicarAsync(local ?? "", artCod ?? "", ct));
+
     // Reimprime el PDF de una corrida pasada (reconstruye desde el snapshot; read-only).
     [HttpGet("historial/{id:int}/pdf")]
     public async Task<IActionResult> HistorialPdf(int id, [FromServices] IReposicionService svc, CancellationToken ct)

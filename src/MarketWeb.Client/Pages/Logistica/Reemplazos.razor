@@ -27,7 +27,10 @@
             else { <i class="fa-solid fa-check me-1"></i> }
             Marcar procesado
         </button>
-        <button class="btn btn-outline-dark ms-auto" @onclick='() => Nav.NavigateTo("/logistica/reemplazos-mueble")' title="Bloqueos de artículos por mueble">
+        <button class="btn btn-outline-secondary ms-auto" @onclick='() => Nav.NavigateTo("/logistica/consulta-reposicion")' title="Por qué el sistema repone lo que repone">
+            <i class="fa-solid fa-magnifying-glass-chart me-1"></i> Consulta Artículo
+        </button>
+        <button class="btn btn-outline-dark" @onclick='() => Nav.NavigateTo("/logistica/reemplazos-mueble")' title="Bloqueos de artículos por mueble">
             <i class="fa-solid fa-ban me-1"></i> Bloqueos por mueble
         </button>
     </div>

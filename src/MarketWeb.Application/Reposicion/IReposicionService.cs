@@ -15,4 +15,7 @@ public interface IReposicionService
 
     /// <summary>Reconstruye una corrida guardada (ReposicionDetalle + huérfanos de RepoReemplazos del día) para reimprimir. null si no existe. NO corre el SP ni persiste.</summary>
     Task<ReposicionResultadoDto?> ReconstruirCorridaAsync(int idReposicion, CancellationToken ct = default);
+
+    /// <summary>"Explain" de un artículo en un local (SP_RepoExplicarArticulo): por qué el sistema repone lo que repone. Read-only.</summary>
+    Task<ExplicarDto> ExplicarAsync(string local, string artCod, CancellationToken ct = default);
 }
