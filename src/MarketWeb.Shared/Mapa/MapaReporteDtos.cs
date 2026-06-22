@@ -43,3 +43,28 @@ public sealed class MapaReporteFila
     public string? Posiciones { get; set; }      // "Pasillo|Fila;..." (alimenta el resaltado del mapa)
     public int CantUbis { get; set; }
 }
+
+/// <summary>Resultado del reporte: filas (grilla) + módulos a resaltar en el visor 3D.</summary>
+public sealed class MapaReporteResultado
+{
+    public List<MapaReporteFila> Filas { get; set; } = new();
+    public List<string> Modulos { get; set; } = new();   // nombres de módulo (mesh) para resaltar en el 3D
+}
+
+public sealed class MapaProveedorDto
+{
+    public string Codigo { get; set; } = "";
+    public string Nombre { get; set; } = "";
+}
+
+/// <summary>Opciones de los combos de filtro (modo Artículos).</summary>
+public sealed class MapaCombosDto
+{
+    public List<string> Tipos { get; set; } = new();
+    public List<string> Combos { get; set; } = new();
+    public List<string> Familias { get; set; } = new();
+    public List<string> Temporadas { get; set; } = new();
+    public List<string> Categorias { get; set; } = new();
+    public List<int> Anios { get; set; } = new();
+    public List<MapaProveedorDto> Proveedores { get; set; } = new();
+}

@@ -271,6 +271,7 @@
         box.edgesWidth = 5.0;
         box.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
       });
+      aplicarResaltarPendiente();
     } catch(e) {
       console.error('Error cargando módulos:', e);
     }
@@ -325,7 +326,13 @@
     if (!modulos.length) { count.textContent = 'Sin resultados'; return; }
     count.textContent = modulos.length + ' módulo' + (modulos.length !== 1 ? 's' : '');
 
-    modulos.forEach(nombre => {
+    resaltarModulos(modulos);
+  }
+
+  // Resalta en amarillo una lista de módulos (nombres de mesh). Reusado por la búsqueda y por el reporte.
+  function resaltarModulos(nombres) {
+    limpiarHighlights();
+    (nombres || []).forEach(nombre => {
       const mesh = scene.getMeshByName(nombre);
       if (!mesh) return;
       const hlMat = new BABYLON.StandardMaterial('hl_' + nombre, scene);
@@ -671,6 +678,17 @@
   const scene = createScene();
   engine.runRenderLoop(() => scene.render());
   window.addEventListener('resize', () => engine.resize());
+
+  // ---- Resaltado pedido desde el reporte (página Blazor) por postMessage ----
+  let _resaltarPendiente = null;
+  function aplicarResaltarPendiente() {
+    if (_resaltarPendiente === null || typeof scene === 'undefined' || !scene) return;
+    resaltarModulos(_resaltarPendiente);
+  }
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.tipo === 'resaltar') { _resaltarPendiente = d.modulos || []; aplicarResaltarPendiente(); }
+  });
 </script>
 </body>
 </html>

@@ -36,6 +36,11 @@ public sealed class MapaController : ControllerBase
 
     // Reporte de Artículos (sp_ConsultaArticulos) — vista Registros y base del resaltado del Mapa.
     [HttpPost("reporte")]
-    public async Task<ActionResult<IReadOnlyList<MapaReporteFila>>> Reporte([FromBody] MapaReporteFiltro filtro, CancellationToken ct)
+    public async Task<ActionResult<MapaReporteResultado>> Reporte([FromBody] MapaReporteFiltro filtro, CancellationToken ct)
         => Ok(await _svc.ReporteArticulosAsync(filtro, ct));
+
+    // Opciones de los combos de filtro.
+    [HttpGet("combos")]
+    public async Task<ActionResult<MapaCombosDto>> Combos(CancellationToken ct)
+        => Ok(await _svc.CombosAsync(ct));
 }

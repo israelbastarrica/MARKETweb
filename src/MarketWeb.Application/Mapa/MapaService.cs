@@ -88,7 +88,7 @@ public sealed class MapaService : IMapaService
         return modulos.ToList();
     }
 
-    public async Task<IReadOnlyList<MapaReporteFila>> ReporteArticulosAsync(MapaReporteFiltro f, CancellationToken ct = default)
+    public async Task<MapaReporteResultado> ReporteArticulosAsync(MapaReporteFiltro f, CancellationToken ct = default)
     {
         // Modo "Artículos" de frmRepoMapa (ConsultarArticulosSP): @StockNegativo=0, @MasDeUnaUbicacion=0,
         // @SoloCentral=1, @Ordenamiento=1; @Stock = 0 si hay código, 1 (Central) si no. @SubFamilia no se pasa.
@@ -148,7 +148,66 @@ public sealed class MapaService : IMapaService
                 CantUbis = I(d, "CantUbis")
             });
         }
-        return lista;
+
+        // Resaltado del 3D: de las Posiciones ("Pasillo|Fila") a los nombres de módulo (mesh) de esa fila.
+        var claves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fila in lista)
+            if (!string.IsNullOrWhiteSpace(fila.Posiciones))
+                foreach (var tok in fila.Posiciones.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    claves.Add(tok);
+
+        var modulos = new List<string>();
+        if (claves.Count > 0)
+        {
+            var mapeo = await cn.QueryAsync(new CommandDefinition(
+                "SELECT RTRIM(Modulo) AS Modulo, RTRIM(Pasillo) AS Pasillo, Fila FROM MARKET.dbo.Mapeo WHERE IDUbicacion = 1 AND Eliminado = 0",
+                cancellationToken: ct));
+            var set = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in mapeo)
+            {
+                var dd = (IDictionary<string, object>)m;
+                var clave = (dd["Pasillo"]?.ToString()?.Trim() ?? "") + "|" + (dd["Fila"]?.ToString()?.Trim() ?? "");
+                if (claves.Contains(clave))
+                {
+                    var mod = dd["Modulo"]?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(mod)) set.Add(mod);
+                }
+            }
+            modulos = set.ToList();
+        }
+
+        return new MapaReporteResultado { Filas = lista, Modulos = modulos };
+    }
+
+    public async Task<MapaCombosDto> CombosAsync(CancellationToken ct = default)
+    {
+        const string db = "DRAGONFISH_CENTRAL.ZooLogic";
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+
+        var c = new MapaCombosDto();
+        c.Tipos = (await cn.QueryAsync<string>(new CommandDefinition(
+            $"SELECT DISTINCT RTRIM(TIPO.DESCRIP) FROM {db}.ART ART LEFT JOIN {db}.TIPOART TIPO ON TIPO.COD = ART.TIPOARTI WHERE TIPO.DESCRIP <> '' ORDER BY 1",
+            cancellationToken: ct))).ToList();
+        c.Combos = (await cn.QueryAsync<string>(new CommandDefinition(
+            $"SELECT DISTINCT RTRIM(ART.CLASIFART) FROM {db}.ART ART WHERE ART.CLASIFART <> '' ORDER BY 1",
+            cancellationToken: ct))).ToList();
+        c.Familias = (await cn.QueryAsync<string>(new CommandDefinition(
+            $"SELECT DISTINCT RTRIM(FAM.DESCRIP) FROM {db}.ART ART LEFT JOIN {db}.FAMILIA FAM ON FAM.COD = ART.FAMILIA WHERE FAM.DESCRIP <> '' ORDER BY 1",
+            cancellationToken: ct))).ToList();
+        c.Temporadas = (await cn.QueryAsync<string>(new CommandDefinition(
+            $"SELECT DISTINCT RTRIM(TEM.TDES) FROM {db}.ART ART LEFT JOIN {db}.TEMPORADA TEM ON TEM.TCOD = ART.ATEMPORADA WHERE TEM.TDES <> '' ORDER BY 1",
+            cancellationToken: ct))).ToList();
+        c.Categorias = (await cn.QueryAsync<string>(new CommandDefinition(
+            $"SELECT DISTINCT RTRIM(CATE.DESCRIP) FROM {db}.ART ART LEFT JOIN {db}.CATEGART CATE ON CATE.COD = ART.CATEARTI WHERE CATE.DESCRIP <> '' ORDER BY 1",
+            cancellationToken: ct))).ToList();
+        c.Anios = (await cn.QueryAsync<int>(new CommandDefinition(
+            $"SELECT DISTINCT ANO FROM {db}.ART WHERE ANO <> 0 ORDER BY ANO DESC",
+            cancellationToken: ct))).ToList();
+        c.Proveedores = (await cn.QueryAsync<MapaProveedorDto>(new CommandDefinition(
+            $"SELECT DISTINCT RTRIM(PRO.CLCOD) AS Codigo, RTRIM(PRO.CLNOM) AS Nombre FROM {db}.ART ART LEFT JOIN {db}.PROV PRO ON PRO.CLCOD = ART.ARTFAB WHERE PRO.CLNOM <> '' ORDER BY Nombre",
+            cancellationToken: ct))).ToList();
+        return c;
     }
 
     private static string? S(IDictionary<string, object> d, params string[] keys)

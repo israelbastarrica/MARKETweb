@@ -14,5 +14,8 @@ public interface IMapaService
     Task<IReadOnlyList<string>> BuscarAsync(string? q, CancellationToken ct = default);
 
     /// <summary>Reporte de Artículos (sp_ConsultaArticulos), modo "Artículos" de frmRepoMapa.</summary>
-    Task<IReadOnlyList<MapaReporteFila>> ReporteArticulosAsync(MapaReporteFiltro f, CancellationToken ct = default);
+    Task<MapaReporteResultado> ReporteArticulosAsync(MapaReporteFiltro f, CancellationToken ct = default);
+
+    /// <summary>Opciones de los combos de filtro (Tipo, Combo, Familia, Temporada, Categoría, Año, Proveedor).</summary>
+    Task<MapaCombosDto> CombosAsync(CancellationToken ct = default);
 }
