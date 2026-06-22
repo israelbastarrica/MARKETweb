@@ -32,6 +32,12 @@
             else { <i class="fa-solid fa-calculator me-1"></i> }
             Calcular
         </button>
+        @if (_resultado is not null && !_corriendo && _jobId is not null && _resultado.Filas.Count > 0)
+        {
+            <a class="btn btn-outline-danger" href="@($"api/reposicion/calcular/{_jobId}/pdf")" target="_blank" rel="noopener">
+                <i class="fa-solid fa-file-pdf me-1"></i> Descargar PDF
+            </a>
+        }
     </div>
 
     @if (_esSimulacion)

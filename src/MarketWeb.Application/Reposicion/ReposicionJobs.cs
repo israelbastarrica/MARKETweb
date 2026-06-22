@@ -22,7 +22,7 @@ public sealed class ReposicionJobs
         Purgar();
 
         var id = Guid.NewGuid().ToString("N");
-        var job = new Job();
+        var job = new Job { Request = req };
         _jobs[id] = job;
 
         _ = Task.Run(async () =>
@@ -56,6 +56,13 @@ public sealed class ReposicionJobs
         };
     }
 
+    /// <summary>Resultado + request de un job terminado (para generar el PDF). null si no existe o no terminó OK.</summary>
+    public (ReposicionResultadoDto Datos, ReposicionCalcularRequest Req)? Datos(string id)
+    {
+        if (!_jobs.TryGetValue(id, out var job) || job.Resultado is null || job.Request is null) return null;
+        return (job.Resultado, job.Request);
+    }
+
     // Saca jobs terminados con más de 1 hora para no crecer sin límite.
     private void Purgar()
     {
@@ -71,5 +78,6 @@ public sealed class ReposicionJobs
         public volatile string Estado = "running";
         public string? Error;
         public ReposicionResultadoDto? Resultado;
+        public ReposicionCalcularRequest? Request;
     }
 }
