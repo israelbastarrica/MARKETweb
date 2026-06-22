@@ -31,6 +31,7 @@ public static class Accesos
         new("/configuracion/tipos-locales", "Tipos de Locales", "fa-solid fa-warehouse", "Configuración"),
         new("/configuracion/usuarios", "Usuarios", "fa-solid fa-users", "Configuración"),
         new("/compras/calculadora", "Calculadora", "fa-solid fa-calculator", "Compras"),
+        new("/sistemas/tareas", "Tareas programadas", "fa-solid fa-clock", "Sistemas"),
     };
 
     /// <summary>Normaliza una URL a su acceso canónico (prefijo más largo que matchea). null si no es conocida o es el home.</summary>

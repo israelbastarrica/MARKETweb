@@ -11,6 +11,7 @@ using MarketWeb.Application.Palets;
 using MarketWeb.Application.Reemplazos;
 using MarketWeb.Application.RemitoImpresion;
 using MarketWeb.Application.Reposicion;
+using MarketWeb.Application.Tareas;
 using MarketWeb.Application.TiposLocal;
 using MarketWeb.Application.Uso;
 using MarketWeb.Application.UsuariosPc;
@@ -51,6 +52,8 @@ public static class DependencyInjection
         services.AddScoped<IReposicionService, ReposicionService>();
         services.AddScoped<IReposicionPdf, ReposicionPdf>();
         services.AddSingleton<ReposicionJobs>();
+        services.AddScoped<ITareasService, TareasService>();
+        services.AddSingleton<TareasRunner>();
         services.AddScoped<Common.ISmtpSender, Common.SmtpSender>();
 
         return services;

@@ -28,6 +28,7 @@ builder.Services.AddScoped<DashboardApi>();
 builder.Services.AddScoped<UsoApi>();
 builder.Services.AddScoped<ReemplazosApi>();
 builder.Services.AddScoped<ReposicionApi>();
+builder.Services.AddScoped<TareasApi>();
 builder.Services.AddSingleton<PageStateService>();
 
 // --- Autenticación (estado en el cliente; identidad real en cookie del server) ---

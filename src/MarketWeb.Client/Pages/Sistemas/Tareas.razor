@@ -1,0 +1,317 @@
+@page "/sistemas/tareas"
+@using MarketWeb.Shared.Tareas
+@inject TareasApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Tareas programadas</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Sistemas" Titulo="Tareas programadas" Icono="fa-solid fa-clock" />
+
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Programador propio del MarketWeb (reemplaza la tarea de Windows). Corre mientras el servidor está activo:
+        cada minuto revisa qué tareas vencieron y las dispara.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+        <button class="btn btn-primary" @onclick="AbrirAlta"><i class="fa-solid fa-plus me-1"></i> Nueva tarea</button>
+    </div>
+
+    @if (_flash is not null)
+    {
+        <div class="alert alert-success alert-dismissible d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i><div class="flex-grow-1">@_flash</div>
+            <button type="button" class="btn-close" @onclick="() => _flash = null"></button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-clock"></i><p>No hay tareas programadas.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Nombre</th><th>Tipo</th><th>Hora</th><th>Días</th>
+                        <th class="text-center">Activa</th><th>Última corrida</th>
+                        <th class="text-center" style="width:170px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _items)
+                    {
+                        <tr>
+                            <td>@t.Nombre</td>
+                            <td><span class="badge text-bg-secondary">@t.Tipo</span></td>
+                            <td>@t.Hora</td>
+                            <td class="small">@Dias(t.DiasSemana)</td>
+                            <td class="text-center">
+                                @if (t.Activa) { <span class="badge text-bg-success">Sí</span> }
+                                else { <span class="badge text-bg-secondary">No</span> }
+                            </td>
+                            <td class="small">
+                                @if (t.UltimaEjecucion is null) { <span class="text-muted">—</span> }
+                                else
+                                {
+                                    <span>@t.UltimaEjecucion.Value.ToString("dd/MM HH:mm")</span>
+                                    @if (t.UltimoOk == true) { <i class="fa-solid fa-check text-success ms-1"></i> }
+                                    else if (t.UltimoOk == false) { <i class="fa-solid fa-xmark text-danger ms-1"></i> }
+                                    @if (!string.IsNullOrEmpty(t.UltimoResultado)) { <div class="text-muted">@t.UltimoResultado</div> }
+                                }
+                            </td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-success me-1" title="Ejecutar ahora" @onclick="() => Ejecutar(t)"><i class="fa-solid fa-play"></i></button>
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Historial" @onclick="() => AbrirHistorial(t)"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModif(t)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(t)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editId > 0 ? "Modificar tarea" : "Nueva tarea")</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre</label>
+                        <input class="form-control" @bind="_eNombre" placeholder="Ej. Reposición nocturna" />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" @bind="_eTipo">
+                                <option value="@TipoTarea.Reposicion">Reposición (PDF + mail)</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Hora</label>
+                            <input type="time" class="form-control" @bind="_eHoraT" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label d-block">Días</label>
+                        @foreach (var d in _diasDef)
+                        {
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="d@(d.Iso)"
+                                       checked="@_eDias.Contains(d.Iso)"
+                                       @onchange="e => ToggleDia(d.Iso, (bool)e.Value!)" />
+                                <label class="form-check-label" for="d@(d.Iso)">@d.Letra</label>
+                            </div>
+                        }
+                    </div>
+
+                    <hr />
+                    <div class="row g-2 mb-3">
+                        <div class="col">
+                            <label class="form-label">Local</label>
+                            <select class="form-select" @bind="_eLocal">
+                                <option value="TODOS">TODOS</option>
+                                <option value="LURO">LURO</option>
+                                <option value="PERALTA">PERALTA</option>
+                            </select>
+                        </div>
+                        <div class="col d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="chkGenReemp" @bind="_eGenerarReemplazos" />
+                                <label class="form-check-label" for="chkGenReemp">Generar reemplazos</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Destinatarios</label>
+                        <input class="form-control" @bind="_eDestinatarios" placeholder="mail1@marketarg.com; mail2@marketarg.com" />
+                        <div class="form-text">Separados por ; o ,</div>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkActiva" @bind="_eActiva" />
+                        <label class="form-check-label" for="chkActiva">Activa</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                        @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_modalHist)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Historial — @_histNombre</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalHist = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_historial.Count == 0)
+                    {
+                        <p class="text-muted">Sin corridas registradas.</p>
+                    }
+                    else
+                    {
+                        <table class="market-table align-middle">
+                            <thead><tr><th>Inicio</th><th>Fin</th><th>Origen</th><th class="text-center">OK</th><th>Resultado</th></tr></thead>
+                            <tbody>
+                                @foreach (var l in _historial)
+                                {
+                                    <tr>
+                                        <td class="small">@l.Inicio.ToString("dd/MM HH:mm:ss")</td>
+                                        <td class="small">@(l.Fin?.ToString("HH:mm:ss") ?? "—")</td>
+                                        <td><span class="badge text-bg-light">@l.Origen</span></td>
+                                        <td class="text-center">
+                                            @if (l.Ok) { <i class="fa-solid fa-check text-success"></i> }
+                                            else { <i class="fa-solid fa-xmark text-danger"></i> }
+                                        </td>
+                                        <td class="small">@l.Resultado</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<TareaProgramadaDto> _items = new();
+    private bool _cargando = true;
+    private string? _flash;
+
+    private bool _modal, _guardando;
+    private int _editId;
+    private string _eNombre = "", _eTipo = TipoTarea.Reposicion, _eLocal = "TODOS", _eDestinatarios = "";
+    private TimeOnly _eHoraT = new(22, 0);
+    private bool _eActiva = true, _eGenerarReemplazos = true;
+    private HashSet<int> _eDias = new();
+
+    private bool _modalHist;
+    private string _histNombre = "";
+    private List<TareaLogDto> _historial = new();
+
+    private readonly (int Iso, string Letra)[] _diasDef =
+        { (1, "L"), (2, "M"), (3, "X"), (4, "J"), (5, "V"), (6, "S"), (7, "D") };
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _items = await Api.ListarAsync(); }
+        catch { _items = new(); }
+        finally { _cargando = false; }
+    }
+
+    private string Dias(string csv)
+    {
+        var set = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Select(s => int.TryParse(s, out var n) ? n : 0).ToHashSet();
+        if (_diasDef.All(d => set.Contains(d.Iso))) return "Todos";
+        return string.Join(" ", _diasDef.Where(d => set.Contains(d.Iso)).Select(d => d.Letra));
+    }
+
+    private void ToggleDia(int iso, bool on)
+    {
+        if (on) _eDias.Add(iso); else _eDias.Remove(iso);
+    }
+
+    private void AbrirAlta()
+    {
+        _editId = 0;
+        _eNombre = ""; _eTipo = TipoTarea.Reposicion; _eHoraT = new TimeOnly(22, 0);
+        _eDias = new HashSet<int> { 1, 2, 3, 4, 5, 6, 7 };
+        _eActiva = true; _eLocal = "TODOS"; _eGenerarReemplazos = true; _eDestinatarios = "";
+        _modal = true;
+    }
+
+    private async Task AbrirModif(TareaProgramadaDto t)
+    {
+        var ed = await Api.ObtenerAsync(t.Id);
+        if (ed is null) return;
+        _editId = ed.Id;
+        _eNombre = ed.Nombre; _eTipo = ed.Tipo;
+        _eHoraT = TimeOnly.TryParse(ed.Hora, out var h) ? h : new TimeOnly(22, 0);
+        _eDias = ed.DiasSemana.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(s => int.TryParse(s, out var n) ? n : 0).Where(n => n > 0).ToHashSet();
+        _eActiva = ed.Activa; _eLocal = ed.Local; _eGenerarReemplazos = ed.GenerarReemplazos; _eDestinatarios = ed.Destinatarios;
+        _modal = true;
+    }
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(_eNombre)) { await JS.InvokeVoidAsync("alert", "Poné un nombre."); return; }
+        if (_eDias.Count == 0) { await JS.InvokeVoidAsync("alert", "Elegí al menos un día."); return; }
+
+        _guardando = true;
+        var ok = await Api.GuardarAsync(new TareaSaveRequest
+        {
+            Id = _editId,
+            Nombre = _eNombre.Trim(),
+            Tipo = _eTipo,
+            Hora = _eHoraT.ToString("HH:mm"),
+            DiasSemana = string.Join(",", _eDias.OrderBy(x => x)),
+            Activa = _eActiva,
+            Local = _eLocal,
+            GenerarReemplazos = _eGenerarReemplazos,
+            Destinatarios = _eDestinatarios.Trim()
+        });
+        _guardando = false;
+        if (!ok) { await JS.InvokeVoidAsync("alert", "No se pudo guardar."); return; }
+        _modal = false;
+        await Cargar();
+    }
+
+    private async Task Eliminar(TareaProgramadaDto t)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Eliminar la tarea \"{t.Nombre}\"?")) return;
+        await Api.EliminarAsync(t.Id);
+        await Cargar();
+    }
+
+    private async Task Ejecutar(TareaProgramadaDto t)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm",
+            $"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF.")) return;
+        var arrancada = await Api.EjecutarAsync(t.Id);
+        _flash = arrancada
+            ? "Tarea iniciada. Tarda ~2 minutos; revisá el historial para ver el resultado."
+            : "La tarea ya se está ejecutando.";
+    }
+
+    private async Task AbrirHistorial(TareaProgramadaDto t)
+    {
+        _histNombre = t.Nombre;
+        _historial = await Api.HistorialAsync(t.Id);
+        _modalHist = true;
+    }
+}

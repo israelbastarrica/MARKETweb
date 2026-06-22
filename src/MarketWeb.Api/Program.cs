@@ -15,6 +15,9 @@ builder.Services.AddMarketApplication();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
+// Programador de tareas in-app (reposición nocturna, etc.).
+builder.Services.AddHostedService<MarketWeb.Api.Services.TareasScheduler>();
+
 // Detrás de un reverse proxy (Caddy, que termina el HTTPS). Respetamos los headers
 // X-Forwarded-* para que el esquema (https) y el host públicos se reflejen en la app
 // → los redirect de Google se arman bien. La app solo escucha en 127.0.0.1, así que

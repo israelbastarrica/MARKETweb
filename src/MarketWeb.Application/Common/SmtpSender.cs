@@ -9,6 +9,9 @@ public interface ISmtpSender
 {
     bool Configurado { get; }
     Task<bool> EnviarAsync(string destinatarios, string asunto, string htmlBody, CancellationToken ct = default);
+    /// <summary>Variante con un adjunto (ej. el PDF de reposición). adjunto=null → sin adjunto.</summary>
+    Task<bool> EnviarAsync(string destinatarios, string asunto, string htmlBody,
+        byte[]? adjunto, string? nombreAdjunto, CancellationToken ct = default);
 }
 
 public sealed class SmtpSender : ISmtpSender
@@ -19,7 +22,11 @@ public sealed class SmtpSender : ISmtpSender
     private string Host => _cfg["Smtp:Host"] ?? "";
     public bool Configurado => !string.IsNullOrWhiteSpace(Host);
 
-    public async Task<bool> EnviarAsync(string destinatarios, string asunto, string htmlBody, CancellationToken ct = default)
+    public Task<bool> EnviarAsync(string destinatarios, string asunto, string htmlBody, CancellationToken ct = default)
+        => EnviarAsync(destinatarios, asunto, htmlBody, null, null, ct);
+
+    public async Task<bool> EnviarAsync(string destinatarios, string asunto, string htmlBody,
+        byte[]? adjunto, string? nombreAdjunto, CancellationToken ct = default)
     {
         if (!Configurado) return false;
 
@@ -34,8 +41,22 @@ public sealed class SmtpSender : ISmtpSender
             msg.To.Add(d);
         if (msg.To.Count == 0) return false;
 
-        using var smtp = new SmtpClient(Host, port) { EnableSsl = true, Credentials = new NetworkCredential(user, pass) };
-        await smtp.SendMailAsync(msg, ct);
-        return true;
+        MemoryStream? adj = null;
+        if (adjunto is { Length: > 0 })
+        {
+            adj = new MemoryStream(adjunto);
+            msg.Attachments.Add(new Attachment(adj, nombreAdjunto ?? "adjunto.pdf", "application/pdf"));
+        }
+
+        try
+        {
+            using var smtp = new SmtpClient(Host, port) { EnableSsl = true, Credentials = new NetworkCredential(user, pass) };
+            await smtp.SendMailAsync(msg, ct);
+            return true;
+        }
+        finally
+        {
+            adj?.Dispose();
+        }
     }
 }
