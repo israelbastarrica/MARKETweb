@@ -84,6 +84,11 @@ html[data-theme="dark"] .cr-verde { color: #6fcf76 !important; }
 html[data-theme="dark"] .cr-ubi .cr-dep { background: #16314a; }
 html[data-theme="dark"] .cr-ubi .cr-loc { background: #1d3a23; }
 
+.cr-ubi .cr-palet td { background: #dcf5dc; font-weight: 700; color: #226b2e; text-align: center; }
+.cr-ubi .cr-nodep td { background: #ffd9d9; font-weight: 700; color: #b02020; text-align: center; letter-spacing: .03em; }
+html[data-theme="dark"] .cr-ubi .cr-palet td { background: #1d3a23; color: #7fd98a; }
+html[data-theme="dark"] .cr-ubi .cr-nodep td { background: #4a2020; color: #ff8a7a; }
+
 /* Movimientos: un color por tipo (Orden), espejo del desktop */
 .cr-mov { max-height: 50vh; overflow-y: auto; }
 .cr-m-ancla { background: #ffd700 !important; font-weight: 700; }

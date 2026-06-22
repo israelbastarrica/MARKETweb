@@ -43,28 +43,29 @@
 
         <fieldset class="cr-box">
             <legend>Ubicaciones</legend>
-            @if (_d.Ubicaciones.Count == 0)
-            {
-                <p class="text-muted small mb-0">Sin ubicaciones mapeadas.</p>
-            }
-            else
-            {
-                <div class="table-responsive cr-ubi-wrap">
-                    <table class="market-table align-middle cr-ubi">
-                        <thead><tr><th>Ubicación</th><th>Mobiliario</th><th>Módulo</th><th class="text-center">Pasillo</th><th class="text-center">Fila</th><th class="text-center">Posición</th><th class="text-center">Fecha/Hora</th></tr></thead>
-                        <tbody>
-                            @foreach (var u in _d.Ubicaciones)
-                            {
-                                <tr class="@(u.EsDeposito ? "cr-dep" : "cr-loc")">
-                                    <td>@u.Ubicacion</td><td>@u.Mobiliario</td><td>@u.Modulo</td>
-                                    <td class="text-center">@u.Pasillo</td><td class="text-center">@u.Fila</td><td class="text-center">@u.Posicion</td>
-                                    <td class="text-center small">@(u.FechaHora?.ToString("dd/MM/yy HH:mm"))</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
+            <div class="table-responsive cr-ubi-wrap">
+                <table class="market-table align-middle cr-ubi">
+                    <thead><tr><th>Ubicación</th><th>Mobiliario</th><th>Módulo</th><th class="text-center">Pasillo</th><th class="text-center">Fila</th><th class="text-center">Posición</th><th class="text-center">Fecha/Hora</th></tr></thead>
+                    <tbody>
+                        @foreach (var u in _d.Ubicaciones)
+                        {
+                            <tr class="@(u.EsDeposito ? "cr-dep" : "cr-loc")">
+                                <td>@u.Ubicacion</td><td>@u.Mobiliario</td><td>@u.Modulo</td>
+                                <td class="text-center">@u.Pasillo</td><td class="text-center">@u.Fila</td><td class="text-center">@u.Posicion</td>
+                                <td class="text-center small">@(u.FechaHora?.ToString("dd/MM/yy HH:mm"))</td>
+                            </tr>
+                        }
+                        @if (_d.EnPalet)
+                        {
+                            <tr class="cr-palet"><td colspan="7">EN PALET (depósito)</td></tr>
+                        }
+                        else if (!_d.Ubicaciones.Any(u => u.EsDeposito))
+                        {
+                            <tr class="cr-nodep"><td colspan="7">⚠ NO ESTÁ EN DEPÓSITO</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </fieldset>
 
         <fieldset class="cr-box">

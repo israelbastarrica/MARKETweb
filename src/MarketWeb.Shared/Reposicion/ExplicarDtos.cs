@@ -60,6 +60,7 @@ public sealed class ExplicarDto
     public string Local { get; set; } = "";
     public string ArtDes { get; set; } = "";
     public ExplicarResumenDto Resumen { get; set; } = new();
+    public bool EnPalet { get; set; }   // está en un palet activo del depósito (aunque no tenga ubicación fija)
     public List<ExplicarUbicacionDto> Ubicaciones { get; set; } = new();
     public List<ExplicarMovimientoDto> Movimientos { get; set; } = new();
     public bool SaldoCuadra { get; set; } = true;   // SUM(SaldoDelta) == Pendiente

@@ -412,6 +412,51 @@ public sealed class ReposicionService : IReposicionService
                 if (mv.EventoId > 0 && fotos.TryGetValue(mv.EventoId, out var tf)) mv.EventoTieneFoto = tf;
         }
 
+        // ¿Está en un palet activo del depósito? (conexión propia: el reader del SP sigue abierto sobre cn)
+        dto.EnPalet = await EnPaletAsync(artCod, ct);
+
         return dto;
+    }
+
+    // True si el artículo está en algún palet activo (no desarmado). Los palets guardan remitos
+    // (PaletsDetalle.NroRemito + Origen); el artículo se resuelve matcheando contra el Dragonfish del origen,
+    // igual que ListarArticulosAsync de Palets. Defensivo: ante error devuelve false (no rompe el explain).
+    private async Task<bool> EnPaletAsync(string artCod, CancellationToken ct)
+    {
+        const string sql = @"
+            SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM MARKET.dbo.PaletsDetalle DETP WITH (NOLOCK)
+                INNER JOIN MARKET.dbo.Palets P WITH (NOLOCK) ON P.id = DETP.idPalet AND P.FechaDesarme IS NULL
+                WHERE DETP.Eliminado = 0 AND (
+                    (DETP.Origen = 'CENTRAL' AND EXISTS (
+                        SELECT 1 FROM DRAGONFISH_CENTRAL.ZooLogic.COMPROBANTEV C WITH (NOLOCK)
+                        INNER JOIN DRAGONFISH_CENTRAL.ZooLogic.COMPROBANTEVDET DET WITH (NOLOCK) ON C.CODIGO = DET.CODIGO
+                        WHERE C.FLETRA = 'R' AND C.ANULADO = 0 AND RTRIM(DET.FART) = @cod
+                          AND C.DESCFW = (CASE WHEN DETP.Auditoria LIKE '%PALET APP%' THEN 'REMITO ' + LTRIM(RTRIM(DETP.NroRemito)) ELSE LTRIM(RTRIM(DETP.NroRemito)) END)))
+                 OR (DETP.Origen = 'LURO' AND EXISTS (
+                        SELECT 1 FROM DRAGONFISH_LURO.ZooLogic.COMPROBANTEV C WITH (NOLOCK)
+                        INNER JOIN DRAGONFISH_LURO.ZooLogic.COMPROBANTEVDET DET WITH (NOLOCK) ON C.CODIGO = DET.CODIGO
+                        WHERE C.FLETRA = 'R' AND C.ANULADO = 0 AND RTRIM(DET.FART) = @cod
+                          AND C.DESCFW = (CASE WHEN DETP.Auditoria LIKE '%PALET APP%' THEN 'REMITO ' + LTRIM(RTRIM(DETP.NroRemito)) ELSE LTRIM(RTRIM(DETP.NroRemito)) END)))
+                 OR (DETP.Origen = 'PERALTA' AND EXISTS (
+                        SELECT 1 FROM DRAGONFISH_PERALTA.ZooLogic.COMPROBANTEV C WITH (NOLOCK)
+                        INNER JOIN DRAGONFISH_PERALTA.ZooLogic.COMPROBANTEVDET DET WITH (NOLOCK) ON C.CODIGO = DET.CODIGO
+                        WHERE C.FLETRA = 'R' AND C.ANULADO = 0 AND RTRIM(DET.FART) = @cod
+                          AND C.DESCFW = (CASE WHEN DETP.Auditoria LIKE '%PALET APP%' THEN 'REMITO ' + LTRIM(RTRIM(DETP.NroRemito)) ELSE LTRIM(RTRIM(DETP.NroRemito)) END)))
+                )
+            ) THEN 1 ELSE 0 END";
+        try
+        {
+            await using var cn = _db.Create();
+            await cn.OpenAsync(ct);
+            await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 60 };
+            cmd.Parameters.Add("@cod", SqlDbType.VarChar, 20).Value = artCod;
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) == 1;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
