@@ -100,6 +100,7 @@
                             <label class="form-label">Tipo</label>
                             <select class="form-select" @bind="_eTipo">
                                 <option value="@TipoTarea.Reposicion">Reposición (PDF + mail)</option>
+                                <option value="@TipoTarea.Backup">Backup MARKET (.rar)</option>
                             </select>
                         </div>
                         <div class="col">
@@ -121,27 +122,49 @@
                     </div>
 
                     <hr />
-                    <div class="row g-2 mb-3">
-                        <div class="col">
-                            <label class="form-label">Local</label>
-                            <select class="form-select" @bind="_eLocal">
-                                <option value="TODOS">TODOS</option>
-                                <option value="LURO">LURO</option>
-                                <option value="PERALTA">PERALTA</option>
-                            </select>
-                        </div>
-                        <div class="col d-flex align-items-end">
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="chkGenReemp" @bind="_eGenerarReemplazos" />
-                                <label class="form-check-label" for="chkGenReemp">Generar reemplazos</label>
+                    @if (_eTipo == TipoTarea.Reposicion)
+                    {
+                        <div class="row g-2 mb-3">
+                            <div class="col">
+                                <label class="form-label">Local</label>
+                                <select class="form-select" @bind="_eLocal">
+                                    <option value="TODOS">TODOS</option>
+                                    <option value="LURO">LURO</option>
+                                    <option value="PERALTA">PERALTA</option>
+                                </select>
+                            </div>
+                            <div class="col d-flex align-items-end">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="chkGenReemp" @bind="_eGenerarReemplazos" />
+                                    <label class="form-check-label" for="chkGenReemp">Generar reemplazos</label>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Destinatarios</label>
-                        <input class="form-control" @bind="_eDestinatarios" placeholder="mail1@marketarg.com; mail2@marketarg.com" />
-                        <div class="form-text">Separados por ; o ,</div>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label">Destinatarios</label>
+                            <input class="form-control" @bind="_eDestinatarios" placeholder="mail1@marketarg.com; mail2@marketarg.com" />
+                            <div class="form-text">Separados por ; o ,</div>
+                        </div>
+                    }
+                    else if (_eTipo == TipoTarea.Backup)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Carpeta destino</label>
+                            <input class="form-control" @bind="_eBackupCarpeta" placeholder="D:\Backups\MARKET" />
+                            <div class="form-text">Donde queda el .rar. La cuenta de servicio de SQL tiene que poder escribir el .bak ahí.</div>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col">
+                                <label class="form-label">Retención (días)</label>
+                                <input type="number" min="0" class="form-control" @bind="_eBackupRetencion" />
+                                <div class="form-text">Borra los .rar más viejos que esto. 0 = conservar todos.</div>
+                            </div>
+                            <div class="col">
+                                <label class="form-label">Mail de aviso (sólo si falla)</label>
+                                <input class="form-control" @bind="_eBackupMail" placeholder="sistemas@marketarg.com" />
+                            </div>
+                        </div>
+                    }
 
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="chkActiva" @bind="_eActiva" />
@@ -214,6 +237,9 @@
     private TimeOnly _eHoraT = new(22, 0);
     private bool _eActiva = true, _eGenerarReemplazos = true;
     private HashSet<int> _eDias = new();
+    // Backup
+    private string _eBackupCarpeta = "", _eBackupMail = "";
+    private int _eBackupRetencion = 15;
 
     private bool _modalHist;
     private string _histNombre = "";
@@ -251,6 +277,7 @@
         _eNombre = ""; _eTipo = TipoTarea.Reposicion; _eHoraT = new TimeOnly(22, 0);
         _eDias = new HashSet<int> { 1, 2, 3, 4, 5, 6, 7 };
         _eActiva = true; _eLocal = "TODOS"; _eGenerarReemplazos = true; _eDestinatarios = "";
+        _eBackupCarpeta = ""; _eBackupMail = ""; _eBackupRetencion = 15;
         _modal = true;
     }
 
@@ -264,6 +291,7 @@
         _eDias = ed.DiasSemana.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Select(s => int.TryParse(s, out var n) ? n : 0).Where(n => n > 0).ToHashSet();
         _eActiva = ed.Activa; _eLocal = ed.Local; _eGenerarReemplazos = ed.GenerarReemplazos; _eDestinatarios = ed.Destinatarios;
+        _eBackupCarpeta = ed.BackupCarpeta; _eBackupMail = ed.BackupMail; _eBackupRetencion = ed.BackupRetencionDias;
         _modal = true;
     }
 
@@ -271,6 +299,7 @@
     {
         if (string.IsNullOrWhiteSpace(_eNombre)) { Ui.Error("Poné un nombre."); return; }
         if (_eDias.Count == 0) { Ui.Error("Elegí al menos un día."); return; }
+        if (_eTipo == TipoTarea.Backup && string.IsNullOrWhiteSpace(_eBackupCarpeta)) { Ui.Error("Poné la carpeta destino del backup."); return; }
 
         _guardando = true;
         var ok = await Api.GuardarAsync(new TareaSaveRequest
@@ -283,7 +312,10 @@
             Activa = _eActiva,
             Local = _eLocal,
             GenerarReemplazos = _eGenerarReemplazos,
-            Destinatarios = _eDestinatarios.Trim()
+            Destinatarios = _eDestinatarios.Trim(),
+            BackupCarpeta = _eBackupCarpeta.Trim(),
+            BackupRetencionDias = _eBackupRetencion,
+            BackupMail = _eBackupMail.Trim()
         });
         _guardando = false;
         if (!ok) { Ui.Error("No se pudo guardar."); return; }
@@ -300,7 +332,10 @@
 
     private async Task Ejecutar(TareaProgramadaDto t)
     {
-        if (!await Ui.ConfirmAsync($"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF.", "Ejecutar ahora")) return;
+        var aviso = t.Tipo == TipoTarea.Backup
+            ? $"¿Ejecutar \"{t.Nombre}\" ahora? Hace el BACKUP de MARKET y lo comprime a .rar (puede tardar)."
+            : $"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF.";
+        if (!await Ui.ConfirmAsync(aviso, "Ejecutar ahora")) return;
         var arrancada = await Api.EjecutarAsync(t.Id);
         _flash = arrancada
             ? "Tarea iniciada. Tarda ~2 minutos; revisá el historial para ver el resultado."

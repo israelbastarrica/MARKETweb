@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Dapper;
 using MarketWeb.Application.Common;
@@ -5,6 +6,7 @@ using MarketWeb.Application.Data;
 using MarketWeb.Application.Reposicion;
 using MarketWeb.Shared.Reposicion;
 using MarketWeb.Shared.Tareas;
+using Microsoft.Extensions.Configuration;
 
 namespace MarketWeb.Application.Tareas;
 
@@ -19,13 +21,15 @@ public sealed class TareasService : ITareasService
     private readonly IReposicionService _repo;
     private readonly IReposicionPdf _pdf;
     private readonly ISmtpSender _smtp;
+    private readonly IConfiguration _cfg;
 
-    public TareasService(ISqlConnectionFactory db, IReposicionService repo, IReposicionPdf pdf, ISmtpSender smtp)
+    public TareasService(ISqlConnectionFactory db, IReposicionService repo, IReposicionPdf pdf, ISmtpSender smtp, IConfiguration cfg)
     {
         _db = db;
         _repo = repo;
         _pdf = pdf;
         _smtp = smtp;
+        _cfg = cfg;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken ct = default)
@@ -84,29 +88,48 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
             new { id }, cancellationToken: ct));
         if (row is null) return null;
 
-        var p = ParseParametros((string?)row.Parametros);
-        return new TareaProgramadaEditorDto
+        var dto = new TareaProgramadaEditorDto
         {
             Id = row.Id,
             Nombre = row.Nombre,
             Tipo = row.Tipo,
             Hora = row.Hora,
             DiasSemana = row.DiasSemana,
-            Activa = row.Activa,
-            Local = p.Local,
-            GenerarReemplazos = p.GenerarReemplazos,
-            Destinatarios = p.Destinatarios
+            Activa = row.Activa
         };
+
+        if ((string)row.Tipo == TipoTarea.Backup)
+        {
+            var pb = ParseParametrosBackup((string?)row.Parametros);
+            dto.BackupCarpeta = pb.Carpeta;
+            dto.BackupRetencionDias = pb.RetencionDias;
+            dto.BackupMail = pb.MailFallo;
+        }
+        else
+        {
+            var p = ParseParametros((string?)row.Parametros);
+            dto.Local = p.Local;
+            dto.GenerarReemplazos = p.GenerarReemplazos;
+            dto.Destinatarios = p.Destinatarios;
+        }
+        return dto;
     }
 
     public async Task<int> GuardarAsync(TareaSaveRequest req, string usuario, CancellationToken ct = default)
     {
-        var parametros = JsonSerializer.Serialize(new ParametrosReposicion
-        {
-            Local = string.IsNullOrWhiteSpace(req.Local) ? "TODOS" : req.Local.Trim().ToUpperInvariant(),
-            GenerarReemplazos = req.GenerarReemplazos,
-            Destinatarios = (req.Destinatarios ?? "").Trim()
-        });
+        var parametros = req.Tipo == TipoTarea.Backup
+            ? JsonSerializer.Serialize(new ParametrosBackup
+            {
+                Carpeta = (req.BackupCarpeta ?? "").Trim(),
+                RetencionDias = req.BackupRetencionDias,
+                MailFallo = (req.BackupMail ?? "").Trim()
+            })
+            : JsonSerializer.Serialize(new ParametrosReposicion
+            {
+                Local = string.IsNullOrWhiteSpace(req.Local) ? "TODOS" : req.Local.Trim().ToUpperInvariant(),
+                GenerarReemplazos = req.GenerarReemplazos,
+                Destinatarios = (req.Destinatarios ?? "").Trim()
+            });
 
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
@@ -207,6 +230,7 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
             (ok, resultado) = (string)tarea.Tipo switch
             {
                 TipoTarea.Reposicion => await EjecutarReposicionAsync((string?)tarea.Parametros, ct),
+                TipoTarea.Backup => await EjecutarBackupAsync((string?)tarea.Parametros, ct),
                 _ => (false, $"Tipo de tarea no soportado: {tarea.Tipo}")
             };
         }
@@ -260,11 +284,120 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
             : (false, $"{datos.TotalArticulos} artículos · {datos.TotalPacks} packs · falló el envío del mail.");
     }
 
+    // === BACKUP: BACKUP DATABASE MARKET → comprimir el .bak a .rar (WinRAR) → retención + aviso si falla ===
+    private async Task<(bool Ok, string Resultado)> EjecutarBackupAsync(string? parametrosJson, CancellationToken ct)
+    {
+        var p = ParseParametrosBackup(parametrosJson);
+        var carpeta = (p.Carpeta ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(carpeta))
+            return (false, "La tarea no tiene carpeta destino configurada.");
+
+        var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var bak = Path.Combine(carpeta, $"MARKET_{ts}.bak");
+
+        // 1) BACKUP DATABASE (lo escribe la cuenta de servicio de SQL; sin COMPRESSION, comprime WinRAR después).
+        try
+        {
+            await using var cn = _db.Create();
+            await cn.OpenAsync(ct);
+            var sql = $"BACKUP DATABASE [MARKET] TO DISK = N'{bak.Replace("'", "''")}' WITH INIT, STATS = 10";
+            await cn.ExecuteAsync(new CommandDefinition(sql, commandTimeout: 0, cancellationToken: ct));
+        }
+        catch (Exception ex)
+        {
+            return await FallaBackupAsync(p, $"Falló el BACKUP DATABASE: {ex.Message}", ct);
+        }
+
+        if (!File.Exists(bak))
+            return await FallaBackupAsync(p, "El BACKUP no generó el .bak (¿la cuenta de SQL puede escribir en la carpeta?).", ct);
+
+        // 2) Comprimir a .rar con WinRAR (-df borra el .bak suelto al terminar).
+        var rar = _cfg["Backup:RarPath"];
+        if (string.IsNullOrWhiteSpace(rar)) rar = @"C:\Program Files\WinRAR\rar.exe";
+        if (!File.Exists(rar))
+            return await FallaBackupAsync(p, $"No se encontró rar.exe en '{rar}'. Configurá Backup:RarPath en el server.", ct);
+
+        var destRar = Path.ChangeExtension(bak, ".rar");
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = rar,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            psi.ArgumentList.Add("a");     // agregar al archivo
+            psi.ArgumentList.Add("-ep");   // sin rutas dentro del .rar
+            psi.ArgumentList.Add("-df");   // borrar el .bak suelto al archivar
+            psi.ArgumentList.Add("-m3");   // compresión normal
+            psi.ArgumentList.Add("-y");    // asumir Sí
+            psi.ArgumentList.Add(destRar);
+            psi.ArgumentList.Add(bak);
+
+            using var proc = Process.Start(psi)!;
+            var outT = proc.StandardOutput.ReadToEndAsync(ct);
+            var errT = proc.StandardError.ReadToEndAsync(ct);
+            using var to = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            to.CancelAfter(TimeSpan.FromMinutes(60));
+            try { await proc.WaitForExitAsync(to.Token); }
+            catch (OperationCanceledException) { try { proc.Kill(true); } catch { } return await FallaBackupAsync(p, "WinRAR tardó demasiado (timeout 60 min).", ct); }
+            var stderr = await errT; _ = await outT;
+            if (proc.ExitCode != 0)
+                return await FallaBackupAsync(p, $"WinRAR devolvió código {proc.ExitCode}. {stderr}".Trim(), ct);
+        }
+        catch (Exception ex)
+        {
+            return await FallaBackupAsync(p, $"Falló la compresión con WinRAR: {ex.Message}", ct);
+        }
+
+        // 3) Retención: borrar .rar más viejos que X días.
+        int borrados = 0;
+        if (p.RetencionDias > 0)
+        {
+            try
+            {
+                var limite = DateTime.Now.AddDays(-p.RetencionDias);
+                foreach (var f in Directory.EnumerateFiles(carpeta, "MARKET_*.rar"))
+                    if (File.GetLastWriteTime(f) < limite) { File.Delete(f); borrados++; }
+            }
+            catch { /* la retención no debe tumbar la tarea */ }
+        }
+
+        var mb = new FileInfo(destRar).Length / 1024d / 1024d;
+        var resumen = $"Backup OK: {Path.GetFileName(destRar)} ({mb:N1} MB)";
+        if (p.RetencionDias > 0) resumen += $" · retención {p.RetencionDias}d, {borrados} viejo(s) borrado(s)";
+        return (true, resumen);
+    }
+
+    // Aviso por mail SÓLO si falla (si hay destinatarios y SMTP configurado). Siempre devuelve el fallo.
+    private async Task<(bool Ok, string Resultado)> FallaBackupAsync(ParametrosBackup p, string msg, CancellationToken ct)
+    {
+        var dest = (p.MailFallo ?? "").Replace(',', ';').Trim();
+        if (!string.IsNullOrWhiteSpace(dest) && _smtp.Configurado)
+        {
+            var body =
+                "<p>El backup automático de la base <b>MARKET</b> falló.</p>" +
+                $"<p>{System.Net.WebUtility.HtmlEncode(msg)}</p>" +
+                $"<p>{DateTime.Now:dd/MM/yyyy HH:mm} — MARKET Web (tarea programada).</p>";
+            try { await _smtp.EnviarAsync(dest, "⚠ Backup MARKET falló", body, ct); } catch { }
+        }
+        return (false, msg);
+    }
+
     private static ParametrosReposicion ParseParametros(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return new ParametrosReposicion();
         try { return JsonSerializer.Deserialize<ParametrosReposicion>(json) ?? new ParametrosReposicion(); }
         catch { return new ParametrosReposicion(); }
+    }
+
+    private static ParametrosBackup ParseParametrosBackup(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new ParametrosBackup();
+        try { return JsonSerializer.Deserialize<ParametrosBackup>(json) ?? new ParametrosBackup(); }
+        catch { return new ParametrosBackup(); }
     }
 
     // ISO: lunes=1 .. domingo=7.

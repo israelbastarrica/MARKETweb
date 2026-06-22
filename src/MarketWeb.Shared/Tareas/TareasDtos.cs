@@ -1,9 +1,10 @@
 namespace MarketWeb.Shared.Tareas;
 
-/// <summary>Tipos de tarea soportados por el programador. Por ahora solo Reposición.</summary>
+/// <summary>Tipos de tarea soportados por el programador.</summary>
 public static class TipoTarea
 {
     public const string Reposicion = "REPOSICION";
+    public const string Backup = "BACKUP";
 }
 
 /// <summary>Una tarea programada (fila del listado en SISTEMAS → Tareas).</summary>
@@ -33,6 +34,10 @@ public sealed class TareaProgramadaEditorDto
     public string Local { get; set; } = "TODOS";
     public bool GenerarReemplazos { get; set; } = true;
     public string Destinatarios { get; set; } = "";    // separados por ; o ,
+    // Parámetros de Backup:
+    public string BackupCarpeta { get; set; } = "";
+    public int BackupRetencionDias { get; set; } = 15;
+    public string BackupMail { get; set; } = "";       // aviso sólo si falla
 }
 
 /// <summary>Alta/modificación de una tarea.</summary>
@@ -47,6 +52,9 @@ public sealed class TareaSaveRequest
     public string Local { get; set; } = "TODOS";
     public bool GenerarReemplazos { get; set; } = true;
     public string Destinatarios { get; set; } = "";
+    public string BackupCarpeta { get; set; } = "";
+    public int BackupRetencionDias { get; set; } = 15;
+    public string BackupMail { get; set; } = "";
 }
 
 /// <summary>Una corrida registrada de una tarea (historial).</summary>
@@ -66,4 +74,12 @@ public sealed class ParametrosReposicion
     public string Local { get; set; } = "TODOS";
     public bool GenerarReemplazos { get; set; } = true;
     public string Destinatarios { get; set; } = "";
+}
+
+/// <summary>Parámetros serializados (JSON) de una tarea de Backup de la base MARKET.</summary>
+public sealed class ParametrosBackup
+{
+    public string Carpeta { get; set; } = "";          // destino del .bak/.rar
+    public int RetencionDias { get; set; } = 15;        // borra .rar más viejos; 0 = conservar todos
+    public string MailFallo { get; set; } = "";         // aviso sólo si falla (separados por ; o ,)
 }
