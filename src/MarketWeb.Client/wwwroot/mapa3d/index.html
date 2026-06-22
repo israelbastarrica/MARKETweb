@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Deposito 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #1a1a2e; font-family: sans-serif; }
+    #canvas { width: 100vw; height: 100vh; touch-action: none; outline: none; }
+
+    #loading {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: white; font-size: 18px;
+    }
+
+    #panel {
+      position: fixed; top: 20px; right: 20px;
+      width: 300px; background: rgba(10, 10, 30, 0.92);
+      color: white; border-radius: 10px; padding: 16px;
+      display: none; max-height: 80vh; overflow-y: auto;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px;
+    }
+    #panel-titulo { font-size: 16px; color: #4fc3f7; font-weight: bold; }
+    #panel-cerrar {
+      cursor: pointer; font-size: 18px; line-height: 1;
+      background: none; border: none; color: white;
+    }
+    .producto {
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 8px 0; font-size: 13px;
+    }
+    .producto:last-child { border-bottom: none; }
+    .artcod { color: #888; font-size: 11px; margin-top: 2px; }
+    .palet-badge {
+      display: inline-block; background: rgba(255,200,0,0.15);
+      color: #ffd700; border: 1px solid rgba(255,200,0,0.35);
+      border-radius: 3px; padding: 1px 5px; font-size: 11px; margin-left: 4px;
+    }
+
+    #busqueda {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(10,10,30,0.88); padding: 7px 14px;
+      border-radius: 24px; border: 1px solid rgba(255,255,255,0.15); z-index: 10;
+    }
+    #search-input {
+      background: transparent; border: none; outline: none;
+      color: white; font-size: 14px; width: 230px;
+    }
+    #search-input::placeholder { color: rgba(255,255,255,0.35); }
+    .sbtn {
+      background: none; border: none; cursor: pointer;
+      color: #4fc3f7; font-size: 13px; padding: 2px 6px;
+    }
+    #search-count { color: rgba(255,255,255,0.55); font-size: 12px; min-width: 70px; }
+
+    #tour-panel {
+      position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
+      display: none; align-items: center; gap: 10px;
+      background: rgba(10,10,30,0.92); padding: 9px 18px;
+      border-radius: 24px; border: 1px solid rgba(0,220,255,0.35); z-index: 10; color: white;
+    }
+    #tour-nombre { color: #00e5ff; font-weight: bold; min-width: 160px; text-align: center; font-size: 42px; letter-spacing: 1px; }
+    #tour-counter { color: rgba(255,255,255,0.5); font-size: 12px; min-width: 55px; text-align: center; }
+    .tbtn {
+      background: none; border: none; cursor: pointer;
+      color: #00e5ff; font-size: 20px; line-height: 1; padding: 0 4px;
+    }
+    .tbtn:disabled { color: rgba(0,220,255,0.25); cursor: default; }
+    #btn-tour-vacios {
+      position: fixed; bottom: 16px; right: 16px;
+      background: rgba(10,10,30,0.85); border: 1px solid rgba(255,100,80,0.5);
+      color: #ff6b6b; font-size: 12px; padding: 6px 12px;
+      border-radius: 16px; cursor: pointer;
+    }
+
+    #instrucciones {
+      position: fixed; bottom: 16px; left: 16px;
+      color: rgba(255,255,255,0.5); font-size: 12px; line-height: 1.6;
+    }
+
+    #highlight-label {
+      position: fixed; pointer-events: none;
+      background: rgba(0,0,0,0.7); color: #4fc3f7;
+      padding: 4px 10px; border-radius: 4px; font-size: 13px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="busqueda">
+  <input id="search-input" type="text" placeholder="Buscar artículo (código o descripción)..."
+    onkeydown="if(event.key==='Enter') buscarArticulo()" />
+  <button class="sbtn" onclick="buscarArticulo()">Buscar</button>
+  <button class="sbtn" id="btn-limpiar" onclick="limpiarBusqueda()" style="display:none">✕ Limpiar</button>
+  <span id="search-count"></span>
+</div>
+<div id="loading">Cargando modelo...</div>
+
+<div id="tour-panel">
+  <button class="tbtn" id="tbtn-prev" onclick="tourAnterior()">◀</button>
+  <span id="tour-nombre"></span>
+  <span id="tour-counter"></span>
+  <button class="tbtn" id="tbtn-next" onclick="tourSiguiente()">▶</button>
+  <button class="tbtn" onclick="cerrarTour()" style="color:#888;font-size:16px;margin-left:6px">✕</button>
+</div>
+<button id="btn-tour-vacios" onclick="iniciarTourVacios()">&#9654; Tour vacíos</button>
+
+<div id="panel">
+  <div id="panel-header">
+    <span id="panel-titulo">Modulo</span>
+    <button id="panel-cerrar" onclick="cerrarPanel()">x</button>
+  </div>
+  <div id="panel-productos"></div>
+</div>
+
+<div id="highlight-label"></div>
+
+<div id="instrucciones">
+  W/A/S/D + mouse: moverse<br>
+  Click en modulo (verde/rojo): ver articulos<br>
+  Shift: bajar | Espacio: subir
+</div>
+
+<script src="/lib/babylon/babylon.js"></script>
+<script src="/lib/babylon/babylonjs.loaders.min.js"></script>
+<script>
+  const canvas = document.getElementById('canvas');
+  const engine = new BABYLON.Engine(canvas, true);
+  const MODULE_REGEX = /^([A-Z]\d{2}|101-\d{2})-\d+$/;
+  // Pasillos cuyo aisle "normal" está bloqueado (ej K-L con columnas):
+  // la cámara va al lado OPUESTO en vez del lado enfrentado habitual
+  const AISLES_BLOQUEADOS = new Set(['L', 'X']); // L→M (K-L columnas), X→W (X-Y back-to-back, Y-Z facing pair)
+
+  const createScene = () => {
+    const scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0.08, 0.08, 0.15, 1);
+    scene.setRenderingAutoClearDepthStencil(2, false);
+
+    const camera = new BABYLON.UniversalCamera('cam', new BABYLON.Vector3(0, 2, -10), scene);
+    camera.setTarget(BABYLON.Vector3.Zero());
+    camera.attachControl(canvas, true);
+    camera.speed = 0.3;
+    camera.minZ = 0.1;
+    camera.keysUp    = [87];
+    camera.keysDown  = [83];
+    camera.keysLeft  = [65];
+    camera.keysRight = [68];
+    camera.keysUpward   = [];
+    camera.keysDownward = [];
+    camera.checkCollisions = false;
+
+    const light = new BABYLON.HemisphericLight('luz', new BABYLON.Vector3(0, 1, 0), scene);
+    light.intensity = 1.2;
+
+    BABYLON.SceneLoader.ImportMesh('', '/mapa3d/modelo/', 'deposito.glb', scene, (meshes) => {
+      document.getElementById('loading').style.display = 'none';
+
+      meshes.forEach(m => {
+        m.isPickable = false;
+        m.renderingGroupId = 2;
+        m.checkCollisions = true;
+      });
+
+      const bounds = scene.getWorldExtends();
+      _maxY  = bounds.max.y;
+      _walkY = bounds.min.y + 1.7;
+      const piso = BABYLON.MeshBuilder.CreateGround('piso', {
+        width:  (bounds.max.x - bounds.min.x) + 10,
+        height: (bounds.max.z - bounds.min.z) + 10
+      }, scene);
+      piso.position.x = (bounds.max.x + bounds.min.x) / 2;
+      piso.position.y = bounds.min.y + 0.001;
+      piso.position.z = (bounds.max.z + bounds.min.z) / 2;
+      piso.isPickable = false;
+      piso.checkCollisions = true;
+      const pisoMat = new BABYLON.StandardMaterial('piso_mat', scene);
+      pisoMat.diffuseColor  = new BABYLON.Color3(0.60, 0.60, 0.58);
+      pisoMat.specularColor = new BABYLON.Color3(0.40, 0.40, 0.40);
+      pisoMat.specularPower = 200;
+      piso.material = pisoMat;
+
+      const center = BABYLON.Vector3.Center(bounds.min, bounds.max);
+      camera.position = new BABYLON.Vector3(-13.2, bounds.min.y + 1.7, -14.8);
+      camera.setTarget(new BABYLON.Vector3(-13.2, bounds.min.y + 1.7, center.z));
+
+      // Y siempre fijo en 1.7 — sin excepciones salvo durante flyTo/walkTo activo
+      const WALK_Y = bounds.min.y + 1.7;
+      scene.onBeforeRenderObservable.add(() => {
+        if (!_flyObs) scene.activeCamera.position.y = WALK_Y;
+      });
+
+      cargarEstadoModulos(scene);
+    });
+
+    const label = document.getElementById('highlight-label');
+    scene.onPointerMove = (evt, pick) => {
+      if (pick.hit && MODULE_REGEX.test(pick.pickedMesh?.name)) {
+        label.style.display = 'block';
+        label.style.left = evt.clientX + 12 + 'px';
+        label.style.top  = evt.clientY + 12 + 'px';
+        label.textContent = pick.pickedMesh.name;
+      } else {
+        label.style.display = 'none';
+      }
+    };
+
+    scene.onPointerDown = (evt, pick) => {
+      if (evt.button !== 0) return;
+      if (pick.hit && MODULE_REGEX.test(pick.pickedMesh?.name)) {
+        mostrarModulo(pick.pickedMesh.name);
+      }
+    };
+
+    return scene;
+  };
+
+  async function cargarEstadoModulos(scene) {
+    try {
+      const SCALE = 0.0254;
+
+      const [resDB, resCSV] = await Promise.all([
+        fetch('/api/mapa/modulos'),
+        fetch('/mapa3d/modelo/modulos_pos.csv')
+      ]);
+      const modulosDB = await resDB.json();
+      const csvText  = await resCSV.text();
+
+      const estado = {};
+      modulosDB.forEach(m => estado[m.Modulo.trim()] = m.CantidadArticulos);
+
+      csvText.trim().split('\n').slice(1).forEach(line => {
+        const [nombre, cx, cy, cz, sx, sy, sz] = line.split(',');
+        const n = nombre.trim();
+
+        const shrink = 1.01;
+        const box = BABYLON.MeshBuilder.CreateBox(n, {
+          width:  parseFloat(sx) * SCALE * shrink,
+          height: parseFloat(sz) * SCALE * shrink,
+          depth:  parseFloat(sy) * SCALE * shrink
+        }, scene);
+
+        box.position.x = -parseFloat(cx) * SCALE;
+        box.position.y =  parseFloat(cz) * SCALE;
+        box.position.z = -parseFloat(cy) * SCALE;
+        box.renderingGroupId = 1;
+        box.checkCollisions = true;
+        box._halfX = parseFloat(sx) * SCALE / 2;
+        box._halfZ = parseFloat(sy) * SCALE / 2;
+
+        const tieneStock = (estado[n] || 0) > 0;
+        box._tieneStock = tieneStock;
+        const color3 = tieneStock
+          ? new BABYLON.Color3(0.1, 0.8, 0.2)
+          : new BABYLON.Color3(0.85, 0.12, 0.08);
+
+        const mat = new BABYLON.StandardMaterial('mat_' + n, scene);
+        mat.diffuseColor = color3;
+        mat.zOffset = -8;
+        box.material = mat;
+
+        box.enableEdgesRendering(0.9);
+        box.edgesWidth = 5.0;
+        box.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
+      });
+    } catch(e) {
+      console.error('Error cargando módulos:', e);
+    }
+  }
+
+  async function mostrarModulo(nombre) {
+    const panel = document.getElementById('panel');
+    const titulo = document.getElementById('panel-titulo');
+    const contenedor = document.getElementById('panel-productos');
+
+    panel.style.display = 'block';
+    titulo.textContent = 'Modulo ' + nombre;
+    contenedor.innerHTML = '<p style="color:#888;font-size:13px">Cargando...</p>';
+
+    try {
+      const res = await fetch('/api/mapa/modulo/' + nombre);
+      const data = await res.json();
+
+      if (data.vacio) {
+        contenedor.innerHTML = '<p style="color:#ff6b6b;font-size:13px">Sin articulos en este modulo</p>';
+        return;
+      }
+
+      contenedor.innerHTML = data.productos.map(p => `
+        <div class="producto">
+          <div>${p.ARTDES}</div>
+          <div class="artcod">
+            ${p.ARTCOD} &nbsp;|&nbsp; ${p.MARCA || ''}
+            ${p.NroPalet ? `<span class="palet-badge">Palet ${p.NroPalet}</span>` : ''}
+          </div>
+        </div>
+      `).join('');
+    } catch(e) {
+      contenedor.innerHTML = '<p style="color:#ff6b6b;font-size:13px">Error al cargar datos</p>';
+    }
+  }
+
+  let meshesResaltados = [];
+
+  async function buscarArticulo() {
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) return;
+
+    limpiarHighlights();
+
+    const res = await fetch('/api/mapa/buscar?q=' + encodeURIComponent(q));
+    const modulos = await res.json();
+
+    const count = document.getElementById('search-count');
+    document.getElementById('btn-limpiar').style.display = 'inline';
+
+    if (!modulos.length) { count.textContent = 'Sin resultados'; return; }
+    count.textContent = modulos.length + ' módulo' + (modulos.length !== 1 ? 's' : '');
+
+    modulos.forEach(nombre => {
+      const mesh = scene.getMeshByName(nombre);
+      if (!mesh) return;
+      const hlMat = new BABYLON.StandardMaterial('hl_' + nombre, scene);
+      hlMat.diffuseColor  = new BABYLON.Color3(1.0, 0.85, 0.0);
+      hlMat.emissiveColor = new BABYLON.Color3(0.3, 0.25, 0.0);
+      hlMat.zOffset = -8;
+      mesh.material = hlMat;
+      mesh.edgesColor = new BABYLON.Color4(1.0, 0.55, 0.0, 1.0);
+      meshesResaltados.push(mesh);
+    });
+  }
+
+  function limpiarHighlights() {
+    meshesResaltados.forEach(mesh => {
+      const mat = new BABYLON.StandardMaterial('mat_' + mesh.name, scene);
+      mat.diffuseColor = mesh._tieneStock
+        ? new BABYLON.Color3(0.1, 0.8, 0.2)
+        : new BABYLON.Color3(0.85, 0.12, 0.08);
+      mat.zOffset = -8;
+      mesh.material = mat;
+      mesh.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
+    });
+    meshesResaltados = [];
+  }
+
+  function limpiarBusqueda() {
+    limpiarHighlights();
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-count').textContent = '';
+    document.getElementById('btn-limpiar').style.display = 'none';
+  }
+
+  function cerrarPanel() {
+    document.getElementById('panel').style.display = 'none';
+  }
+
+  // --- Fly-to suave con easing cúbico ---
+  let _flyObs = null;
+  let _maxY = 20;
+  let _walkY = 1.7;
+
+  function flyTo(pos, lookAt, ms = 1100, onComplete = null) {
+    const cam = scene.activeCamera;
+    if (_flyObs) { scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null; }
+    const p0 = cam.position.clone(); p0.y = _walkY;
+    const t0 = cam.getTarget().clone();
+    const t1 = performance.now();
+    const ease = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3) / 2;
+    _flyObs = scene.onBeforeRenderObservable.add(() => {
+      const f = Math.min((performance.now() - t1) / ms, 1);
+      const ef = ease(f);
+      cam.position = BABYLON.Vector3.Lerp(p0, pos, ef);
+      cam.position.y = _walkY;
+      cam.setTarget(BABYLON.Vector3.Lerp(t0, lookAt, ef));
+      if (f >= 1) {
+        scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null;
+        if (onComplete) onComplete();
+      }
+    });
+  }
+
+  // Recorre una lista de waypoints [{pos, lookAt}] con un único observer
+  function flyToPath(waypoints, onComplete) {
+    if (!waypoints.length) { if (onComplete) onComplete(); return; }
+    const cam = scene.activeCamera;
+    if (_flyObs) { scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null; }
+    const ease = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3) / 2;
+    let wi = 0, segT = performance.now(), segMs = 400;
+    let p0 = cam.position.clone(); p0.y = _walkY;
+    let t0 = cam.getTarget().clone();
+    const nextSeg = () => {
+      p0 = cam.position.clone(); p0.y = _walkY;
+      t0 = cam.getTarget().clone();
+      segT = performance.now();
+      const d = BABYLON.Vector3.Distance(p0, waypoints[wi].pos);
+      segMs = Math.max(400, d * 160);
+    };
+    nextSeg();
+    _flyObs = scene.onBeforeRenderObservable.add(() => {
+      const f = Math.min((performance.now() - segT) / segMs, 1);
+      const ef = ease(f);
+      cam.position = BABYLON.Vector3.Lerp(p0, waypoints[wi].pos, ef);
+      cam.position.y = _walkY;
+      cam.setTarget(BABYLON.Vector3.Lerp(t0, waypoints[wi].lookAt, ef));
+      if (f >= 1) {
+        wi++;
+        if (wi >= waypoints.length) {
+          scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null;
+          if (onComplete) onComplete();
+        } else { nextSeg(); }
+      }
+    });
+  }
+
+  // --- Tour de ubicaciones vacías ---
+  let tourModulos = [], tourIdx = -1, tourMeshActual = null, tourTimer = null, tourActivo = false;
+
+  function restaurarModulo(mesh) {
+    const mat = new BABYLON.StandardMaterial('mat_' + mesh.name, scene);
+    mat.diffuseColor = mesh._tieneStock
+      ? new BABYLON.Color3(0.1, 0.8, 0.2)
+      : new BABYLON.Color3(0.85, 0.12, 0.08);
+    mat.zOffset = -8;
+    mesh.material = mat;
+    mesh.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
+  }
+
+  async function iniciarTourVacios() {
+    cerrarTour();
+    try {
+      const res = await fetch('/api/mapa/vacios');
+      const nombresVacios = await res.json();
+      tourModulos = nombresVacios
+        .map(nombre => scene.getMeshByName(nombre))
+        .filter(Boolean)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    } catch(e) {
+      console.error('Error al cargar vacíos:', e);
+      return;
+    }
+    if (!tourModulos.length) return;
+    tourActivo = true;
+    document.getElementById('tour-panel').style.display = 'flex';
+    irATour(0);
+  }
+
+  function irATour(idx) {
+    if (tourMeshActual) restaurarModulo(tourMeshActual);
+    tourIdx = idx;
+    const mesh = tourModulos[idx];
+    tourMeshActual = mesh;
+
+    const mat = new BABYLON.StandardMaterial('tour_' + mesh.name, scene);
+    mat.diffuseColor  = new BABYLON.Color3(0.0, 0.85, 1.0);
+    mat.emissiveColor = new BABYLON.Color3(0.0, 0.2,  0.3);
+    mat.zOffset = -8;
+    mesh.material = mat;
+    mesh.edgesColor = new BABYLON.Color4(0.0, 1.0, 1.0, 1.0);
+
+    document.getElementById('tour-nombre').textContent  = mesh.name;
+    document.getElementById('tour-counter').textContent = `${idx + 1} / ${tourModulos.length}`;
+    document.getElementById('tbtn-prev').disabled = idx === 0;
+    document.getElementById('tbtn-next').disabled = false;
+
+    const t = mesh.position.clone();
+    const bounds = scene.getWorldExtends();
+
+    // Todas las posiciones a Y=1.7 — cabecera del pasillo, corrido al lateral libre
+    const isNumeric = /^\d/.test(mesh.name);
+    const pasilloKey = isNumeric
+      ? mesh.name.match(/^\d+/)?.[0]        // "101" de "101-01-3"
+      : mesh.name.match(/^[A-Za-z]+/)?.[0]; // "A"   de "A01-3"
+    let camPos, usaEjeX;
+    {
+      const pMeshes = scene.meshes.filter(m => {
+        if (!MODULE_REGEX.test(m.name)) return false;
+        return isNumeric
+          ? m.name.startsWith(pasilloKey + '-')
+          : m.name.match(/^[A-Za-z]+/)?.[0] === pasilloKey;
+      });
+
+      const xs = pMeshes.map(m => m.position.x);
+      const zs = pMeshes.map(m => m.position.z);
+      const xRange = Math.max(...xs) - Math.min(...xs);
+      const zRange = Math.max(...zs) - Math.min(...zs);
+
+      const MARGIN  = 2;
+      const LATERAL = 8;
+
+      // Pasillos numéricos (101) son perpendiculares al eje dominante
+      usaEjeX = isNumeric ? zRange > xRange : xRange > zRange;
+
+      // Detecta hacia qué lado stepear buscando el gap real entre racks vecinos
+      const otrosMeshes = scene.meshes.filter(m => {
+        if (!MODULE_REGEX.test(m.name)) return false;
+        return isNumeric
+          ? !m.name.startsWith(pasilloKey + '-')
+          : m.name.match(/^[A-Za-z]+/)?.[0] !== pasilloKey;
+      });
+
+      function gapOffset(ourCoord, neighborCoords, maxStep) {
+        const izq = neighborCoords.filter(c => c < ourCoord);
+        const der = neighborCoords.filter(c => c > ourCoord);
+        const nearL = izq.length ? Math.max(...izq) : -Infinity;
+        const nearR = der.length ? Math.min(...der) :  Infinity;
+        const gapL  = ourCoord - nearL;
+        const gapR  = nearR - ourCoord;
+        if (!izq.length) return +Math.min(maxStep, gapR * 0.82);  // borde izq → ir a la derecha
+        if (!der.length) return -Math.min(maxStep, gapL * 0.82);  // borde der → ir a la izquierda
+        return gapR >= gapL                                         // al medio: gap más ancho = pasillo enfrentado
+          ? +Math.min(maxStep, gapR * 0.82)
+          : -Math.min(maxStep, gapL * 0.82);
+      }
+
+      const cx = (bounds.max.x + bounds.min.x) / 2;
+      const cz = (bounds.max.z + bounds.min.z) / 2;
+
+      if (usaEjeX) {
+        const minX = Math.min(...xs), maxX = Math.max(...xs);
+        const mid  = (minX + maxX) / 2;
+        const endX = isNumeric
+          ? (cx > t.x ? maxX + MARGIN : minX - MARGIN)
+          : (t.x >= mid ? maxX + MARGIN : minX - MARGIN);
+
+        let deltaZ;
+        if (isNumeric) {
+          // 101: posicionarse entre los dos pasillos de letras que lo flanquean en Z
+          const allLZ = otrosMeshes.map(m => m.position.z);
+          const z101  = (Math.min(...zs) + Math.max(...zs)) / 2;
+          const lZs   = allLZ.filter(z => z < z101);
+          const rZs   = allLZ.filter(z => z > z101);
+          const nL    = lZs.length ? Math.max(...lZs) : bounds.min.z;
+          const nR    = rZs.length ? Math.min(...rZs) : bounds.max.z;
+          deltaZ = ((nL + nR) / 2) - t.z;
+        } else {
+          const vecinosLetras = otrosMeshes.filter(m => !/^\d/.test(m.name));
+          deltaZ = gapOffset(t.z, vecinosLetras.map(m => m.position.z), LATERAL);
+        }
+        const finalX = isNumeric ? endX : t.x;
+        camPos = new BABYLON.Vector3(finalX, 1.7, t.z + deltaZ);
+      } else {
+        const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+        const mid  = (minZ + maxZ) / 2;
+        const endZ = isNumeric
+          ? (cz > t.z ? maxZ + MARGIN : minZ - MARGIN)
+          : (t.z >= mid ? maxZ + MARGIN : minZ - MARGIN);
+
+        let deltaX;
+        if (isNumeric) {
+          // 101: posicionarse entre los dos pasillos de letras que lo flanquean en X
+          const allLX = otrosMeshes.map(m => m.position.x);
+          const x101  = (Math.min(...xs) + Math.max(...xs)) / 2;
+          const lXs   = allLX.filter(x => x < x101);
+          const rXs   = allLX.filter(x => x > x101);
+          const nL    = lXs.length ? Math.max(...lXs) : bounds.min.x;
+          const nR    = rXs.length ? Math.min(...rXs) : bounds.max.x;
+          deltaX = ((nL + nR) / 2) - t.x;
+        } else {
+          const vecinosLetras = otrosMeshes.filter(m => !/^\d/.test(m.name));
+          deltaX = gapOffset(t.x, vecinosLetras.map(m => m.position.x), LATERAL);
+        }
+        const finalZ = isNumeric ? endZ : t.z;
+        camPos = new BABYLON.Vector3(t.x + deltaX, 1.7, finalZ);
+      }
+
+      // Pasillo con aisle bloqueado (K-L con columnas): invertir lado para ir al opuesto
+      // K va al lado I-J (anterior), L va al lado M-N (posterior)
+      if (!isNumeric && AISLES_BLOQUEADOS.has(pasilloKey)) {
+        if (!usaEjeX) { camPos.x = t.x - (camPos.x - t.x); }
+        else           { camPos.z = t.z - (camPos.z - t.z); }
+      }
+
+      // No cruzar las paredes del depósito
+      const PAD = 0.5;
+      camPos.x = Math.max(bounds.min.x + PAD, Math.min(bounds.max.x - PAD, camPos.x));
+      camPos.z = Math.max(bounds.min.z + PAD, Math.min(bounds.max.z - PAD, camPos.z));
+    }
+
+    clearTimeout(tourTimer);
+    const onDone = () => {
+      if (tourActivo) tourTimer = setTimeout(() => irATour((idx + 1) % tourModulos.length), 5000);
+    };
+
+    const bnd2 = scene.getWorldExtends();
+    const cur  = scene.activeCamera.position.clone();
+    const wp3  = new BABYLON.Vector3(camPos.x, _walkY, camPos.z);
+
+    const path = [];
+
+    // Detectar si la cámara cruza algún rack de letra para ir al destino.
+    // Para pares ENFRENTADOS (A→B misma aisle): cur.x y camPos.x están a AMBOS LADOS del aisle
+    // pero ningún rack cae ENTRE ellos → no cruza rack → ruta directa.
+    // Para cambio de aisle (B→C): el rack de B y el de C están entre cur.x y camPos.x → cruza.
+    const lMs = scene.meshes.filter(m => MODULE_REGEX.test(m.name) && !/^\d/.test(m.name));
+    let crossAisle = false;
+    if (!isNumeric) {
+      if (!usaEjeX) {
+        const lo = Math.min(cur.x, camPos.x), hi = Math.max(cur.x, camPos.x);
+        crossAisle = lMs.some(m => m.position.x > lo && m.position.x < hi);
+      } else {
+        const lo = Math.min(cur.z, camPos.z), hi = Math.max(cur.z, camPos.z);
+        crossAisle = lMs.some(m => m.position.z > lo && m.position.z < hi);
+      }
+    }
+
+    // lookAt horizontal para waypoints de tránsito: evita que la cámara
+    // viaje mirando para arriba cuando el módulo anterior estaba en altura
+    const tFlat = new BABYLON.Vector3(t.x, _walkY, t.z);
+
+    if (idx === 0) {
+      // Primer paso desde home (oficina, x=-13.2): ir LEFT primero al K-L aisle (x=-20),
+      // que está fuera de la oficina y libre de racks en z=-14.8. Luego FORWARD a camPos.z.
+      const EXIT_X = -20;
+      const p0 = new BABYLON.Vector3(EXIT_X, _walkY, cur.z);
+      const p1 = new BABYLON.Vector3(EXIT_X, _walkY, camPos.z);
+      if (Math.abs(cur.x - EXIT_X) > 0.5) path.push({ pos: p0, lookAt: tFlat });
+      if (Math.abs(cur.z - camPos.z) > 0.5) path.push({ pos: p1, lookAt: tFlat });
+    } else if (crossAisle && !usaEjeX) {
+      // Letras en Z, gap en X → cambio de aisle → ir por cabecera del pasillo DESTINO
+      // (B05 matchea con C01 → corrZ = extremo del pasillo destino, no el global)
+      const destZs  = scene.meshes
+        .filter(m => MODULE_REGEX.test(m.name) && m.name.match(/^[A-Za-z]+/)?.[0] === pasilloKey)
+        .map(m => m.position.z);
+      const corrZraw = Math.max(...destZs) + 1;
+      const corrZ    = Math.max(bnd2.min.z + 0.5, Math.min(bnd2.max.z - 0.5, corrZraw));
+      const p1 = new BABYLON.Vector3(cur.x,    _walkY, corrZ);
+      const p2 = new BABYLON.Vector3(camPos.x, _walkY, corrZ);
+      if (Math.abs(cur.z - corrZ) > 0.5) path.push({ pos: p1, lookAt: tFlat });
+      path.push({ pos: p2, lookAt: tFlat });
+    } else if (crossAisle && usaEjeX) {
+      // Letras en X, gap en Z → cambio de aisle → ir por cabecera del pasillo DESTINO
+      const destXs  = scene.meshes
+        .filter(m => MODULE_REGEX.test(m.name) && m.name.match(/^[A-Za-z]+/)?.[0] === pasilloKey)
+        .map(m => m.position.x);
+      const corrXraw = Math.max(...destXs) + 1;
+      const corrX    = Math.max(bnd2.min.x + 0.5, Math.min(bnd2.max.x - 0.5, corrXraw));
+      const p1 = new BABYLON.Vector3(corrX, _walkY, cur.z);
+      const p2 = new BABYLON.Vector3(corrX, _walkY, camPos.z);
+      if (Math.abs(cur.x - corrX) > 0.5) path.push({ pos: p1, lookAt: tFlat });
+      path.push({ pos: p2, lookAt: tFlat });
+    } else {
+      // Mismo aisle (incl. pares enfrentados A↔B) o 101: primero X, luego Z
+      const pX = new BABYLON.Vector3(camPos.x, _walkY, cur.z);
+      if (Math.abs(cur.x - camPos.x) > 0.5) path.push({ pos: pX, lookAt: tFlat });
+    }
+    path.push({ pos: wp3, lookAt: t });
+
+    flyToPath(path, onDone);
+  }
+
+  function tourSiguiente() { if (tourModulos.length) irATour((tourIdx + 1) % tourModulos.length); }
+  function tourAnterior()  { if (tourIdx > 0) irATour(tourIdx - 1); }
+
+  function cerrarTour() {
+    clearTimeout(tourTimer);
+    tourTimer = null;
+    if (tourMeshActual) restaurarModulo(tourMeshActual);
+    tourMeshActual = null; tourModulos = []; tourIdx = -1;
+    tourActivo = false;
+    document.getElementById('tour-panel').style.display = 'none';
+  }
+
+  const scene = createScene();
+  engine.runRenderLoop(() => scene.render());
+  window.addEventListener('resize', () => engine.resize());
+</script>
+</body>
+</html>

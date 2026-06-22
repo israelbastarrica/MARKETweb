@@ -6,6 +6,7 @@ using MarketWeb.Application.Despachos;
 using MarketWeb.Application.Insumos;
 using MarketWeb.Application.Locales;
 using MarketWeb.Application.LogisticaDashboard;
+using MarketWeb.Application.Mapa;
 using MarketWeb.Application.Mapeo;
 using MarketWeb.Application.Palets;
 using MarketWeb.Application.Reemplazos;
@@ -39,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IArticulosService, ArticulosService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IMapeoService, MapeoService>();
+        services.AddScoped<IMapaService, MapaService>();
         services.AddScoped<IDespachosService, DespachosService>();
         services.AddScoped<IRemitoImpresionService, RemitoImpresionService>();
         services.AddScoped<IPaletsService, PaletsService>();

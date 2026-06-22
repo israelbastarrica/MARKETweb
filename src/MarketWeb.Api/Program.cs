@@ -117,7 +117,11 @@ if (app.Environment.IsDevelopment())
 // solo escucha http en 127.0.0.1:8000.
 
 app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
+// El visor 3D del Mapa carga deposito.glb; .glb no está en los MIME por defecto y el
+// static files middleware devolvería 404. Lo registramos explícitamente.
+var ctp = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+ctp.Mappings[".glb"] = "model/gltf-binary";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = ctp });
 
 app.UseAuthentication();
 app.UseAuthorization();

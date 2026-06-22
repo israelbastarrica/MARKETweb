@@ -1,0 +1,26 @@
+@page "/logistica/mapa"
+
+<PageTitle>Mapa 3D</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Mapa 3D" Icono="fa-solid fa-cube" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Depósito CENTRAL en 3D. Verde = con stock, rojo = vacío. Click en un módulo para ver sus artículos;
+        buscá por código o descripción para resaltarlos. WASD + mouse para moverte.
+    </p>
+
+    <div class="market-card mapa3d-card">
+        <iframe src="/mapa3d/index.html" class="mapa3d-frame" title="Mapa 3D del depósito" allow="fullscreen"></iframe>
+    </div>
+</div>
+
+<style>
+    .mapa3d-card { padding: 0; overflow: hidden; }
+    .mapa3d-frame {
+        width: 100%;
+        height: calc(100vh - 190px);
+        min-height: 460px;
+        border: 0;
+        display: block;
+    }
+</style>

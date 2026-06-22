@@ -492,3 +492,6 @@ secrets.json
 
 # Script local con comandos dotnet user-secrets (contiene secretos) - NUNCA al repo
 user-secrets
+
+# ---- Mapa 3D: el modelo del depósito (22MB) NO va al repo; se copia al publicar ----
+src/MarketWeb.Client/wwwroot/mapa3d/modelo/*.glb
