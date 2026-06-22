@@ -18,6 +18,10 @@ builder.Services.AddOpenApi();
 // Programador de tareas in-app (reposición nocturna, etc.).
 builder.Services.AddHostedService<MarketWeb.Api.Services.TareasScheduler>();
 
+// Cliente de la API Dragonfish (crear remito de insumos CENTRAL→local).
+builder.Services.AddHttpClient<MarketWeb.Application.Dragonfish.IDragonfishService, MarketWeb.Application.Dragonfish.DragonfishService>(
+    c => c.Timeout = TimeSpan.FromSeconds(60));
+
 // Detrás de un reverse proxy (Caddy, que termina el HTTPS). Respetamos los headers
 // X-Forwarded-* para que el esquema (https) y el host públicos se reflejen en la app
 // → los redirect de Google se arman bien. La app solo escucha en 127.0.0.1, así que

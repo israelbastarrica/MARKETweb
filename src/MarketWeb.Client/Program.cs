@@ -43,6 +43,7 @@ builder.Services.AddScoped<ReseteadosApi>();
 builder.Services.AddScoped<ControlRemitosApi>();
 builder.Services.AddScoped<ReporteArticulosApi>();
 builder.Services.AddScoped<TareasApi>();
+builder.Services.AddScoped<DragonApi>();
 builder.Services.AddSingleton<PageStateService>();
 
 // --- Autenticación (estado en el cliente; identidad real en cookie del server) ---

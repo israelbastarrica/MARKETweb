@@ -1,0 +1,114 @@
+@page "/sistemas/dragon-remito"
+@using MarketWeb.Shared.Dragonfish
+@inject DragonApi Api
+
+<PageTitle>Probar Remito Dragon</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Sistemas" Titulo="Probar Remito Dragon" Icono="fa-solid fa-flask" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Crea un remito de insumos CENTRAL→local en Dragonfish (Motivo 13, mercadería en tránsito) para validar auth y esquema.
+        Probá con poca cantidad. El stock lo mueve el agente al escanear la recepción.
+    </p>
+
+    @if (_configurado == false)
+    {
+        <div class="alert alert-warning"><i class="fa-solid fa-triangle-exclamation me-2"></i>
+            La API Dragonfish no está configurada en el servidor (faltan credenciales en <code>Dragonfish:*</code>).
+        </div>
+    }
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end mb-2">
+            <div class="col-auto">
+                <label class="form-label small text-muted mb-1">Local (Cliente)</label>
+                <select class="form-select form-select-sm" style="width:160px" @bind="_local">
+                    <option value="LURO">LURO</option>
+                    <option value="PERALTA">PERALTA</option>
+                </select>
+            </div>
+        </div>
+
+        <table class="market-table align-middle" style="max-width:520px">
+            <thead><tr><th>ARTCOD (insumo, ZZ…)</th><th style="width:120px">Cantidad</th><th style="width:48px"></th></tr></thead>
+            <tbody>
+                @foreach (var it in _items)
+                {
+                    <tr>
+                        <td><input class="form-control form-control-sm" @bind="it.Articulo" placeholder="ZZ..." /></td>
+                        <td><input type="number" min="1" class="form-control form-control-sm" @bind="it.Cantidad" /></td>
+                        <td><button class="btn btn-sm btn-outline-danger" @onclick="() => _items.Remove(it)" disabled="@(_items.Count == 1)"><i class="fa-solid fa-xmark"></i></button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <button class="btn btn-sm btn-outline-secondary mb-2" @onclick="() => _items.Add(new DragonRemitoItemDto { Cantidad = 1 })"><i class="fa-solid fa-plus me-1"></i> Agregar renglón</button>
+
+        <div>
+            <button class="btn btn-primary" @onclick="Crear" disabled="@_enviando">
+                @if (_enviando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                else { <i class="fa-solid fa-paper-plane me-1"></i> }
+                Crear remito en Dragon
+            </button>
+        </div>
+    </div>
+
+    @if (_res is not null)
+    {
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <h6 class="text-muted">JSON enviado</h6>
+                <pre class="dr-pre">@_res.JsonEnviado</pre>
+            </div>
+            <div class="col-lg-6">
+                <h6 class="text-muted">
+                    Respuesta de Dragon
+                    @if (_res.HttpStatus is not null)
+                    {
+                        <span class="badge @(_res.Ok ? "text-bg-success" : "text-bg-danger") ms-2">HTTP @_res.HttpStatus</span>
+                    }
+                    @if (_res.Ok && (_res.Codigo is not null || _res.Numero is not null))
+                    {
+                        <span class="badge text-bg-light border ms-1">@_res.Codigo @(_res.Numero?.ToString())</span>
+                    }
+                </h6>
+                @if (!string.IsNullOrEmpty(_res.Error)) { <div class="alert alert-danger py-2">@_res.Error</div> }
+                <pre class="dr-pre">@_res.Respuesta</pre>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .dr-pre {
+        background: var(--mk-surface-2);
+        border: 1px solid var(--mk-border);
+        border-radius: 8px;
+        padding: .6rem .8rem;
+        font-size: .78rem;
+        max-height: 50vh;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--mk-text);
+    }
+</style>
+
+@code {
+    private string _local = "LURO";
+    private readonly List<DragonRemitoItemDto> _items = new() { new DragonRemitoItemDto { Cantidad = 1 } };
+    private bool _enviando;
+    private bool? _configurado;
+    private DragonRemitoResultDto? _res;
+
+    protected override async Task OnInitializedAsync() => _configurado = await Api.ConfiguradoAsync();
+
+    private async Task Crear()
+    {
+        var items = _items.Where(i => !string.IsNullOrWhiteSpace(i.Articulo) && i.Cantidad > 0).ToList();
+        if (items.Count == 0) return;
+        _enviando = true; _res = null;
+        _res = await Api.RemitoPruebaAsync(new DragonRemitoRequest { Local = _local, Items = items });
+        _enviando = false;
+    }
+}
