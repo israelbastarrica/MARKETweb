@@ -241,19 +241,44 @@ public sealed class ReposicionPdf : IReposicionPdf
         f.UltRemitoFecha == default ? "" : f.UltRemitoFecha.ToString("dd/MM/yyyy"), f.Mobiliario, f.Packs.ToString("N0")
     };
 
-    private async Task<int> VentasDiaAsync(string local, DateTime dia, CancellationToken ct)
+    // Hosts de los locales para leer la venta EN VIVO. La réplica DRAGONFISH_<local> está atrasada
+    // ~2 días y sub-cuenta, así que NO se usa para este dato (igual que el SP de repo y el dashboard).
+    private static readonly Dictionary<string, string> LocalHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["LURO"] = "marketluro.ddns.net",
+        ["PERALTA"] = "marketperalta.ddns.net",
+    };
+
+    private static bool HostVivo(string host)
     {
         try
         {
+            using var c = new System.Net.Sockets.TcpClient();
+            return c.ConnectAsync(host, 1433).Wait(TimeSpan.FromMilliseconds(600)) && c.Connected;
+        }
+        catch { return false; }
+    }
+
+    private async Task<int> VentasDiaAsync(string local, DateTime dia, CancellationToken ct)
+    {
+        // EN VIVO por OPENQUERY contra el local (mismo camino que LogisticaDashboardService).
+        // Si el local no tiene host conocido o no responde, devolvemos -1 → el PDF omite el dato
+        // (preferimos no mostrarlo antes que mostrar el número atrasado de la réplica).
+        var loc = local.Trim();
+        if (!LocalHosts.TryGetValue(loc, out var host) || !HostVivo(host)) return -1;
+        try
+        {
+            var db = "DRAGONFISH_" + loc.ToUpperInvariant();
+            var desde = dia.Date.ToString("yyyy-MM-dd");
+            var hasta = dia.Date.AddDays(1).ToString("yyyy-MM-dd");
+            var inner =
+                "SELECT ISNULL(SUM(D.FCANT*C.SIGNOMOV),0) AS n " +
+                $"FROM {db}.Zoologic.COMPROBANTEV C JOIN {db}.Zoologic.COMPROBANTEVDET D ON C.CODIGO=D.CODIGO " +
+                $"WHERE C.ANULADO=0 AND C.FLETRA NOT IN ('R','X') AND C.FFCH >= '{desde}' AND C.FFCH < '{hasta}'";
+            var sql = $"SELECT * FROM OPENQUERY([{host}], '{inner.Replace("'", "''")}')";
             await using var cn = _db.Create();
             await cn.OpenAsync(ct);
-            var sql =
-                "SELECT ISNULL(SUM(D.FCANT * C.SIGNOMOV), 0) " +
-                $"FROM DRAGONFISH_{local}.Zoologic.COMPROBANTEV C WITH(NOLOCK) " +
-                $"INNER JOIN DRAGONFISH_{local}.Zoologic.COMPROBANTEVDET D WITH(NOLOCK) ON C.CODIGO = D.CODIGO " +
-                "WHERE C.ANULADO = 0 AND C.FLETRA NOT IN ('R', 'X') AND CAST(C.FFCH AS DATE) = @Dia";
-            await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 60 };
-            cmd.Parameters.Add("@Dia", SqlDbType.Date).Value = dia.Date;
+            await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 30 };
             var res = await cmd.ExecuteScalarAsync(ct);
             return res is null or DBNull ? -1 : Convert.ToInt32(res);
         }
