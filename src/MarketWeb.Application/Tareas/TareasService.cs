@@ -292,7 +292,7 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
         if (string.IsNullOrWhiteSpace(carpeta))
             return (false, "La tarea no tiene carpeta destino configurada.");
 
-        var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var ts = DateTime.Now.ToString("dd-MM-yyyy_HH-mm-ss");
         var bak = Path.Combine(carpeta, $"MARKET_{ts}.bak");
 
         // 1) BACKUP DATABASE (lo escribe la cuenta de servicio de SQL; sin COMPRESSION, comprime WinRAR después).
