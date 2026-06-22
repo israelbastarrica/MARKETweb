@@ -38,22 +38,21 @@
         }
     </nav>
 
-    <div class="market-pcbox" style="padding: .2rem .8rem .5rem;">
-        <EstaPcSelector />
-    </div>
-
     <div class="market-userbox">
         <AuthorizeView>
             <Authorized>
-                <div class="avatar">@Iniciales(context.User.Identity?.Name)</div>
-                <div class="info">
-                    <span class="n">@context.User.Identity?.Name</span>
-                    <span class="p">@Perfil(context.User)</span>
+                <div class="userbox-row">
+                    <div class="avatar">@Iniciales(context.User.Identity?.Name)</div>
+                    <div class="info">
+                        <span class="n">@context.User.Identity?.Name</span>
+                        <span class="p">@Perfil(context.User)</span>
+                    </div>
+                    <button class="theme-toggle" title="@(_tema == "dark" ? "Modo claro" : "Modo oscuro")" @onclick="ToggleTema">
+                        <i class="@(_tema == "dark" ? "fa-solid fa-sun" : "fa-solid fa-moon")"></i>
+                    </button>
+                    <button class="logout" title="Salir" @onclick="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
-                <button class="theme-toggle" title="@(_tema == "dark" ? "Modo claro" : "Modo oscuro")" @onclick="ToggleTema">
-                    <i class="@(_tema == "dark" ? "fa-solid fa-sun" : "fa-solid fa-moon")"></i>
-                </button>
-                <button class="logout" title="Salir" @onclick="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+                <EstaPcSelector />
             </Authorized>
             <NotAuthorized>
                 <button class="btn-google" @onclick="Login">
