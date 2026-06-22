@@ -6,116 +6,115 @@
 
 <PageTitle>Consulta Reposición</PageTitle>
 
-<div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Consulta Reposición" Icono="fa-solid fa-magnifying-glass-chart" />
-    <p class="text-muted market-hint" style="margin-top:-.6rem">
-        Por qué el sistema repone lo que repone: veredicto, ubicaciones y el detalle de movimientos con el saldo corrido desde el ancla.
-    </p>
+<div class="market-page cr">
+    <PageHeader Modulo="Logística" Titulo="Consulta Artículo" Icono="fa-solid fa-magnifying-glass-chart" />
 
-    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
-        <div>
-            <label class="form-label small text-muted mb-1">Local</label>
-            <select class="form-select" @bind="_local">
+    <fieldset class="cr-box">
+        <legend>Datos</legend>
+        <div class="cr-datos">
+            <label>LOCAL:</label>
+            <select class="form-select form-select-sm" style="width:160px" @bind="_local">
                 <option value="LURO">LURO</option>
                 <option value="PERALTA">PERALTA</option>
             </select>
+            <label>COD. ART:</label>
+            <input class="form-control form-control-sm" style="width:140px" @bind="_artCod" @onkeyup="OnKey" />
+            <span class="cr-desc">@(_d?.ArtDes)</span>
+            <div class="cr-datos-btns">
+                <button class="btn btn-primary btn-sm" @onclick="Buscar" disabled="@_cargando">
+                    @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                    PROCESAR
+                </button>
+            </div>
         </div>
-        <div>
-            <label class="form-label small text-muted mb-1">Artículo</label>
-            <input class="form-control" placeholder="ARTCOD" @bind="_artCod" @onkeyup="OnKey" style="min-width:180px" />
-        </div>
-        <button class="btn btn-primary" @onclick="Buscar" disabled="@_cargando">
-            @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
-            else { <i class="fa-solid fa-magnifying-glass me-1"></i> }
-            Consultar
-        </button>
-    </div>
+    </fieldset>
 
     @if (_cargando)
     {
-        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Calculando...</p>
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Procesando...</p>
     }
     else if (_d is not null)
     {
         var r = _d.Resumen;
-        <div class="cr-art mb-3"><span class="cod">@_d.ArtCod</span> · @_d.ArtDes</div>
 
-        <div class="row g-3 mb-3">
-            <div class="col-lg-7">
-                <div class="cr-banner @(EsAtencion(r) ? "cr-banner-warn" : "")">
-                    <div class="cr-banner-t">EXPLICACIÓN</div>
-                    <div>@BannerTexto(r)</div>
-                </div>
-            </div>
-            <div class="col-lg-2 col-6">
-                <div class="cr-card cr-veredicto @VeredictoClase(r)">
-                    <div class="cr-vtxt">@VeredictoTexto(r)</div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-6">
-                <div class="cr-mini">
-                    <div class="cr-mini-row"><span>Pack</span><b class="@(PackRoto(r) ? "cr-rojo" : "")">@r.CantPack</b></div>
-                    <div class="cr-mini-sub">@PackSub(r)</div>
-                    <div class="cr-mini-row"><span>Pendiente</span><b>@r.Pendiente.ToString("N0")</b></div>
-                    <div class="cr-mini-sub">Vendido @(r.Ancla is null ? "desde el ancla" : "desde " + r.Ancla.Value.ToString("dd/MM/yyyy")): @r.Venta.ToString("N0")@(r.FallasRotacion > 0 ? " · Fallas+Rot: " + r.FallasRotacion.ToString("N0") : "")</div>
-                </div>
-            </div>
+        <div class="cr-explica @(EsAtencion(r) ? "warn" : "")">
+            <div class="cr-explica-t">¿Por qué está en el reporte?</div>
+            <div class="cr-explica-x">@BannerTexto(r)</div>
         </div>
 
-        <div class="cr-footer mb-3">@FooterTexto(r)</div>
-
-        <div class="row g-3">
-            <div class="col-lg-5">
-                <h6 class="cr-h">Ubicaciones</h6>
-                @if (_d.Ubicaciones.Count == 0)
-                {
-                    <p class="text-muted small">Sin ubicaciones mapeadas.</p>
-                }
-                else
-                {
-                    <div class="market-card table-responsive">
-                        <table class="market-table align-middle cr-ubi">
-                            <thead><tr><th>Ubicación</th><th>Mobiliario</th><th>Módulo</th><th class="text-center">Pas.</th><th class="text-center">Fila</th><th class="text-center">Pos.</th></tr></thead>
-                            <tbody>
-                                @foreach (var u in _d.Ubicaciones)
-                                {
-                                    <tr class="@(u.EsDeposito ? "cr-dep" : "cr-loc")">
-                                        <td>@u.Ubicacion</td><td>@u.Mobiliario</td><td>@u.Modulo</td>
-                                        <td class="text-center">@u.Pasillo</td><td class="text-center">@u.Fila</td><td class="text-center">@u.Posicion</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
-            <div class="col-lg-7">
-                <h6 class="cr-h">
-                    Movimientos desde el ancla
-                    @if (!_d.SaldoCuadra) { <span class="badge text-bg-danger ms-2" title="El saldo acumulado no cierra con el Pendiente del SP">saldo no cuadra</span> }
-                </h6>
-                <div class="market-card table-responsive cr-mov">
-                    <table class="market-table align-middle">
-                        <thead><tr><th>Fecha</th><th>Hora</th><th>Comprob.</th><th>Mot.</th><th class="text-end">Cant.</th><th class="text-end">Saldo</th><th>Origen</th><th>Movimiento</th></tr></thead>
+        <fieldset class="cr-box">
+            <legend>Ubicaciones</legend>
+            @if (_d.Ubicaciones.Count == 0)
+            {
+                <p class="text-muted small mb-0">Sin ubicaciones mapeadas.</p>
+            }
+            else
+            {
+                <div class="table-responsive cr-ubi-wrap">
+                    <table class="market-table align-middle cr-ubi">
+                        <thead><tr><th>Ubicación</th><th>Mobiliario</th><th>Módulo</th><th class="text-center">Pasillo</th><th class="text-center">Fila</th><th class="text-center">Posición</th><th class="text-center">Fecha/Hora</th></tr></thead>
                         <tbody>
-                            @foreach (var m in _d.Movimientos)
+                            @foreach (var u in _d.Ubicaciones)
                             {
-                                <tr class="@MovClase(m, r.CantPack)" @onclick="() => AbrirEvento(m)" style="@(m.EventoId > 0 ? "cursor:pointer" : "")">
-                                    <td class="small">@(m.Fecha?.ToString("dd/MM/yyyy") ?? "")</td>
-                                    <td class="small">@m.Hora</td>
-                                    <td class="small">@m.Remito</td>
-                                    <td class="text-center small">@m.Motivo</td>
-                                    <td class="text-end fw-bold @(m.Cantidad < 0 ? "cr-rojo" : "")">@(m.Cantidad is null ? "" : ((int)m.Cantidad).ToString("N0"))</td>
-                                    <td class="text-end fw-bold @SaldoClase(m, r.CantPack)">@(m.Saldo?.ToString("N0") ?? "")</td>
-                                    <td class="text-center small">@m.Origen</td>
-                                    <td class="small">@m.Tipo @if (m.EventoId > 0) { <i class="fa-solid fa-image ms-1 text-muted" title="Ver detalle/foto del evento"></i> }</td>
+                                <tr class="@(u.EsDeposito ? "cr-dep" : "cr-loc")">
+                                    <td>@u.Ubicacion</td><td>@u.Mobiliario</td><td>@u.Modulo</td>
+                                    <td class="text-center">@u.Pasillo</td><td class="text-center">@u.Fila</td><td class="text-center">@u.Posicion</td>
+                                    <td class="text-center small">@(u.FechaHora?.ToString("dd/MM/yy HH:mm"))</td>
                                 </tr>
                             }
                         </tbody>
                     </table>
                 </div>
+            }
+        </fieldset>
+
+        <fieldset class="cr-box">
+            <legend>Remitos y Ventas</legend>
+
+            <div class="cr-cards">
+                <div class="cr-card cr-card-pack">
+                    <div class="cr-card-t">UNIDADES POR PACK</div>
+                    <div class="cr-card-n @(PackRoto(r) ? "cr-rojo" : "")">@r.CantPack</div>
+                    <div class="cr-card-s @(PackRoto(r) ? "cr-rojo" : "")">@PackSub(r)</div>
+                </div>
+                <div class="cr-card cr-card-pend">
+                    <div class="cr-card-t">PENDIENTE</div>
+                    <div class="cr-card-n">@r.Pendiente.ToString("N0")</div>
+                    <div class="cr-card-s">@VendidoSub(r)</div>
+                </div>
+                <div class="cr-card cr-card-packs">
+                    <div class="cr-card-t">PACKS A REPONER</div>
+                    <div class="cr-card-n @(r.Packs > 0 ? "cr-verde" : "")">@r.Packs</div>
+                    <div class="cr-card-s">@PacksSub(r)</div>
+                </div>
+                <div class="cr-card cr-veredicto @VeredictoClase(r)">
+                    <div class="cr-vtxt">@VeredictoTexto(r)</div>
+                </div>
             </div>
-        </div>
+
+            <div class="table-responsive cr-mov">
+                <table class="market-table align-middle">
+                    <thead><tr><th>Fecha</th><th>Hora</th><th>Comprobante</th><th class="text-center">Mot.</th><th class="text-end">Cant.</th><th class="text-end">Saldo</th><th class="text-center">Origen</th><th>Movimiento</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _d.Movimientos)
+                        {
+                            <tr class="@MovClase(m)" @onclick="() => AbrirEvento(m)" style="@(m.EventoId > 0 ? "cursor:pointer" : "")">
+                                <td class="small">@(m.Fecha?.ToString("dd/MM/yyyy") ?? "")</td>
+                                <td class="small">@m.Hora</td>
+                                <td class="small">@m.Remito</td>
+                                <td class="text-center small">@m.Motivo</td>
+                                <td class="text-end fw-bold @(m.Cantidad < 0 ? "cr-rojo" : "")">@(m.Cantidad is null ? "" : ((int)m.Cantidad).ToString("N0"))</td>
+                                <td class="text-end fw-bold @SaldoClase(m, r.CantPack)">@(m.Saldo?.ToString("N0") ?? "")</td>
+                                <td class="text-center small">@m.Origen</td>
+                                <td class="small">@m.Tipo @if (m.EventoId > 0) { <i class="fa-solid fa-image ms-1 text-muted" title="Ver detalle/foto del evento"></i> }</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="cr-footer">@FooterTexto(r) @if (!_d.SaldoCuadra) { <span class="badge text-bg-danger ms-2">saldo no cuadra</span> }</div>
+        </fieldset>
     }
     else if (_busco)
     {
@@ -174,7 +173,6 @@
         try { _d = await Api.ExplicarAsync(_local, _artCod.Trim()); }
         catch { _d = null; }
         finally { _cargando = false; }
-        if (_d is not null && !_d.Resumen.HayDatos) { /* mostramos igual con SIN DATOS */ }
     }
 
     private async Task AbrirEvento(ExplicarMovimientoDto m)
@@ -224,6 +222,15 @@
     private static string PackSub(ExplicarResumenDto r)
         => PackRoto(r) ? $"Últ. remito: {r.UltRemitoCant:N0} u." : $"(Repo neto: {r.ReposEnviadas})";
 
+    private static string VendidoSub(ExplicarResumenDto r)
+    {
+        var desde = r.Ancla is null ? "desde el ancla" : "desde " + r.Ancla.Value.ToString("dd/MM/yyyy");
+        return $"Vendido {desde}: {r.Venta:N0}" + (r.FallasRotacion > 0 ? $" · Fallas+Rot: {r.FallasRotacion:N0}" : "");
+    }
+
+    private static string PacksSub(ExplicarResumenDto r)
+        => $"(Pendiente: {r.Pendiente} · Pack={r.CantPack})";
+
     private static string FooterTexto(ExplicarResumenDto r)
     {
         var p = new List<string> { "VENDIDO: " + r.Venta };
@@ -235,7 +242,7 @@
         return string.Join(" · ", p) + "   →   PENDIENTE: " + r.Pendiente;
     }
 
-    private static string MovClase(ExplicarMovimientoDto m, int cantPack) => m.Orden switch
+    private static string MovClase(ExplicarMovimientoDto m) => m.Orden switch
     {
         0 => "cr-m-ancla",
         1 => m.Tipo.Contains("Refuerzo dia", StringComparison.OrdinalIgnoreCase) ? "cr-m-refuerzo" : "cr-m-noche",
