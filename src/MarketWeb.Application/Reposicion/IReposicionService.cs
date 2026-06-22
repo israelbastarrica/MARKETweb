@@ -18,4 +18,7 @@ public interface IReposicionService
 
     /// <summary>"Explain" de un artículo en un local (SP_RepoExplicarArticulo): por qué el sistema repone lo que repone. Read-only.</summary>
     Task<ExplicarDto> ExplicarAsync(string local, string artCod, CancellationToken ct = default);
+
+    /// <summary>Resetea un artículo DESDE un remito: re-ancla RepoResto a esa fecha/hora (Pendiente=0) y registra el reset. Idempotente.</summary>
+    Task<ResetResultadoDto> ResetearDesdeRemitoAsync(ResetRemitoRequest req, string usuario, CancellationToken ct = default);
 }

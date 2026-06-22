@@ -418,6 +418,96 @@ public sealed class ReposicionService : IReposicionService
         return dto;
     }
 
+    public async Task<ResetResultadoDto> ResetearDesdeRemitoAsync(ResetRemitoRequest req, string usuario, CancellationToken ct = default)
+    {
+        var local = (req.Local ?? "").Trim();
+        var artCod = (req.ArtCod ?? "").Trim();
+        if (local == "" || artCod == "") return new ResetResultadoDto { Ok = false, Mensaje = "Faltan datos (local / artículo)." };
+
+        // Fecha+hora del remito = ancla. La hora es clave (v53): sin ella se pierde la venta del mismo día.
+        var fechaCompleta = req.Fecha.Date;
+        if (!string.IsNullOrWhiteSpace(req.Hora) && TimeSpan.TryParse(req.Hora, out var ts)) fechaCompleta = fechaCompleta.Add(ts);
+
+        // Reset manual desde remito: packs siempre POSITIVO (demanda detectada al ver el historial).
+        var cantPack = req.CantPack > 0 ? req.CantPack : 1;
+        var packs = Math.Max(1, (int)Math.Round(Math.Abs(req.Cantidad) / (double)cantPack));
+
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+
+        // Idempotencia: si ya hay un reset vigente con fecha >= la del remito, no insertamos.
+        await using (var cmdChk = new SqlCommand(
+            "SELECT TOP 1 Fecha, PacksDetectados, Comentario FROM MARKET.dbo.RepoReposicionArticulosReseteados " +
+            "WHERE Local = @l AND RTRIM(ARTCOD) = @a AND Eliminado = 0 AND CAST(Fecha AS DATE) >= CAST(@f AS DATE) ORDER BY Fecha DESC", cn))
+        {
+            cmdChk.Parameters.Add("@l", SqlDbType.VarChar, 20).Value = local;
+            cmdChk.Parameters.Add("@a", SqlDbType.VarChar, 20).Value = artCod;
+            cmdChk.Parameters.Add("@f", SqlDbType.DateTime).Value = fechaCompleta;
+            await using var rdr = await cmdChk.ExecuteReaderAsync(ct);
+            if (await rdr.ReadAsync(ct))
+            {
+                var fchYa = Convert.ToDateTime(rdr["Fecha"]);
+                var packsYa = rdr["PacksDetectados"] is DBNull or null ? 0 : Convert.ToInt32(rdr["PacksDetectados"]);
+                var coment = rdr["Comentario"] is DBNull or null ? "" : rdr["Comentario"].ToString()!;
+                var msg = $"Ya hay un reset vigente para este artículo/local desde {fchYa:dd/MM/yyyy HH:mm} (Packs: {packsYa:N0}). No se inserta de nuevo.";
+                if (coment != "") msg += "\n\nComentario: " + coment;
+                return new ResetResultadoDto { Ok = false, Mensaje = msg };
+            }
+        }
+
+        var comentFinal = $"RESETEO VENTA · {usuario} · {DateTime.Now:dd/MM/yyyy HH:mm}";
+        if (!string.IsNullOrWhiteSpace(req.Comentario)) comentFinal += " — " + req.Comentario.Trim();
+        if (comentFinal.Length > 500) comentFinal = comentFinal[..500];
+
+        var fechaAncla = fechaCompleta.Date;
+        var anclaHora = fechaCompleta.ToString("HH:mm:ss");
+        int filasAncladas;
+
+        await using (var tx = (SqlTransaction)await cn.BeginTransactionAsync(ct))
+        {
+            try
+            {
+                // (A) Re-anclar el estado: lo que REALMENTE resetea.
+                await using (var cmdUpd = new SqlCommand(
+                    "UPDATE MARKET.dbo.RepoResto SET FechaAncla = @FechaAncla, AnclaHora = @AnclaHora, " +
+                    "Pendiente = 0, Resto = 0, FechaActualizacion = GETDATE() " +
+                    "WHERE Local = @l AND RTRIM(ARTCOD) = @a AND Eliminado = 0", cn, tx))
+                {
+                    cmdUpd.Parameters.Add("@FechaAncla", SqlDbType.Date).Value = fechaAncla;
+                    cmdUpd.Parameters.Add("@AnclaHora", SqlDbType.VarChar, 8).Value = anclaHora;
+                    cmdUpd.Parameters.Add("@l", SqlDbType.VarChar, 20).Value = local;
+                    cmdUpd.Parameters.Add("@a", SqlDbType.VarChar, 20).Value = artCod;
+                    filasAncladas = await cmdUpd.ExecuteNonQueryAsync(ct);
+                }
+
+                // (B) Log de auditoría (Mobiliario NULL: el SP solo filtra por Local+ARTCOD).
+                await using (var cmdIns = new SqlCommand(
+                    "INSERT INTO MARKET.dbo.RepoReposicionArticulosReseteados (Fecha, Local, Mobiliario, ARTCOD, PacksDetectados, Comentario) " +
+                    "VALUES (@f, @l, NULL, @a, @p, @c)", cn, tx))
+                {
+                    cmdIns.Parameters.Add("@f", SqlDbType.DateTime).Value = fechaCompleta;
+                    cmdIns.Parameters.Add("@l", SqlDbType.VarChar, 20).Value = local;
+                    cmdIns.Parameters.Add("@a", SqlDbType.VarChar, 20).Value = artCod;
+                    cmdIns.Parameters.Add("@p", SqlDbType.Int).Value = packs;
+                    cmdIns.Parameters.Add("@c", SqlDbType.NVarChar, 500).Value = comentFinal;
+                    await cmdIns.ExecuteNonQueryAsync(ct);
+                }
+
+                await tx.CommitAsync(ct);
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct);
+                throw;
+            }
+        }
+
+        var ok = $"Reset aplicado para {artCod} en {local}. Ancla: {fechaAncla:dd/MM/yyyy} {anclaHora} (Packs: {packs:N0}).";
+        if (filasAncladas == 0)
+            ok += "\n\nNota: no había estado previo en RepoResto para este artículo/local; se registró el reset y la próxima corrida sembrará la fila con esta ancla.";
+        return new ResetResultadoDto { Ok = true, Mensaje = ok };
+    }
+
     // True si el artículo está en algún palet activo (no desarmado). Los palets guardan remitos
     // (PaletsDetalle.NroRemito + Origen); el artículo se resuelve matcheando contra el Dragonfish del origen,
     // igual que ListarArticulosAsync de Palets. Defensivo: ante error devuelve false (no rompe el explain).

@@ -106,7 +106,16 @@
                                 <td class="text-end fw-bold @(m.Cantidad < 0 ? "cr-rojo" : "")">@(m.Cantidad is null ? "" : ((int)m.Cantidad).ToString("N0"))</td>
                                 <td class="text-end fw-bold @SaldoClase(m, r.CantPack)">@(m.Saldo?.ToString("N0") ?? "")</td>
                                 <td class="text-center small">@m.Origen</td>
-                                <td class="small">@m.Tipo @if (m.EventoId > 0) { <i class="fa-solid fa-image ms-1 text-muted" title="Ver detalle/foto del evento"></i> }</td>
+                                <td class="small">
+                                    @m.Tipo
+                                    @if (m.EventoId > 0) { <i class="fa-solid fa-image ms-1 text-muted" title="Ver detalle/foto del evento"></i> }
+                                    @if (m.Orden == 1)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary cr-reset-btn" @onclick:stopPropagation="true" @onclick="() => AbrirReset(m)" title="Resetear este artículo desde este remito">
+                                            <i class="fa-solid fa-rotate-left"></i> Resetear
+                                        </button>
+                                    }
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -155,6 +164,41 @@
     <div class="modal-backdrop fade show"></div>
 }
 
+@if (_modalReset && _resetMov is not null && _d is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-rotate-left me-2"></i>Resetear desde remito</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalReset = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        Vas a re-anclar <strong>@_d.ArtCod</strong> en <strong>@_d.Local</strong> al remito
+                        <strong>@_resetMov.Remito</strong> del <strong>@(_resetMov.Fecha?.ToString("dd/MM/yyyy")) @_resetMov.Hora</strong>.
+                    </p>
+                    <p class="small text-muted mb-3">
+                        Cantidad del remito: @(((int)Math.Abs(_resetMov.Cantidad ?? 0)).ToString("N0")) u. · Pack: @_d.Resumen.CantPack
+                        → <strong>@PacksReset(_resetMov) pack(s)</strong>.<br />
+                        La ancla del artículo se mueve a esa fecha/hora y el pendiente queda en cero. La venta se vuelve a contar desde ahí.
+                    </p>
+                    <label class="form-label">Comentario (opcional)</label>
+                    <input class="form-control" @bind="_resetComentario" maxlength="400" placeholder="Motivo del reseteo..." />
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _modalReset = false">Cancelar</button>
+                    <button class="btn btn-danger" @onclick="ConfirmarReset" disabled="@_reseteando">
+                        @if (_reseteando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        Resetear
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     private string _local = "LURO";
     private string _artCod = "";
@@ -163,6 +207,10 @@
 
     private bool _modalEvt;
     private EventoDetalleDto? _evt;
+
+    private bool _modalReset, _reseteando;
+    private ExplicarMovimientoDto? _resetMov;
+    private string _resetComentario = "";
 
     private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
 
@@ -180,6 +228,41 @@
         if (m.EventoId <= 0) return;
         _evt = await EventosApi.DetalleAsync(m.EventoId);
         if (_evt is not null) _modalEvt = true;
+    }
+
+    private int PacksReset(ExplicarMovimientoDto m)
+    {
+        var cp = _d?.Resumen.CantPack ?? 1;
+        if (cp <= 0) cp = 1;
+        var cant = (int)Math.Abs(m.Cantidad ?? 0);
+        return Math.Max(1, (int)Math.Round(cant / (double)cp));
+    }
+
+    private void AbrirReset(ExplicarMovimientoDto m)
+    {
+        _resetMov = m;
+        _resetComentario = "";
+        _modalReset = true;
+    }
+
+    private async Task ConfirmarReset()
+    {
+        if (_resetMov is null || _d is null) return;
+        _reseteando = true;
+        var res = await Api.ResetearDesdeRemitoAsync(new ResetRemitoRequest
+        {
+            Local = _d.Local,
+            ArtCod = _d.ArtCod,
+            Remito = _resetMov.Remito,
+            Fecha = _resetMov.Fecha ?? DateTime.Today,
+            Hora = _resetMov.Hora,
+            Cantidad = (int)Math.Abs(_resetMov.Cantidad ?? 0),
+            CantPack = _d.Resumen.CantPack,
+            Comentario = _resetComentario
+        });
+        _reseteando = false;
+        await JS.InvokeVoidAsync("alert", res.Mensaje);
+        if (res.Ok) { _modalReset = false; await Buscar(); }
     }
 
     // ---- Presentación (porteo de frmRepoConsultaArticulo) ----

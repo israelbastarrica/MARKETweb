@@ -53,6 +53,26 @@ public sealed class ExplicarMovimientoDto
     public bool EventoTieneFoto { get; set; }
 }
 
+/// <summary>Pedido de reseteo de un artículo DESDE un remito (re-ancla a la fecha/hora de ese remito).</summary>
+public sealed class ResetRemitoRequest
+{
+    public string Local { get; set; } = "";
+    public string ArtCod { get; set; } = "";
+    public string Remito { get; set; } = "";
+    public DateTime Fecha { get; set; }       // fecha del remito (DATE)
+    public string Hora { get; set; } = "";    // "HH:mm:ss" del remito (clave para la venta del mismo día)
+    public int Cantidad { get; set; }         // unidades del remito
+    public int CantPack { get; set; } = 1;
+    public string Comentario { get; set; } = "";
+}
+
+/// <summary>Resultado de un reseteo: Ok=false cuando ya había un reset vigente (no se re-inserta).</summary>
+public sealed class ResetResultadoDto
+{
+    public bool Ok { get; set; }
+    public string Mensaje { get; set; } = "";
+}
+
 /// <summary>Resultado completo del "explain" de un artículo en un local.</summary>
 public sealed class ExplicarDto
 {

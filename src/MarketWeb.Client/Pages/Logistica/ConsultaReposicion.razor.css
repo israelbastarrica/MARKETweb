@@ -113,6 +113,8 @@ html[data-theme="dark"] .cr-m-evt { background: #2e2440 !important; color: #c9b3
 html[data-theme="dark"] .cr-m-evt-pend { background: #4a3115 !important; color: #f0c79a !important; }
 html[data-theme="dark"] .cr-m-resumen { background: #2b2b2b !important; }
 
+.cr-reset-btn { float: right; padding: .05rem .4rem; font-size: .72rem; line-height: 1.4; }
+
 .cr-foto { width: 100%; max-height: 420px; object-fit: contain; border: 1px solid var(--mk-border); border-radius: 8px; background: var(--mk-surface-2); cursor: zoom-in; }
 
 @media (max-width: 768px) {

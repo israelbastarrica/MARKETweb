@@ -34,5 +34,14 @@ public sealed class ReposicionApi
         => await _http.GetFromJsonAsync<ExplicarDto>(
             $"api/reposicion/explicar?local={Uri.EscapeDataString(local)}&artCod={Uri.EscapeDataString(artCod)}");
 
+    /// <summary>Resetea un artículo desde un remito. Devuelve Ok + mensaje (idempotente).</summary>
+    public async Task<ResetResultadoDto> ResetearDesdeRemitoAsync(ResetRemitoRequest req)
+    {
+        var resp = await _http.PostAsJsonAsync("api/reposicion/resetear", req);
+        if (resp.IsSuccessStatusCode)
+            return await resp.Content.ReadFromJsonAsync<ResetResultadoDto>() ?? new ResetResultadoDto { Ok = false, Mensaje = "Sin respuesta." };
+        return new ResetResultadoDto { Ok = false, Mensaje = "No se pudo resetear." };
+    }
+
     private sealed class JobStart { public string JobId { get; set; } = ""; }
 }
