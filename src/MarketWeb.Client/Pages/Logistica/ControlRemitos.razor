@@ -1,0 +1,283 @@
+@page "/logistica/control-remitos"
+@using MarketWeb.Shared.Reposicion
+@inject ControlRemitosApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Control de Remitos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Control de Remitos" Icono="fa-solid fa-truck-ramp-box" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Estado de los remitos: generados, despachados, recibidos y aceptados en Dragon. Clic en una fila para ver el detalle.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Desde</label>
+            <input type="date" class="form-control" @bind="_desde" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Hasta</label>
+            <input type="date" class="form-control" @bind="_hasta" />
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="CargarEstado"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+        <button class="btn btn-primary" @onclick="() => AbrirDetalle(0, _desde, _hasta)"><i class="fa-solid fa-list me-1"></i> Ver remitos (rango)</button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_estado.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-truck-ramp-box"></i><p>No hay remitos en el rango.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Local Destino</th>
+                        <th class="text-end">Generados</th><th class="text-end">Despachados</th>
+                        <th class="text-end">Recibidos</th><th class="text-end">No Recibidos</th><th class="text-end">Aceptados</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var grupo in _estado.GroupBy(e => e.FechaRemito.Date).OrderByDescending(g => g.Key))
+                    {
+                        <tr class="cr-fecha"><td colspan="6">@grupo.Key.ToString("dddd dd/MM/yyyy")</td></tr>
+                        @foreach (var f in grupo)
+                        {
+                            <tr class="cr-fila" @onclick="() => AbrirDetalle(IdLocal(f.LocalDestino), grupo.Key, grupo.Key)">
+                                <td>@f.LocalDestino</td>
+                                <td class="text-end">@f.Generados.ToString("N0")</td>
+                                <td class="text-end cr-desp">@f.Despachados.ToString("N0")</td>
+                                <td class="text-end cr-rec">@f.Recibidos.ToString("N0")</td>
+                                <td class="text-end cr-norec">@f.NoRecibidos.ToString("N0")</td>
+                                <td class="text-end cr-acep">@f.Aceptados.ToString("N0")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-lg-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Remitos @(_detLocalId == 0 ? "" : "— " + Texto(_detLocalId))</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+                        <div>
+                            <label class="form-label small text-muted mb-1">Destino</label>
+                            <select class="form-select" @bind="_detLocalId" @bind:after="CargarListado">
+                                <option value="0">TODOS</option>
+                                <option value="1">CENTRAL</option>
+                                <option value="2">LURO</option>
+                                <option value="3">PERALTA</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">Estado</label>
+                            <select class="form-select" @bind="_detEstado" @bind:after="CargarListado">
+                                <option value="TODOS">TODOS</option>
+                                <option value="RECIBIDO">RECIBIDO</option>
+                                <option value="NO RECIBIDO">NO RECIBIDO</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-outline-secondary" @onclick="CargarListado"><i class="fa-solid fa-rotate"></i></button>
+                    </div>
+
+                    @if (_remitos.Count == 0)
+                    {
+                        <p class="text-muted">No hay remitos para el filtro.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive cr-listado">
+                            <table class="market-table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Nro Remito</th><th>Fecha</th><th>Origen</th><th>Destino</th>
+                                        <th>Despacho</th><th>Recepción</th><th>Usuario Rec.</th><th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var r in _remitos)
+                                    {
+                                        <tr class="cr-@r.ColorHint @(_sel?.RemitoId == r.RemitoId && _sel?.NroRemito == r.NroRemito ? "cr-sel" : "")"
+                                            @onclick="() => SeleccionarRemito(r)">
+                                            <td>@r.NroRemito</td>
+                                            <td class="small">@(r.FechaRemito?.ToString("dd/MM/yyyy") ?? "")</td>
+                                            <td>@r.Origen</td>
+                                            <td>@r.Destino</td>
+                                            <td class="small">@r.EstadoDespacho</td>
+                                            <td class="small fw-bold">@r.Estado</td>
+                                            <td class="small">@r.UsuarioApp</td>
+                                            <td class="text-nowrap">
+                                                @if (r.DespachoId > 0)
+                                                {
+                                                    <button class="btn btn-sm btn-outline-primary me-1" title="Reasignar destino" @onclick:stopPropagation="true" @onclick="() => AbrirReasignar(r)"><i class="fa-solid fa-shuffle"></i></button>
+                                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar despacho" @onclick:stopPropagation="true" @onclick="() => EliminarDespacho(r)"><i class="fa-solid fa-trash"></i></button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if (_sel is not null)
+                        {
+                            <h6 class="mt-3">Contenido — @_sel.Origen — @_sel.NroRemito</h6>
+                            @if (_contenido.Count == 0)
+                            {
+                                <p class="text-muted small">(remito sin items o no encontrado en Dragon)</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="market-table align-middle">
+                                        <thead><tr><th>Cód.Art</th><th>Descripción</th><th>Color</th><th>Talle</th><th class="text-end">Cant.</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var it in _contenido)
+                                            {
+                                                <tr>
+                                                    <td>@it.ArtCod</td><td>@it.Descripcion</td><td>@it.Color</td>
+                                                    <td class="text-center">@it.Talle</td><td class="text-end fw-bold">@it.Cantidad</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_modalReasignar && _sel is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1060">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Reasignar destino</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalReasignar = false"></button></div>
+                <div class="modal-body">
+                    <p class="mb-2">Remito <strong>@_sel.NroRemito</strong> — destino actual: <strong>@Texto(_sel.IdLocalDestinoDespacho)</strong></p>
+                    <label class="form-label">Nuevo destino</label>
+                    <select class="form-select" @bind="_nuevoDestino">
+                        <option value="1">CENTRAL</option>
+                        <option value="2">LURO</option>
+                        <option value="3">PERALTA</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _modalReasignar = false">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="ConfirmarReasignar">Reasignar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" style="z-index:1055"></div>
+}
+
+@code {
+    private DateTime _desde = MaxFecha(DateTime.Today.AddDays(-4));
+    private DateTime _hasta = DateTime.Today;
+    private List<ControlEstadoDto> _estado = new();
+    private bool _cargando = true;
+
+    private bool _modal;
+    private int _detLocalId;
+    private string _detEstado = "TODOS";
+    private DateTime _detDesde, _detHasta;
+    private List<RemitoControlDto> _remitos = new();
+    private RemitoControlDto? _sel;
+    private List<EventoItemDto> _contenido = new();
+
+    private bool _modalReasignar;
+    private int _nuevoDestino = 2;
+
+    // Inicio del modelo de control por QR (antes no había QR escaneable).
+    private static DateTime MaxFecha(DateTime d) => d < new DateTime(2026, 5, 27) ? new DateTime(2026, 5, 27) : d;
+
+    protected override async Task OnInitializedAsync() => await CargarEstado();
+
+    private static int IdLocal(string local) => local switch { "CENTRAL" => 1, "LURO" => 2, "PERALTA" => 3, _ => 0 };
+    private static string Texto(int id) => id switch { 1 => "CENTRAL", 2 => "LURO", 3 => "PERALTA", _ => "TODOS" };
+
+    private async Task CargarEstado()
+    {
+        _cargando = true;
+        try { _estado = await Api.EstadoAsync(_desde, _hasta); }
+        catch { _estado = new(); }
+        finally { _cargando = false; }
+    }
+
+    private async Task AbrirDetalle(int idLocal, DateTime desde, DateTime hasta)
+    {
+        _detLocalId = idLocal;
+        _detEstado = "TODOS";
+        _detDesde = desde;
+        _detHasta = hasta;
+        _sel = null;
+        _contenido = new();
+        _modal = true;
+        await CargarListado();
+    }
+
+    private async Task CargarListado()
+    {
+        try { _remitos = await Api.ListadoAsync(_detDesde, _detHasta, _detLocalId, _detEstado); }
+        catch { _remitos = new(); }
+        _sel = null;
+        _contenido = new();
+    }
+
+    private async Task SeleccionarRemito(RemitoControlDto r)
+    {
+        _sel = r;
+        _contenido = new();
+        try { _contenido = await Api.ContenidoAsync(r.RemitoId, r.Origen); }
+        catch { _contenido = new(); }
+    }
+
+    private void AbrirReasignar(RemitoControlDto r)
+    {
+        _sel = r;
+        _nuevoDestino = r.IdLocalDestinoDespacho > 0 ? r.IdLocalDestinoDespacho : 2;
+        _modalReasignar = true;
+    }
+
+    private async Task ConfirmarReasignar()
+    {
+        if (_sel is null) return;
+        if (_nuevoDestino != _sel.IdLocalDestinoDespacho)
+            await Api.ReasignarAsync(_sel.DespachoId, _nuevoDestino);
+        _modalReasignar = false;
+        await CargarListado();
+        await CargarEstado();
+    }
+
+    private async Task EliminarDespacho(RemitoControlDto r)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm",
+            $"¿Eliminar el despacho del remito {r.NroRemito}? Queda marcado como eliminado (no se borra físicamente).")) return;
+        await Api.EliminarDespachoAsync(r.DespachoId);
+        await CargarListado();
+        await CargarEstado();
+    }
+}
