@@ -133,6 +133,39 @@
     }
 </div>
 
+@if (_modalAnular && _anularRemito is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content border-danger">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fa-solid fa-triangle-exclamation me-2"></i>Anular remito</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => _modalAnular = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        Vas a anular el remito <strong>@_anularRemito.NroRemito</strong> hacia <strong>@_anularRemito.LocalDestino</strong>.
+                    </p>
+                    <div class="alert alert-danger mb-0">
+                        <i class="fa-solid fa-circle-exclamation me-1"></i>
+                        Esto pide que <strong>@_anularRemito.LocalDestino</strong> lo <strong>RECHACE</strong> y el stock <strong>vuelve al depósito</strong>.
+                        La acción es delicada y afecta stock real. ¿Seguro?
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalAnular = false">No, cancelar</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmarAnular" disabled="@_anulando">
+                        @if (_anulando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        else { <i class="fa-solid fa-ban me-1"></i> }
+                        Sí, anular y pedir rechazo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 <style>
     tr.fila-imp { }
     tr.fila-pen { background: #eef4ff !important; }
@@ -169,6 +202,9 @@
     private List<RemitoColaDto> _remitos = new();
     private bool _cargando = true;
     private string? _error;
+
+    private bool _modalAnular, _anulando;
+    private RemitoColaDto? _anularRemito;
 
     private readonly HashSet<int> _seguimiento = new();
     private CancellationTokenSource? _pollCts;
@@ -225,14 +261,25 @@
         ArrancarPolling();
     }
 
-    private async Task Anular(RemitoColaDto r)
+    private void Anular(RemitoColaDto r)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm",
-            $"¿Anular el remito {r.NroRemito} ({r.LocalDestino})? Se va a pedir que el local lo RECHACE y el stock vuelve al depósito.");
-        if (!confirma) return;
-        var ok = await Api.AnularAsync(r.Id);
+        _anularRemito = r;
+        _modalAnular = true;
+    }
+
+    private async Task ConfirmarAnular()
+    {
+        if (_anularRemito is null) return;
+        // Segunda confirmación: mueve stock real, mejor recontra preguntar.
+        var seguro = await JS.InvokeAsync<bool>("confirm",
+            $"Última confirmación: ANULAR el remito {_anularRemito.NroRemito} y pedir que {_anularRemito.LocalDestino} lo rechace. ¿Continuar?");
+        if (!seguro) return;
+        _anulando = true;
+        var ok = await Api.AnularAsync(_anularRemito.Id);
+        _anulando = false;
+        _modalAnular = false;
         await JS.InvokeVoidAsync("alert", ok
-            ? $"Remito {r.NroRemito}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado."
+            ? $"Remito {_anularRemito.NroRemito}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado."
             : "No se pudo anular el remito.");
     }
 
