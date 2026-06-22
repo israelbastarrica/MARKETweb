@@ -4,7 +4,6 @@ using MarketWeb.Shared.Reposicion;
 using Microsoft.Data.SqlClient;
 using PdfSharpCore;
 using PdfSharpCore.Drawing;
-using PdfSharpCore.Drawing.Layout;
 using PdfSharpCore.Fonts;
 using PdfSharpCore.Pdf;
 
@@ -41,11 +40,12 @@ public sealed class ReposicionPdf : IReposicionPdf
         { "TipoArt", "Categoria", "Combo", "Codigo", "DescArt", "Mes, Día, Año", "Mobiliario", "Cant." };
     private static readonly double[] PctsReemp = { 0.12, 0.10, 0.10, 0.10, 0.30, 0.10, 0.10, 0.08 };
 
-    private static readonly XParagraphAlignment[] Aligns =
+    // Alineación por columna (una sola línea, recortada al ancho de la celda como hace el desktop).
+    private static readonly XStringAlignment[] CellAligns =
     {
-        XParagraphAlignment.Left, XParagraphAlignment.Left, XParagraphAlignment.Left,
-        XParagraphAlignment.Left, XParagraphAlignment.Left, XParagraphAlignment.Center,
-        XParagraphAlignment.Left, XParagraphAlignment.Right
+        XStringAlignment.Near, XStringAlignment.Near, XStringAlignment.Near,
+        XStringAlignment.Near, XStringAlignment.Near, XStringAlignment.Center,
+        XStringAlignment.Near, XStringAlignment.Far
     };
 
     public async Task<byte[]> GenerarAsync(ReposicionResultadoDto datos, DateTime? fechaCorte, CancellationToken ct = default)
@@ -94,7 +94,6 @@ public sealed class ReposicionPdf : IReposicionPdf
         var page = doc.AddPage();
         page.Orientation = PageOrientation.Landscape;
         var gfx = XGraphics.FromPdfPage(page);
-        var tf = new XTextFormatter(gfx);
         double y = margen;
         double anchoTotal = page.Width.Point - margen * 2;
 
@@ -123,8 +122,17 @@ public sealed class ReposicionPdf : IReposicionPdf
             page = doc.AddPage();
             page.Orientation = PageOrientation.Landscape;
             gfx = XGraphics.FromPdfPage(page);
-            tf = new XTextFormatter(gfx);
             y = margen;
+        }
+
+        // Una sola línea, centrada vertical y recortada con … al ancho de la celda (no desborda nunca).
+        void Celda(string texto, XFont font, XRect celda, XStringAlignment align)
+        {
+            var inner = new XRect(celda.X + 2, celda.Y, celda.Width - 4, celda.Height);
+            var t = TruncarParaAncho(gfx, texto ?? "", font, inner.Width);
+            if (t.Length == 0) return;
+            gfx.DrawString(t, font, XBrushes.Black, inner,
+                new XStringFormat { Alignment = align, LineAlignment = XLineAlignment.Center });
         }
 
         void DibujarEncabezados(string[] headers, double[] anchos)
@@ -133,8 +141,7 @@ public sealed class ReposicionPdf : IReposicionPdf
             for (int i = 0; i < headers.Length; i++)
             {
                 gfx.DrawRectangle(XPens.Black, XBrushes.LightGray, new XRect(x, y, anchos[i], altoFila));
-                tf.Alignment = XParagraphAlignment.Center;
-                tf.DrawString(headers[i], fontCabecera, XBrushes.Black, new XRect(x + 2, y + 3, anchos[i] - 4, altoFila));
+                Celda(headers[i], fontCabecera, new XRect(x, y, anchos[i], altoFila), XStringAlignment.Center);
                 x += anchos[i];
             }
             y += altoFila;
@@ -164,8 +171,7 @@ public sealed class ReposicionPdf : IReposicionPdf
                 for (int i = 0; i < headers.Length; i++)
                 {
                     gfx.DrawRectangle(XPens.Black, new XRect(x, y, anchos[i], altoFila));
-                    tf.Alignment = Aligns[i];
-                    tf.DrawString(valores[i] ?? "", fontCelda, XBrushes.Black, new XRect(x + 2, y + 3, anchos[i] - 4, altoFila));
+                    Celda(valores[i] ?? "", fontCelda, new XRect(x, y, anchos[i], altoFila), CellAligns[i]);
                     x += anchos[i];
                 }
                 y += altoFila;
@@ -207,6 +213,20 @@ public sealed class ReposicionPdf : IReposicionPdf
         if (reempNoPerchero.Count > 0 || reempPerchero.Count > 0) NuevaPagina();
         DibujarSeccion($"{local} reemplazos (mesa, mesa chica, estantería, panel, cajón)", reempNoPerchero, HeadersReemp, PctsReemp);
         DibujarSeccion($"{local} reemplazos (perchero)", reempPerchero, HeadersReemp, PctsReemp);
+    }
+
+    // Recorta el texto a una sola línea que entre en maxWidth, agregando … si hubo que cortar.
+    // Reemplaza al wrap de XTextFormatter, que desbordaba con strings largos sin espacios.
+    private static string TruncarParaAncho(XGraphics gfx, string s, XFont font, double maxWidth)
+    {
+        if (string.IsNullOrEmpty(s) || maxWidth <= 0) return "";
+        if (gfx.MeasureString(s, font).Width <= maxWidth) return s;
+        for (int len = s.Length - 1; len > 0; len--)
+        {
+            var cand = s.Substring(0, len).TrimEnd() + "…";
+            if (gfx.MeasureString(cand, font).Width <= maxWidth) return cand;
+        }
+        return "";
     }
 
     private static string[] FilaRepo(ReposicionFilaDto f) => new[]
