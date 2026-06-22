@@ -170,6 +170,16 @@
             var state = await AuthState;
             perfil = state.User.FindFirst("perfil")?.Value;
         }
+        // Logística solo opera el depósito: dejamos únicamente esa ubicación en el combo.
+        if (string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase))
+        {
+            var dep = _ubicaciones
+                .Where(u => u.Descripcion.StartsWith("DEP", StringComparison.OrdinalIgnoreCase)
+                         || u.Descripcion.Equals("CENTRAL", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (dep.Count > 0) _ubicaciones = dep;
+        }
+
         var propio = _ubicaciones.FirstOrDefault(u => string.Equals(u.Descripcion, perfil, StringComparison.OrdinalIgnoreCase));
         _ubicacion = propio?.Descripcion
                      ?? _ubicaciones.FirstOrDefault(u => u.Descripcion.StartsWith("DEP", StringComparison.OrdinalIgnoreCase))?.Descripcion
