@@ -20,6 +20,10 @@
             <label>COD. ART:</label>
             <input class="form-control form-control-sm" style="width:140px" @bind="_artCod" @onkeyup="OnKey" />
             <span class="cr-desc">@(_d?.ArtDes)</span>
+            @if (_d is not null && !string.IsNullOrEmpty(_d.ArtCod))
+            {
+                <ArticuloLink Codigo="@_d.ArtCod" Badge="false" />
+            }
             <div class="cr-datos-btns">
                 <button class="btn btn-primary btn-sm" @onclick="Buscar" disabled="@_cargando">
                     @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
@@ -36,11 +40,6 @@
     else if (_d is not null)
     {
         var r = _d.Resumen;
-
-        <div class="cr-explica @(EsAtencion(r) ? "warn" : "")">
-            <div class="cr-explica-t">¿Por qué está en el reporte?</div>
-            <div class="cr-explica-x">@BannerTexto(r)</div>
-        </div>
 
         <fieldset class="cr-box">
             <legend>Ubicaciones</legend>
@@ -183,24 +182,6 @@
     }
 
     // ---- Presentación (porteo de frmRepoConsultaArticulo) ----
-
-    private static bool EsAtencion(ExplicarResumenDto r)
-        => r.Clasificacion.ToUpperInvariant().StartsWith("REEMPLAZO") || r.EventosPendientes > 0;
-
-    private static string BannerTexto(ExplicarResumenDto r)
-    {
-        var t = r.HayDatos ? r.Explicacion : "Sin datos para este artículo en este local.";
-        if (r.EventosPendientes > 0)
-        {
-            var p = new List<string>();
-            if (r.EventosSobrantePacks > 0) p.Add($"sobrante {r.EventosSobrantePacks:N0} pack(s)");
-            if (r.EventosFaltantePacks > 0) p.Add($"faltante {r.EventosFaltantePacks:N0} pack(s)");
-            t += $"  ⚠ {r.EventosPendientes:N0} evento(s) de piso sin atender";
-            if (p.Count > 0) t += " (" + string.Join(" · ", p) + ")";
-            t += ".";
-        }
-        return t;
-    }
 
     private static string VeredictoTexto(ExplicarResumenDto r)
     {

@@ -22,23 +22,6 @@
 .cr-desc { font-weight: 600; color: var(--mk-text-strong); min-width: 120px; }
 .cr-datos-btns { margin-left: auto; }
 
-/* Panel "¿Por qué está en el reporte?" */
-.cr-explica {
-    background: #e8f4ff;
-    border: 1px solid var(--mk-border);
-    border-radius: 6px;
-    padding: .5rem .8rem;
-    margin-bottom: 1rem;
-    color: #1f3a5a;
-}
-.cr-explica.warn { background: #fff0e8; color: #8a4a10; }
-.cr-explica-t { font-size: .8rem; font-weight: 700; color: #28508c; margin-bottom: .2rem; }
-.cr-explica.warn .cr-explica-t { color: #b45309; }
-.cr-explica-x { font-size: .95rem; }
-html[data-theme="dark"] .cr-explica { background: #16263a; color: #cfe2f7; }
-html[data-theme="dark"] .cr-explica.warn { background: #3a2715; color: #f0c79a; }
-html[data-theme="dark"] .cr-explica-t { color: #7aa8f0; }
-
 /* 4 tarjetas en fila */
 .cr-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: .8rem; }
 .cr-card {
