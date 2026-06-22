@@ -49,38 +49,11 @@ public sealed class AuthController : ControllerBase
         });
     }
 
-    /// <summary>PCs disponibles (sin mail) para que el usuario elija la suya en el onboarding.</summary>
-    [Authorize]
-    [HttpGet("pcs-disponibles")]
-    public async Task<IActionResult> PcsDisponibles([FromServices] IUsuariosPcService usuarios, CancellationToken ct)
-        => Ok(await usuarios.ListarDisponiblesAsync(ct));
-
     /// <summary>Todas las PCs físicas activas, para el selector "Esta PC" por dispositivo.</summary>
     [Authorize]
     [HttpGet("pcs")]
     public async Task<IActionResult> Pcs([FromServices] IUsuariosPcService usuarios, CancellationToken ct)
         => Ok(await usuarios.ListarTodasPcsAsync(ct));
-
-    /// <summary>El usuario reclama una PC. Queda pendiente de aprobación.</summary>
-    [Authorize]
-    [HttpPost("reclamar-pc")]
-    public async Task<IActionResult> ReclamarPc(
-        [FromServices] IUsuariosPcService usuarios, [FromBody] ReclamarPcRequest req, CancellationToken ct)
-    {
-        var email = User.FindFirst(ClaimTypes.Email)?.Value;
-        if (string.IsNullOrEmpty(email)) return Unauthorized();
-        try
-        {
-            await usuarios.ReclamarPcAsync(req.PcId, email, ct);
-            return Ok();
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(new { mensaje = ex.Message });
-        }
-    }
-
-    public sealed record ReclamarPcRequest(int PcId);
 
     /// <summary>Perfiles existentes (áreas/locales) para que un usuario nuevo elija el suyo.</summary>
     [Authorize]

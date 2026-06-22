@@ -97,15 +97,6 @@ public sealed class UsuariosPcService : IUsuariosPcService
         await cn.ExecuteAsync(new CommandDefinition(sql, new { id, pc, perfil, mail, aprobado }, cancellationToken: ct));
     }
 
-    public async Task<IReadOnlyList<UsuarioPcDto>> ListarDisponiblesAsync(CancellationToken ct = default)
-    {
-        // PCs sin mail asignado (para que el usuario elija la suya en el onboarding).
-        const string sql = "SELECT ID AS Id, PC AS Pc FROM UsuariosPC WHERE Eliminado = 0 AND Mail IS NULL ORDER BY PC;";
-        using var cn = _db.Create();
-        var rows = await cn.QueryAsync<UsuarioPcDto>(new CommandDefinition(sql, cancellationToken: ct));
-        return rows.ToList();
-    }
-
     public async Task<IReadOnlyList<UsuarioPcDto>> ListarTodasPcsAsync(CancellationToken ct = default)
     {
         // PCs físicas reales: con nombre y que no sean solicitudes web (PC = mail con '@').
@@ -117,28 +108,6 @@ public sealed class UsuariosPcService : IUsuariosPcService
         using var cn = _db.Create();
         var rows = await cn.QueryAsync<UsuarioPcDto>(new CommandDefinition(sql, cancellationToken: ct));
         return rows.ToList();
-    }
-
-    public async Task ReclamarPcAsync(int pcId, string mail, CancellationToken ct = default)
-    {
-        var m = (mail ?? "").Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(m)) throw new BusinessException("Mail inválido.");
-
-        using var cn = _db.Create();
-
-        // El mail no puede estar ya asociado a otra PC.
-        var yaAsignado = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
-            "SELECT COUNT(1) FROM UsuariosPC WHERE Eliminado = 0 AND Mail = @m;", new { m }, cancellationToken: ct));
-        if (yaAsignado > 0)
-            throw new BusinessException("Tu cuenta ya está asociada a una PC. Avisá a Sistemas si necesitás cambiarla.");
-
-        // Toma la PC solo si sigue libre (sin mail). Queda PENDIENTE de aprobación.
-        var aud = ConstruirAuditoria("Auto-asignación web (pendiente)");
-        var filas = await cn.ExecuteAsync(new CommandDefinition(
-            "UPDATE UsuariosPC SET Mail = @m, MailAprobado = 0, Auditoria = @aud WHERE ID = @pcId AND Eliminado = 0 AND Mail IS NULL;",
-            new { m, pcId, aud }, cancellationToken: ct));
-        if (filas == 0)
-            throw new BusinessException("Esa PC ya fue tomada o no existe. Elegí otra.");
     }
 
     public async Task SolicitarAccesoAsync(string mail, string perfil, CancellationToken ct = default)

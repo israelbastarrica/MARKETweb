@@ -11,14 +11,8 @@ public interface IUsuariosPcService
     /// <summary>Resuelve la fila por mail (para el login web): perfil + PC asociados.</summary>
     Task<UsuarioPcDto?> ObtenerPorMailAsync(string mail, CancellationToken ct = default);
 
-    /// <summary>PCs sin mail asignado, para el onboarding (elegir la propia).</summary>
-    Task<IReadOnlyList<UsuarioPcDto>> ListarDisponiblesAsync(CancellationToken ct = default);
-
     /// <summary>Todas las PCs físicas (máquinas) activas, para el selector "Esta PC" por dispositivo.</summary>
     Task<IReadOnlyList<UsuarioPcDto>> ListarTodasPcsAsync(CancellationToken ct = default);
-
-    /// <summary>El usuario reclama una PC (queda pendiente de aprobación).</summary>
-    Task ReclamarPcAsync(int pcId, string mail, CancellationToken ct = default);
 
     /// <summary>
     /// El usuario que no tiene PC (o no la encuentra) pide acceso eligiendo su

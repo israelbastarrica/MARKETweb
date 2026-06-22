@@ -12,61 +12,28 @@
             <div class="login-error">@_error</div>
         }
 
-        @if (_modo == "pc")
+        <p class="ob-text">
+            Entraste como <strong>@_email</strong>. Elegí tu <strong>área o local</strong> y pedí acceso.
+            Un administrador lo revisa y te habilita.
+        </p>
+
+        @if (_cargando)
         {
-            <p class="ob-text">
-                No encontramos tu PC asociada a <strong>@_email</strong>.
-                Elegí cuál es tu PC para continuar.
-            </p>
-
-            @if (_cargando)
-            {
-                <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando PCs...</p>
-            }
-            else
-            {
-                <select class="form-select mb-3" @bind="_pcId">
-                    <option value="0">— Elegí tu PC —</option>
-                    @foreach (var p in _pcs)
-                    {
-                        <option value="@p.Id">@p.Pc</option>
-                    }
-                </select>
-                <button class="login-google" @onclick="Confirmar" disabled="@(_pcId == 0 || _guardando)">
-                    @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
-                    Confirmar
-                </button>
-
-                <button class="ob-logout" @onclick="IrANuevo">No tengo PC asignada</button>
-            }
+            <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando...</p>
         }
         else
         {
-            <p class="ob-text">
-                Elegí tu <strong>área o local</strong> y pedí acceso. Un administrador
-                lo revisa y te habilita.
-            </p>
-
-            @if (_cargando)
-            {
-                <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando...</p>
-            }
-            else
-            {
-                <select class="form-select mb-3" @bind="_perfilSel">
-                    <option value="">— Elegí tu área / local —</option>
-                    @foreach (var p in _perfiles)
-                    {
-                        <option value="@p">@p</option>
-                    }
-                </select>
-                <button class="login-google" @onclick="PedirAcceso" disabled="@(string.IsNullOrEmpty(_perfilSel) || _guardando)">
-                    @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
-                    Pedir acceso
-                </button>
-
-                <button class="ob-logout" @onclick="IrAPc">Tengo una PC asignada</button>
-            }
+            <select class="form-select mb-3" @bind="_perfilSel">
+                <option value="">— Elegí tu área / local —</option>
+                @foreach (var p in _perfiles)
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+            <button class="login-google" @onclick="PedirAcceso" disabled="@(string.IsNullOrEmpty(_perfilSel) || _guardando)">
+                @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                Pedir acceso
+            </button>
         }
 
         <p class="login-foot">Tu acceso quedará <strong>pendiente de aprobación</strong>.</p>
@@ -75,11 +42,6 @@
 </div>
 
 @code {
-    private string _modo = "nuevo";   // "nuevo" = pedir acceso por área/local (default) | "pc" = elegir PC
-
-    private List<UsuarioPcDto> _pcs = new();
-    private int _pcId;
-
     private List<string> _perfiles = new();
     private string _perfilSel = "";
 
@@ -92,15 +54,7 @@
     {
         var auth = await AuthProvider.GetAuthenticationStateAsync();
         _email = auth.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
-        await CargarPerfiles();   // arranca en modo "nuevo" (área/local)
-    }
-
-    private async Task CargarPcs()
-    {
-        _cargando = true;
-        try { _pcs = await Api.PcsDisponiblesAsync(); }
-        catch { _error = "No se pudieron cargar las PCs."; }
-        _cargando = false;
+        await CargarPerfiles();
     }
 
     private async Task CargarPerfiles()
@@ -109,41 +63,6 @@
         try { _perfiles = await Api.PerfilesAsync(); }
         catch { _error = "No se pudieron cargar las áreas."; }
         _cargando = false;
-    }
-
-    private async Task IrANuevo()
-    {
-        _error = null;
-        _modo = "nuevo";
-        if (_perfiles.Count == 0) await CargarPerfiles();
-    }
-
-    private async Task IrAPc()
-    {
-        _error = null;
-        _modo = "pc";
-        if (_pcs.Count == 0) await CargarPcs();
-    }
-
-    private async Task Confirmar()
-    {
-        if (_pcId == 0) return;
-        _guardando = true;
-        _error = null;
-
-        var (ok, err) = await Api.ReclamarPcAsync(_pcId);
-        _guardando = false;
-
-        if (!ok)
-        {
-            _error = err;
-            _pcId = 0;
-            await CargarPcs(); // refresca por si la PC ya fue tomada
-            return;
-        }
-
-        // Reclamada → estado pasa a "pendiente" → la UI muestra PendienteScreen.
-        (AuthProvider as HostAuthStateProvider)?.Refrescar();
     }
 
     private async Task PedirAcceso()
