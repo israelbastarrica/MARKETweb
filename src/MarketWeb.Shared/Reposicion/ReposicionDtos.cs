@@ -43,6 +43,18 @@ public sealed class ReposicionResultadoDto
     public int TotalPrendas { get; set; }
 }
 
+/// <summary>Una corrida guardada (MARKET.dbo.Reposicion) para el historial / reimpresión.</summary>
+public sealed class CorridaDto
+{
+    public int Id { get; set; }
+    public DateTime FechaHoraCorrida { get; set; }
+    public string LocalParam { get; set; } = "";
+    public int TotalArticulos { get; set; }
+    public int TotalPacks { get; set; }
+    public int TotalPrendas { get; set; }
+    public string MachineName { get; set; } = "";
+}
+
 /// <summary>Estado de un job de cálculo (la corrida tarda ~2 min → se ejecuta en background y se consulta por polling).</summary>
 public sealed class ReposicionJobDto
 {

@@ -45,4 +45,22 @@ public sealed class ReposicionController : ControllerBase
         Response.Headers.ContentDisposition = $"inline; filename=\"{nombre}\"";
         return File(bytes, "application/pdf");
     }
+
+    // ---- Historial / Reimpresión de corridas guardadas ----
+
+    [HttpGet("historial")]
+    public async Task<ActionResult<IReadOnlyList<CorridaDto>>> Historial([FromServices] IReposicionService svc, CancellationToken ct)
+        => Ok(await svc.ListarCorridasAsync(ct));
+
+    // Reimprime el PDF de una corrida pasada (reconstruye desde el snapshot; read-only).
+    [HttpGet("historial/{id:int}/pdf")]
+    public async Task<IActionResult> HistorialPdf(int id, [FromServices] IReposicionService svc, CancellationToken ct)
+    {
+        var datos = await svc.ReconstruirCorridaAsync(id, ct);
+        if (datos is null) return NotFound();
+        var bytes = await _pdf.GenerarAsync(datos, null, ct);
+        var nombre = $"Reposicion_corrida{id}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+        Response.Headers.ContentDisposition = $"inline; filename=\"{nombre}\"";
+        return File(bytes, "application/pdf");
+    }
 }

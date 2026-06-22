@@ -25,5 +25,9 @@ public sealed class ReposicionApi
         catch { return null; }
     }
 
+    /// <summary>Historial de corridas guardadas (para reimprimir).</summary>
+    public async Task<List<CorridaDto>> ListarCorridasAsync()
+        => await _http.GetFromJsonAsync<List<CorridaDto>>("api/reposicion/historial") ?? new();
+
     private sealed class JobStart { public string JobId { get; set; } = ""; }
 }

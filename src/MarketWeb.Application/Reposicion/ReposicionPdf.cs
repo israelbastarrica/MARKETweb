@@ -218,7 +218,7 @@ public sealed class ReposicionPdf : IReposicionPdf
     private static string[] FilaReemp(ReposicionFilaDto f) => new[]
     {
         f.TipoArt, f.Categoria, f.Combo, f.ArtCod, f.ArtDes,
-        f.UltRemitoFecha.ToString("dd/MM/yyyy"), f.Mobiliario, f.Packs.ToString("N0")
+        f.UltRemitoFecha == default ? "" : f.UltRemitoFecha.ToString("dd/MM/yyyy"), f.Mobiliario, f.Packs.ToString("N0")
     };
 
     private async Task<int> VentasDiaAsync(string local, DateTime dia, CancellationToken ct)

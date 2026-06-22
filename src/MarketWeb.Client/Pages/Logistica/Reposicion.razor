@@ -38,6 +38,9 @@
                 <i class="fa-solid fa-file-pdf me-1"></i> Descargar PDF
             </a>
         }
+        <button class="btn btn-outline-secondary ms-auto" @onclick="AbrirHistorial" disabled="@_corriendo">
+            <i class="fa-solid fa-clock-rotate-left me-1"></i> Historial / Reimprimir
+        </button>
     </div>
 
     @if (_esSimulacion)
@@ -124,6 +127,61 @@
     }
 </div>
 
+@if (_modalHist)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Historial de corridas</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalHist = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_cargandoHist)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+                    }
+                    else if (_corridas.Count == 0)
+                    {
+                        <p class="text-muted">No hay corridas guardadas.</p>
+                    }
+                    else
+                    {
+                        <table class="market-table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Fecha / Hora</th><th>Local</th>
+                                    <th class="text-end">Artículos</th><th class="text-end">Packs</th><th class="text-end">Prendas</th>
+                                    <th>PC</th><th class="text-center" style="width:120px">PDF</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in _corridas)
+                                {
+                                    <tr>
+                                        <td class="small">@c.FechaHoraCorrida.ToString("dd/MM/yyyy HH:mm")</td>
+                                        <td>@c.LocalParam</td>
+                                        <td class="text-end">@c.TotalArticulos.ToString("N0")</td>
+                                        <td class="text-end">@c.TotalPacks.ToString("N0")</td>
+                                        <td class="text-end">@c.TotalPrendas.ToString("N0")</td>
+                                        <td class="small text-muted">@c.MachineName</td>
+                                        <td class="text-center">
+                                            <a class="btn btn-sm btn-outline-danger" href="@($"api/reposicion/historial/{c.Id}/pdf")" target="_blank" rel="noopener" title="Reimprimir PDF">
+                                                <i class="fa-solid fa-file-pdf"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     private string _local = "TODOS";
     private DateTime _fecha = DateTime.Today;
@@ -138,6 +196,9 @@
     private ReposicionResultadoDto? _resultado;
     private List<ReposicionFilaDto> _filas = new();
     private int _huerfanos;
+
+    private bool _modalHist, _cargandoHist;
+    private List<CorridaDto> _corridas = new();
 
     private string _hoyIso = DateTime.Today.ToString("yyyy-MM-dd");
     private bool _esSimulacion => _fecha.Date < DateTime.Today;
@@ -213,6 +274,15 @@
         _corriendo = false;
         _tick?.Dispose();
         _tick = null;
+    }
+
+    private async Task AbrirHistorial()
+    {
+        _modalHist = true;
+        _cargandoHist = true;
+        try { _corridas = await Api.ListarCorridasAsync(); }
+        catch { _corridas = new(); }
+        finally { _cargandoHist = false; }
     }
 
     public void Dispose() => _tick?.Dispose();
