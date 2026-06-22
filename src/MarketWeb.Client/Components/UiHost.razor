@@ -1,0 +1,105 @@
+@inject UiService Ui
+@implements IDisposable
+
+@if (_confirm is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content @(_confirm.Peligro ? "border-danger" : "")">
+                <div class="modal-header @(_confirm.Peligro ? "bg-danger text-white" : "")">
+                    <h5 class="modal-title">
+                        @if (_confirm.Peligro) { <i class="fa-solid fa-triangle-exclamation me-2"></i> }
+                        @_confirm.Titulo
+                    </h5>
+                    <button type="button" class="btn-close @(_confirm.Peligro ? "btn-close-white" : "")" @onclick="() => Responder(false)"></button>
+                </div>
+                <div class="modal-body"><div class="ui-confirm-msg">@_confirm.Mensaje</div></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => Responder(false)">@_confirm.Cancelar</button>
+                    <button type="button" class="btn @(_confirm.Peligro ? "btn-danger" : "btn-primary")" @onclick="() => Responder(true)">@_confirm.Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<div class="ui-toasts">
+    @foreach (var t in _toasts)
+    {
+        <div class="ui-toast ui-toast-@t.Tipo.ToString().ToLowerInvariant()">
+            <i class="@Icono(t.Tipo) me-2"></i><span>@t.Mensaje</span>
+        </div>
+    }
+</div>
+
+@code {
+    private UiService.ConfirmRequest? _confirm;
+    private readonly List<UiService.ToastItem> _toasts = new();
+
+    protected override void OnInitialized()
+    {
+        Ui.OnConfirm += MostrarConfirm;
+        Ui.OnToast += MostrarToast;
+    }
+
+    private void MostrarConfirm(UiService.ConfirmRequest req)
+    {
+        _confirm = req;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Responder(bool r)
+    {
+        var c = _confirm;
+        _confirm = null;
+        c?.Tcs.TrySetResult(r);
+        StateHasChanged();
+    }
+
+    private async void MostrarToast(UiService.ToastItem t)
+    {
+        _toasts.Add(t);
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(4000);
+        _toasts.RemoveAll(x => x.Id == t.Id);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string Icono(ToastTipo tipo) => tipo switch
+    {
+        ToastTipo.Exito => "fa-solid fa-circle-check",
+        ToastTipo.Error => "fa-solid fa-circle-exclamation",
+        _ => "fa-solid fa-circle-info"
+    };
+
+    public void Dispose()
+    {
+        Ui.OnConfirm -= MostrarConfirm;
+        Ui.OnToast -= MostrarToast;
+    }
+}
+
+<style>
+    .ui-confirm-msg { white-space: pre-line; }
+
+    .ui-toasts {
+        position: fixed; bottom: 18px; right: 18px; z-index: 1090;
+        display: flex; flex-direction: column; gap: 8px; max-width: 360px;
+    }
+    .ui-toast {
+        display: flex; align-items: center;
+        background: var(--mk-surface, #fff); color: var(--mk-text, #222);
+        border: 1px solid var(--mk-border, #e0e0e0); border-left-width: 4px;
+        border-radius: 8px; padding: .6rem .9rem; font-size: .9rem;
+        box-shadow: 0 6px 20px rgba(16,24,40,.18);
+        animation: ui-toast-in .15s ease;
+    }
+    .ui-toast-exito { border-left-color: #2e9d50; }
+    .ui-toast-exito i { color: #2e9d50; }
+    .ui-toast-error { border-left-color: #c0392b; }
+    .ui-toast-error i { color: #c0392b; }
+    .ui-toast-info { border-left-color: #2a5db0; }
+    .ui-toast-info i { color: #2a5db0; }
+    @@keyframes ui-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>

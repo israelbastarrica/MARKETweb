@@ -1,7 +1,7 @@
 @page "/logistica/control-remitos"
 @using MarketWeb.Shared.Reposicion
 @inject ControlRemitosApi Api
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Control de Remitos</PageTitle>
 
@@ -375,8 +375,8 @@
 
     private async Task EliminarDespacho(RemitoControlDto r)
     {
-        if (!await JS.InvokeAsync<bool>("confirm",
-            $"¿Eliminar el despacho del remito {r.NroRemito}? Queda marcado como eliminado (no se borra físicamente).")) return;
+        if (!await Ui.ConfirmAsync(
+            $"¿Eliminar el despacho del remito {r.NroRemito}? Queda marcado como eliminado (no se borra físicamente).", "Eliminar despacho", "Eliminar", "Cancelar", peligro: true)) return;
         await Api.EliminarDespachoAsync(r.DespachoId);
         await CargarListado();
         await CargarEstado();

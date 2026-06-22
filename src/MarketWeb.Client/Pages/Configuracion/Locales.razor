@@ -1,6 +1,6 @@
 @page "/configuracion/locales"
 @inject LocalesApi Api
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Locales</PageTitle>
 
@@ -232,7 +232,7 @@
 
     private async Task Eliminar(LocalDto l)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Está seguro de eliminar \"{l.Local}\"?");
+        var confirma = await Ui.ConfirmAsync($"¿Está seguro de eliminar \"{l.Local}\"?", "Eliminar local", "Eliminar", "Cancelar", peligro: true);
         if (!confirma) return;
 
         await Api.EliminarAsync(l.Id);

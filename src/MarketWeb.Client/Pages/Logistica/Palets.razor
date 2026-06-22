@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject PaletsApi Api
 @inject IJSRuntime JS
+@inject UiService Ui
 @inject NavigationManager Nav
 @inject PageStateService State
 
@@ -279,7 +280,7 @@
 
     private async Task Desarmar(PaletDto p)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Desarmar el palet {p.NroPalet}? Se liberan sus remitos.");
+        var confirma = await Ui.ConfirmAsync($"¿Desarmar el palet {p.NroPalet}? Se liberan sus remitos.", "Desarmar palet", "Desarmar", "Cancelar", peligro: true);
         if (!confirma) return;
         var ok = await Api.DesarmarAsync(p.Id);
         if (!ok) { _error = "No se pudo desarmar el palet."; return; }

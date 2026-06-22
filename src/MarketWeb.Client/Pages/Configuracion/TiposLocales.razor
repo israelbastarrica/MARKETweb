@@ -1,6 +1,6 @@
 @page "/configuracion/tipos-locales"
 @inject TiposLocalApi Api
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Tipos de Locales</PageTitle>
 
@@ -204,7 +204,7 @@
 
     private async Task Eliminar(LocalTipoDto t)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Está seguro de eliminar \"{t.Descripcion}\"?");
+        var confirma = await Ui.ConfirmAsync($"¿Está seguro de eliminar \"{t.Descripcion}\"?", "Eliminar tipo", "Eliminar", "Cancelar", peligro: true);
         if (!confirma) return;
 
         await Api.EliminarAsync(t.Id);

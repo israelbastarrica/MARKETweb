@@ -3,7 +3,7 @@
 @inject ReemplazosApi Api
 @inject NavigationManager Nav
 @inject PageStateService State
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Reemplazos</PageTitle>
 
@@ -419,7 +419,7 @@
 
     private async Task MarcarProcesados()
     {
-        var ok = await JS.InvokeAsync<bool>("confirm", "¿Marcar TODOS los reemplazos visibles como procesados y notificar a los locales?");
+        var ok = await Ui.ConfirmAsync("¿Marcar TODOS los reemplazos visibles como procesados y notificar a los locales?", "Procesar reemplazos");
         if (!ok) return;
         _procesando = true; _error = null; _flash = null;
         try
@@ -440,7 +440,7 @@
 
     private async Task Eliminar(ReemplazoDto r)
     {
-        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el reemplazo de {r.ArtCod} en {r.Ubicacion}?");
+        var ok = await Ui.ConfirmAsync($"¿Eliminar el reemplazo de {r.ArtCod} en {r.Ubicacion}?", "Eliminar reemplazo", "Eliminar", "Cancelar", peligro: true);
         if (!ok) return;
         await Api.EliminarAsync(r.Id);
         await Cargar();

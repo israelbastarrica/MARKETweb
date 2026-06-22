@@ -1,7 +1,7 @@
 @page "/logistica/reemplazos-mueble"
 @inject ReemplazosApi Api
 @inject NavigationManager Nav
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Bloqueos por mueble</PageTitle>
 
@@ -201,7 +201,7 @@
 
     private async Task Eliminar(BloqueoMuebleDto b)
     {
-        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el bloqueo de {b.ArtCod} en {b.Mobiliario} ({b.Local})?");
+        var ok = await Ui.ConfirmAsync($"¿Eliminar el bloqueo de {b.ArtCod} en {b.Mobiliario} ({b.Local})?", "Eliminar bloqueo", "Eliminar", "Cancelar", peligro: true);
         if (!ok) return;
         await Api.EliminarBloqueoAsync(b.Id);
         await Cargar();

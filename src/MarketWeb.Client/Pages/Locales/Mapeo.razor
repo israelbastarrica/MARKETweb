@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject MapeoApi Api
 @inject IJSRuntime JS
+@inject UiService Ui
 @inject NavigationManager Nav
 @inject PageStateService State
 
@@ -514,7 +515,7 @@
 
     private async Task EliminarPos(MapeoPosicionDto p)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar la posición \"{p.Modulo}\"?");
+        var confirma = await Ui.ConfirmAsync($"¿Eliminar la posición \"{p.Modulo}\"?", "Eliminar posición", "Eliminar", "Cancelar", peligro: true);
         if (!confirma) return;
         await Api.EliminarPosicionAsync(p.Id);
         _mensaje = "Posición eliminada.";
@@ -561,7 +562,7 @@
 
     private async Task QuitarArt(MapeoArticuloDto a)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Quitar el artículo \"{a.ArtCod}\" de la posición?");
+        var confirma = await Ui.ConfirmAsync($"¿Quitar el artículo \"{a.ArtCod}\" de la posición?", "Quitar artículo", "Quitar", "Cancelar", peligro: true);
         if (!confirma) return;
         await Api.EliminarArticuloAsync(a.Id);
         await CargarArticulos();

@@ -3,7 +3,7 @@
 @inject ReposicionApi Api
 @inject EventosApi EventosApi
 @inject PageStateService State
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Consulta Reposición</PageTitle>
 
@@ -285,7 +285,7 @@
             Comentario = _resetComentario
         });
         _reseteando = false;
-        await JS.InvokeVoidAsync("alert", res.Mensaje);
+        if (res.Ok) Ui.Exito(res.Mensaje); else Ui.Error(res.Mensaje);
         if (res.Ok) { _modalReset = false; await Buscar(); }
     }
 

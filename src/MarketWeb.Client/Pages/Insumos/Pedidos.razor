@@ -2,6 +2,7 @@
 @inject InsumosApi Api
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Insumos · Pedidos</PageTitle>
 
@@ -221,7 +222,7 @@
     {
         if (_idLocalPedir == 0)
         {
-            await JS.InvokeVoidAsync("alert", "Elegí un local (LURO o PERALTA) en el filtro de Ubicación para crear el pedido.");
+            Ui.Error("Elegí un local (LURO o PERALTA) en el filtro de Ubicación para crear el pedido.");
             return;
         }
         try
@@ -229,20 +230,20 @@
             var val = await Api.ValidarFechaAsync(_idLocalPedir);
             if (val.Resultado == "BLOQUEADO")
             {
-                await JS.InvokeVoidAsync("alert", $"{val.Titulo}\n\n{val.Mensaje}");
+                Ui.Error($"{val.Titulo} — {val.Mensaje}");
                 return;
             }
             if (val.Resultado == "AVISO")
             {
                 // Igual que el "Entendido" de la app Android: informa y deja pasar.
-                await JS.InvokeVoidAsync("alert", $"{val.Titulo}\n\n{val.Mensaje}");
+                Ui.Toast($"{val.Titulo} — {val.Mensaje}");
             }
             // No se crea nada en la base todavía: se arma en el editor y se persiste recién al Guardar.
             Nav.NavigateTo($"/insumos/pedidos/0?local={_idLocalPedir}");
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", ex.Message);
+            Ui.Error(ex.Message);
         }
     }
 
@@ -255,8 +256,8 @@
     // Depósito: imprime la hoja de ruta de los pendientes del filtro y los marca EN ARMADO.
     private async Task ImprimirArmado()
     {
-        var ok = await JS.InvokeAsync<bool>("confirm",
-            "Se va a imprimir el armado de los pedidos pendientes del filtro y quedarán EN ARMADO (cerrados para el local). ¿Continuar?");
+        var ok = await Ui.ConfirmAsync(
+            "Se va a imprimir el armado de los pedidos pendientes del filtro y quedarán EN ARMADO (cerrados para el local). ¿Continuar?", "Imprimir armado");
         if (!ok) return;
         try
         {
@@ -265,7 +266,7 @@
             if (_armado.Pedidos.Count == 0)
             {
                 _armado = null;
-                await JS.InvokeVoidAsync("alert", "No hay pedidos pendientes para imprimir en este filtro.");
+                Ui.Toast("No hay pedidos pendientes para imprimir en este filtro.");
                 return;
             }
             StateHasChanged();
@@ -273,19 +274,19 @@
             try { await JS.InvokeVoidAsync("print"); } catch { }
             await Cargar();                         // refrescar: ahora quedan EN ARMADO
         }
-        catch (Exception ex) { await JS.InvokeVoidAsync("alert", ex.Message); Console.Error.WriteLine(ex); }
+        catch (Exception ex) { Ui.Error(ex.Message); Console.Error.WriteLine(ex); }
     }
 
     private async Task Eliminar(PedidoInsumoDto p)
     {
         // El local puede eliminar mientras DEPÓSITO no lo haya tomado (impreso/enviado).
-        var ok = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el pedido N° {p.NroPedido}?");
+        var ok = await Ui.ConfirmAsync($"¿Eliminar el pedido N° {p.NroPedido}?", "Eliminar pedido", "Eliminar", "Cancelar", peligro: true);
         if (!ok) return;
         try
         {
             var borrado = await Api.EliminarPedidoAsync(p.Id);
             if (!borrado)
-                await JS.InvokeVoidAsync("alert", "El pedido ya fue tomado por Depósito (en armado/enviado): cerrado para el local.");
+                Ui.Error("El pedido ya fue tomado por Depósito (en armado/enviado): cerrado para el local.");
             await Cargar();
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); }

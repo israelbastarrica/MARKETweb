@@ -4,7 +4,7 @@
 @inject EventosApi Api
 @inject ReposicionApi RepoApi
 @inject PageStateService State
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Eventos reposición</PageTitle>
 
@@ -267,12 +267,12 @@
     private async Task AplicarReset()
     {
         if (_det is null) return;
-        if (!await JS.InvokeAsync<bool>("confirm",
-            $"¿Resetear {_det.ArtCod} en {_det.Local} desde el último remito? Re-ancla la cuenta de reposición.")) return;
+        if (!await Ui.ConfirmAsync(
+            $"¿Resetear {_det.ArtCod} en {_det.Local} desde el último remito? Re-ancla la cuenta de reposición.", "Resetear artículo")) return;
         _accionando = true;
         var res = await RepoApi.ResetearDesdeEventoAsync(_det.Id, _accionComentario);
         _accionando = false;
-        await JS.InvokeVoidAsync("alert", res.Mensaje);
+        if (res.Ok) Ui.Exito(res.Mensaje); else Ui.Error(res.Mensaje);
         if (res.Ok) await Cargar();
     }
 
@@ -288,7 +288,7 @@
     private async Task Eliminar()
     {
         if (_det is null) return;
-        if (!await JS.InvokeAsync<bool>("confirm", "¿Eliminar este evento? Es para cargas erradas, no para procesarlo.")) return;
+        if (!await Ui.ConfirmAsync("¿Eliminar este evento? Es para cargas erradas, no para procesarlo.", "Eliminar evento", "Eliminar", "Cancelar", peligro: true)) return;
         _accionando = true;
         if (await Api.EliminarAsync(_det.Id)) { _modal = false; await Cargar(); }
         _accionando = false;

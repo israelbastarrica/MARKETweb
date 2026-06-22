@@ -1,6 +1,6 @@
 @page "/configuracion/usuarios"
 @inject UsuariosPcApi Api
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Usuarios</PageTitle>
 
@@ -297,7 +297,7 @@
 
     private async Task Eliminar(UsuarioPcDto u)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Está seguro de eliminar la PC \"{u.Pc}\"?");
+        var confirma = await Ui.ConfirmAsync($"¿Está seguro de eliminar la PC \"{u.Pc}\"?", "Eliminar PC", "Eliminar", "Cancelar", peligro: true);
         if (!confirma) return;
 
         await Api.EliminarAsync(u.Id);
@@ -307,8 +307,7 @@
 
     private async Task Aprobar(UsuarioPcDto u)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm",
-            $"¿Aprobar el acceso de {u.Mail} (PC {u.Pc}, perfil {u.Perfil})?");
+        var confirma = await Ui.ConfirmAsync($"¿Aprobar el acceso de {u.Mail} (PC {u.Pc}, perfil {u.Perfil})?", "Aprobar acceso");
         if (!confirma) return;
 
         await Api.AprobarAsync(u.Id);

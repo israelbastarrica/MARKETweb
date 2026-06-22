@@ -3,7 +3,7 @@
 @implements IDisposable
 @inject ReporteArticulosApi Api
 @inject PageStateService State
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Reporte Artículos</PageTitle>
 
@@ -288,7 +288,7 @@
         _guardando = false;
         if (n < 0) { _errorPacks = "No se pudo guardar."; return; }
         _modalPacks = false;
-        await JS.InvokeVoidAsync("alert", $"{n} registro(s) actualizados.");
+        Ui.Exito($"{n} registro(s) actualizados.");
         await Buscar();
     }
 }

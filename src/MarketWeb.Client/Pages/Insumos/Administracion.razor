@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject InsumosApi Api
 @inject IJSRuntime JS
+@inject UiService Ui
 @inject NavigationManager Nav
 @inject PageStateService State
 
@@ -172,8 +173,8 @@
     {
         if (_sel.Count == 0) return;
         var seleccionados = _sel.Count;
-        var ok = await JS.InvokeAsync<bool>("confirm",
-            $"¿Marcar {seleccionados} consumo(s) como procesados? Pasarán al historial de procesados.");
+        var ok = await Ui.ConfirmAsync(
+            $"¿Marcar {seleccionados} consumo(s) como procesados? Pasarán al historial de procesados.", "Marcar procesados");
         if (!ok) return;
 
         var refs = _sel.SelectMany(k => k.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

@@ -45,6 +45,7 @@ builder.Services.AddScoped<ReporteArticulosApi>();
 builder.Services.AddScoped<TareasApi>();
 builder.Services.AddScoped<DragonApi>();
 builder.Services.AddSingleton<PageStateService>();
+builder.Services.AddSingleton<UiService>();
 
 // --- Autenticación (estado en el cliente; identidad real en cookie del server) ---
 builder.Services.AddAuthorizationCore();

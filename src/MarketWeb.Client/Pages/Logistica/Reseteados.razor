@@ -4,7 +4,7 @@
 @inject ReseteadosApi Api
 @inject ReemplazosApi ReempApi
 @inject PageStateService State
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Reseteados</PageTitle>
 
@@ -212,7 +212,7 @@
 
     private async Task Eliminar(ReseteadoDto r)
     {
-        if (!await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el reseteado de {r.ArtCod} ({r.Local})?")) return;
+        if (!await Ui.ConfirmAsync($"¿Eliminar el reseteado de {r.ArtCod} ({r.Local})?", "Eliminar reseteado", "Eliminar", "Cancelar", peligro: true)) return;
         await Api.EliminarAsync(r.Id);
         await Cargar();
     }

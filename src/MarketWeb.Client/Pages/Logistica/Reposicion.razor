@@ -1,7 +1,7 @@
 @page "/logistica/reposicion"
 @using MarketWeb.Shared.Reposicion
 @inject ReposicionApi Api
-@inject IJSRuntime JS
+@inject UiService Ui
 @implements IDisposable
 
 <PageTitle>Reposición</PageTitle>
@@ -211,7 +211,7 @@
         var aviso = _esSimulacion
             ? $"Vas a SIMULAR la reposición de {_local} al {_fecha:dd/MM/yyyy}. Esta corrida procesa y persiste en producción. ¿Continuar?"
             : $"Vas a calcular la reposición REAL de {_local}. Esta corrida procesa y persiste en producción. ¿Continuar?";
-        if (!await JS.InvokeAsync<bool>("confirm", aviso)) return;
+        if (!await Ui.ConfirmAsync(aviso, "Calcular reposición")) return;
 
         _error = null;
         _resultado = null;

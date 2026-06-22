@@ -1,7 +1,7 @@
 @page "/sistemas/tareas"
 @using MarketWeb.Shared.Tareas
 @inject TareasApi Api
-@inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Tareas programadas</PageTitle>
 
@@ -269,8 +269,8 @@
 
     private async Task Guardar()
     {
-        if (string.IsNullOrWhiteSpace(_eNombre)) { await JS.InvokeVoidAsync("alert", "Poné un nombre."); return; }
-        if (_eDias.Count == 0) { await JS.InvokeVoidAsync("alert", "Elegí al menos un día."); return; }
+        if (string.IsNullOrWhiteSpace(_eNombre)) { Ui.Error("Poné un nombre."); return; }
+        if (_eDias.Count == 0) { Ui.Error("Elegí al menos un día."); return; }
 
         _guardando = true;
         var ok = await Api.GuardarAsync(new TareaSaveRequest
@@ -286,22 +286,21 @@
             Destinatarios = _eDestinatarios.Trim()
         });
         _guardando = false;
-        if (!ok) { await JS.InvokeVoidAsync("alert", "No se pudo guardar."); return; }
+        if (!ok) { Ui.Error("No se pudo guardar."); return; }
         _modal = false;
         await Cargar();
     }
 
     private async Task Eliminar(TareaProgramadaDto t)
     {
-        if (!await JS.InvokeAsync<bool>("confirm", $"¿Eliminar la tarea \"{t.Nombre}\"?")) return;
+        if (!await Ui.ConfirmAsync($"¿Eliminar la tarea \"{t.Nombre}\"?", "Eliminar tarea", "Eliminar", "Cancelar", peligro: true)) return;
         await Api.EliminarAsync(t.Id);
         await Cargar();
     }
 
     private async Task Ejecutar(TareaProgramadaDto t)
     {
-        if (!await JS.InvokeAsync<bool>("confirm",
-            $"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF.")) return;
+        if (!await Ui.ConfirmAsync($"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF.", "Ejecutar ahora")) return;
         var arrancada = await Api.EjecutarAsync(t.Id);
         _flash = arrancada
             ? "Tarea iniciada. Tarda ~2 minutos; revisá el historial para ver el resultado."

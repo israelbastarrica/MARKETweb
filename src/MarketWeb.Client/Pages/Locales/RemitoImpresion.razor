@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject RemitoImpresionApi Api
 @inject IJSRuntime JS
+@inject UiService Ui
 
 <PageTitle>Remito Impresión</PageTitle>
 
@@ -246,7 +247,7 @@
 
     private async Task Reimprimir(RemitoColaDto r)
     {
-        var confirma = await JS.InvokeAsync<bool>("confirm", $"¿Re-encolar el remito {r.NroRemito} ({r.LocalDestino}) para reimprimir?");
+        var confirma = await Ui.ConfirmAsync($"¿Re-encolar el remito {r.NroRemito} ({r.LocalDestino}) para reimprimir?", "Reimprimir");
         if (!confirma) return;
 
         var ok = await Api.ReimprimirAsync(r.Id);
@@ -270,17 +271,14 @@
     private async Task ConfirmarAnular()
     {
         if (_anularRemito is null) return;
-        // Segunda confirmación: mueve stock real, mejor recontra preguntar.
-        var seguro = await JS.InvokeAsync<bool>("confirm",
-            $"Última confirmación: ANULAR el remito {_anularRemito.NroRemito} y pedir que {_anularRemito.LocalDestino} lo rechace. ¿Continuar?");
-        if (!seguro) return;
+        // El modal rojo de arriba ya es la confirmación deliberada (acción delicada, mueve stock real).
+        var nro = _anularRemito.NroRemito;
         _anulando = true;
         var ok = await Api.AnularAsync(_anularRemito.Id);
         _anulando = false;
         _modalAnular = false;
-        await JS.InvokeVoidAsync("alert", ok
-            ? $"Remito {_anularRemito.NroRemito}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado."
-            : "No se pudo anular el remito.");
+        if (ok) Ui.Exito($"Remito {nro}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado.");
+        else Ui.Error("No se pudo anular el remito.");
     }
 
     private void ArrancarPolling()
