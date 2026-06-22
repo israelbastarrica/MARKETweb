@@ -27,6 +27,28 @@ public sealed class RemitoControlDto
     public string UsuarioApp { get; set; } = "";
     public string RemitoId { get; set; } = "";
     public int DespachoId { get; set; }
+    public int IdLocalDestino { get; set; }             // destino esperado (para la foto del QR de pantalla)
     public int IdLocalDestinoDespacho { get; set; }
+    public bool EsQrPantalla { get; set; }              // recibido escaneando un QR regenerado en pantalla (-PC)
     public string ColorHint { get; set; } = "normal";   // cruzado / qrpc / aceptado / recibido / norecibido / normal
+}
+
+/// <summary>Una fila del log de QR regenerados en pantalla (RemitoQRGenerado_Log).</summary>
+public sealed class QrLogDto
+{
+    public DateTime? Fecha { get; set; }
+    public string MachineName { get; set; } = "";
+    public string LocalUsuario { get; set; } = "";
+    public string NroRemito { get; set; } = "";
+    public string Origen { get; set; } = "";
+    public string Destino { get; set; } = "";
+    public string RemitoCodigo { get; set; } = "";
+}
+
+/// <summary>Motivo + indicador de foto de un QR de pantalla (RemitosEscaneados).</summary>
+public sealed class QrFotoInfoDto
+{
+    public bool Existe { get; set; }
+    public string Motivo { get; set; } = "";
+    public bool TieneFoto { get; set; }
 }

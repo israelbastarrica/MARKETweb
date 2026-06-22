@@ -44,4 +44,24 @@ public sealed class ControlRemitosController : ControllerBase
         await _service.EliminarDespachoAsync(despachoId, ct);
         return NoContent();
     }
+
+    [HttpGet("log-qr")]
+    public async Task<ActionResult<IReadOnlyList<QrLogDto>>> LogQr(
+        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, CancellationToken ct = default)
+        => Ok(await _service.LogQrAsync(desde ?? DateTime.Today.AddDays(-6), hasta ?? DateTime.Today, ct));
+
+    [HttpGet("qr-foto-info")]
+    public async Task<ActionResult<QrFotoInfoDto>> QrFotoInfo(
+        [FromQuery] string remitoId, [FromQuery] int idLocal, CancellationToken ct)
+    {
+        var info = await _service.FotoQrInfoAsync(remitoId ?? "", idLocal, ct);
+        return info is null ? NotFound() : Ok(info);
+    }
+
+    [HttpGet("qr-foto")]
+    public async Task<IActionResult> QrFoto([FromQuery] string remitoId, [FromQuery] int idLocal, CancellationToken ct)
+    {
+        var bytes = await _service.FotoQrBytesAsync(remitoId ?? "", idLocal, ct);
+        return bytes is null ? NotFound() : File(bytes, "image/jpeg");
+    }
 }

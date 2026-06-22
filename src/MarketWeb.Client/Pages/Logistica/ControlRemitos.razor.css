@@ -27,6 +27,16 @@ html[data-theme="dark"] .cr-acep { color: #4ade80; }
 .cr-listado .cr-norecibido { background: #ffeb9c; }
 .cr-listado .cr-sel        { outline: 2px solid var(--mk-accent, #f59e0b); outline-offset: -2px; }
 
+.cr-foto {
+    width: 100%;
+    max-height: 460px;
+    object-fit: contain;
+    border: 1px solid var(--mk-border);
+    border-radius: 8px;
+    background: var(--mk-surface-2);
+    cursor: zoom-in;
+}
+
 html[data-theme="dark"] .cr-listado .cr-cruzado    { background: #5a2a2a; }
 html[data-theme="dark"] .cr-listado .cr-qrpc       { background: #1f3a5a; }
 html[data-theme="dark"] .cr-listado .cr-aceptado   { background: #1f5a37; }

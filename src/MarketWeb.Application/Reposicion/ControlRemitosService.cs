@@ -88,7 +88,9 @@ public sealed class ControlRemitosService : IControlRemitosService
                 UsuarioApp = IsNull(rdr, "UsuarioApp") ? "" : rdr["UsuarioApp"].ToString()!.Trim(),
                 RemitoId = (rdr["RemitoID"]?.ToString() ?? "").Trim(),
                 DespachoId = despachoId,
+                IdLocalDestino = idDest,
                 IdLocalDestinoDespacho = idDestDespacho,
+                EsQrPantalla = esQR,
                 ColorHint = ColorHint(estadoTxt, esQR, esCruzado, estadoDragon)
             });
         }
@@ -175,6 +177,69 @@ public sealed class ControlRemitosService : IControlRemitosService
         await using var cmd = new SqlCommand("SP_RemitosDespachadosEliminar", cn) { CommandType = CommandType.StoredProcedure };
         cmd.Parameters.AddWithValue("@ID", despachoId);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<QrLogDto>> LogQrAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        const string sql =
+            "SELECT Fecha, MachineName, LocalUsuario, NroRemito, Origen, Destino, RemitoCODIGO " +
+            "FROM dbo.RemitoQRGenerado_Log WITH(NOLOCK) " +
+            "WHERE Fecha >= @Desde AND Fecha < @HastaExcl ORDER BY Fecha DESC, ID DESC";
+        await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 60 };
+        cmd.Parameters.Add("@Desde", SqlDbType.DateTime).Value = desde.Date;
+        cmd.Parameters.Add("@HastaExcl", SqlDbType.DateTime).Value = hasta.Date.AddDays(1);
+
+        var lista = new List<QrLogDto>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            lista.Add(new QrLogDto
+            {
+                Fecha = Fecha(rdr, "Fecha"),
+                MachineName = IsNull(rdr, "MachineName") ? "" : rdr["MachineName"].ToString()!.Trim(),
+                LocalUsuario = IsNull(rdr, "LocalUsuario") ? "" : rdr["LocalUsuario"].ToString()!.Trim(),
+                NroRemito = IsNull(rdr, "NroRemito") ? "" : rdr["NroRemito"].ToString()!.Trim(),
+                Origen = IsNull(rdr, "Origen") ? "" : rdr["Origen"].ToString()!.Trim(),
+                Destino = IsNull(rdr, "Destino") ? "" : rdr["Destino"].ToString()!.Trim(),
+                RemitoCodigo = IsNull(rdr, "RemitoCODIGO") ? "" : rdr["RemitoCODIGO"].ToString()!.Trim()
+            });
+        }
+        return lista;
+    }
+
+    public async Task<QrFotoInfoDto?> FotoQrInfoAsync(string remitoCodigo, int idLocal, CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            "SELECT TOP 1 Motivo, CASE WHEN Foto IS NULL THEN 0 ELSE 1 END AS TieneFoto " +
+            "FROM dbo.RemitosEscaneados WITH(NOLOCK) " +
+            "WHERE RTRIM(CODIGO) = @COD AND IDLocal = @IDL AND EsDesconocido = 0 AND EsQRDePantalla = 1", cn);
+        cmd.Parameters.Add("@COD", SqlDbType.NVarChar, 100).Value = remitoCodigo;
+        cmd.Parameters.Add("@IDL", SqlDbType.Int).Value = idLocal;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct)) return new QrFotoInfoDto { Existe = false };
+        return new QrFotoInfoDto
+        {
+            Existe = true,
+            Motivo = IsNull(rdr, "Motivo") ? "" : rdr["Motivo"].ToString()!.Trim(),
+            TieneFoto = Convert.ToInt32(rdr["TieneFoto"]) == 1
+        };
+    }
+
+    public async Task<byte[]?> FotoQrBytesAsync(string remitoCodigo, int idLocal, CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            "SELECT TOP 1 Foto FROM dbo.RemitosEscaneados WITH(NOLOCK) " +
+            "WHERE RTRIM(CODIGO) = @COD AND IDLocal = @IDL AND EsDesconocido = 0 AND EsQRDePantalla = 1", cn);
+        cmd.Parameters.Add("@COD", SqlDbType.NVarChar, 100).Value = remitoCodigo;
+        cmd.Parameters.Add("@IDL", SqlDbType.Int).Value = idLocal;
+        var obj = await cmd.ExecuteScalarAsync(ct);
+        return obj is DBNull or null ? null : (byte[])obj;
     }
 
     private static bool IsNull(SqlDataReader r, string c) => r[c] is DBNull or null;

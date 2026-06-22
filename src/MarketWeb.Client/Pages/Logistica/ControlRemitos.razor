@@ -22,6 +22,7 @@
         </div>
         <button class="btn btn-outline-secondary" @onclick="CargarEstado"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
         <button class="btn btn-primary" @onclick="() => AbrirDetalle(0, _desde, _hasta)"><i class="fa-solid fa-list me-1"></i> Ver remitos (rango)</button>
+        <button class="btn btn-outline-dark" @onclick="AbrirLog"><i class="fa-solid fa-qrcode me-1"></i> Ver log QR</button>
     </div>
 
     @if (_cargando)
@@ -123,6 +124,10 @@
                                             <td class="small fw-bold">@r.Estado</td>
                                             <td class="small">@r.UsuarioApp</td>
                                             <td class="text-nowrap">
+                                                @if (r.EsQrPantalla)
+                                                {
+                                                    <button class="btn btn-sm btn-outline-info me-1" title="Ver foto QR de pantalla" @onclick:stopPropagation="true" @onclick="() => AbrirFotoQr(r)"><i class="fa-solid fa-camera"></i></button>
+                                                }
                                                 @if (r.DespachoId > 0)
                                                 {
                                                     <button class="btn btn-sm btn-outline-primary me-1" title="Reasignar destino" @onclick:stopPropagation="true" @onclick="() => AbrirReasignar(r)"><i class="fa-solid fa-shuffle"></i></button>
@@ -194,6 +199,92 @@
     <div class="modal-backdrop fade show" style="z-index:1055"></div>
 }
 
+@if (_modalLog)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Log de QR regenerados en pantalla</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalLog = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+                        <div>
+                            <label class="form-label small text-muted mb-1">Desde</label>
+                            <input type="date" class="form-control" @bind="_logDesde" />
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">Hasta</label>
+                            <input type="date" class="form-control" @bind="_logHasta" />
+                        </div>
+                        <button class="btn btn-outline-secondary" @onclick="CargarLog"><i class="fa-solid fa-magnifying-glass"></i></button>
+                    </div>
+                    @if (_log.Count == 0)
+                    {
+                        <p class="text-muted">Sin QR regenerados en el rango.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="market-table align-middle">
+                                <thead><tr><th>Fecha y hora</th><th>PC</th><th>Usuario</th><th>Nro Remito</th><th>Origen</th><th>Destino</th></tr></thead>
+                                <tbody>
+                                    @foreach (var l in _log)
+                                    {
+                                        <tr>
+                                            <td class="small">@(l.Fecha?.ToString("dd/MM/yyyy HH:mm:ss") ?? "")</td>
+                                            <td class="small">@l.MachineName</td>
+                                            <td>@l.LocalUsuario</td>
+                                            <td>@l.NroRemito</td>
+                                            <td>@l.Origen</td>
+                                            <td>@l.Destino</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="text-muted small">@_log.Count registro(s).</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_modalFoto)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1060">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Foto del QR de pantalla — @_fotoNro</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalFoto = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2"><strong>Motivo:</strong> @(_fotoInfo is null ? "(cargando...)" : string.IsNullOrEmpty(_fotoInfo.Motivo) ? "(sin motivo registrado)" : _fotoInfo.Motivo)</p>
+                    @if (_fotoInfo is not null && !_fotoInfo.Existe)
+                    {
+                        <p class="text-muted">(no se encontró el escaneo)</p>
+                    }
+                    else if (_fotoInfo is not null && _fotoInfo.TieneFoto)
+                    {
+                        <a href="@($"api/control-remitos/qr-foto?remitoId={Uri.EscapeDataString(_fotoRemitoId)}&idLocal={_fotoIdLocal}")" target="_blank" rel="noopener">
+                            <img src="@($"api/control-remitos/qr-foto?remitoId={Uri.EscapeDataString(_fotoRemitoId)}&idLocal={_fotoIdLocal}")" class="cr-foto" alt="Foto del QR" />
+                        </a>
+                    }
+                    else if (_fotoInfo is not null)
+                    {
+                        <p class="text-muted">Sin foto registrada.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" style="z-index:1055"></div>
+}
+
 @code {
     private DateTime _desde = MaxFecha(DateTime.Today.AddDays(-4));
     private DateTime _hasta = DateTime.Today;
@@ -210,6 +301,16 @@
 
     private bool _modalReasignar;
     private int _nuevoDestino = 2;
+
+    private bool _modalLog;
+    private DateTime _logDesde = DateTime.Today.AddDays(-6);
+    private DateTime _logHasta = DateTime.Today;
+    private List<QrLogDto> _log = new();
+
+    private bool _modalFoto;
+    private QrFotoInfoDto? _fotoInfo;
+    private string _fotoRemitoId = "", _fotoNro = "";
+    private int _fotoIdLocal;
 
     // Inicio del modelo de control por QR (antes no había QR escaneable).
     private static DateTime MaxFecha(DateTime d) => d < new DateTime(2026, 5, 27) ? new DateTime(2026, 5, 27) : d;
@@ -279,5 +380,28 @@
         await Api.EliminarDespachoAsync(r.DespachoId);
         await CargarListado();
         await CargarEstado();
+    }
+
+    private async Task AbrirLog()
+    {
+        _modalLog = true;
+        await CargarLog();
+    }
+
+    private async Task CargarLog()
+    {
+        try { _log = await Api.LogQrAsync(_logDesde, _logHasta); }
+        catch { _log = new(); }
+    }
+
+    private async Task AbrirFotoQr(RemitoControlDto r)
+    {
+        _fotoRemitoId = r.RemitoId;
+        _fotoIdLocal = r.IdLocalDestino;
+        _fotoNro = r.NroRemito;
+        _fotoInfo = null;
+        _modalFoto = true;
+        try { _fotoInfo = await Api.QrFotoInfoAsync(r.RemitoId, r.IdLocalDestino); }
+        catch { _fotoInfo = new QrFotoInfoDto { Existe = false }; }
     }
 }

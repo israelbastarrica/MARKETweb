@@ -18,4 +18,13 @@ public interface IControlRemitosService
 
     /// <summary>Baja lógica de un despacho (SP_RemitosDespachadosEliminar).</summary>
     Task EliminarDespachoAsync(int despachoId, CancellationToken ct = default);
+
+    /// <summary>Log de QR regenerados en pantalla (RemitoQRGenerado_Log) en el rango.</summary>
+    Task<IReadOnlyList<QrLogDto>> LogQrAsync(DateTime desde, DateTime hasta, CancellationToken ct = default);
+
+    /// <summary>Motivo + indicador de foto de un QR de pantalla (RemitosEscaneados).</summary>
+    Task<QrFotoInfoDto?> FotoQrInfoAsync(string remitoCodigo, int idLocal, CancellationToken ct = default);
+
+    /// <summary>Bytes de la foto del QR de pantalla. null si no hay.</summary>
+    Task<byte[]?> FotoQrBytesAsync(string remitoCodigo, int idLocal, CancellationToken ct = default);
 }

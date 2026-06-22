@@ -26,4 +26,12 @@ public sealed class ControlRemitosApi
 
     public async Task<bool> EliminarDespachoAsync(int despachoId)
         => (await _http.PostAsync($"api/control-remitos/eliminar-despacho/{despachoId}", null)).IsSuccessStatusCode;
+
+    public async Task<List<QrLogDto>> LogQrAsync(DateTime desde, DateTime hasta)
+        => await _http.GetFromJsonAsync<List<QrLogDto>>(
+            $"api/control-remitos/log-qr?desde={desde:yyyy-MM-dd}&hasta={hasta:yyyy-MM-dd}") ?? new();
+
+    public async Task<QrFotoInfoDto?> QrFotoInfoAsync(string remitoId, int idLocal)
+        => await _http.GetFromJsonAsync<QrFotoInfoDto>(
+            $"api/control-remitos/qr-foto-info?remitoId={Uri.EscapeDataString(remitoId)}&idLocal={idLocal}");
 }
