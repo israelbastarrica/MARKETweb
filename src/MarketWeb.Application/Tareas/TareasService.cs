@@ -62,7 +62,9 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
     Ok BIT NOT NULL CONSTRAINT DF_TareasLog_Ok DEFAULT 0,
     Origen VARCHAR(20) NOT NULL,
     Resultado NVARCHAR(MAX) NULL
-);";
+);
+IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
+    ALTER TABLE MARKET.dbo.TareasProgramadas ADD UltimaEjecucionAuto DATETIME NULL;";
         await cn.ExecuteAsync(new CommandDefinition(ddl, cancellationToken: ct));
     }
 
@@ -168,7 +170,7 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
         var rows = await cn.QueryAsync(new CommandDefinition(
-            @"SELECT Id, Hora, DiasSemana, UltimaEjecucion
+            @"SELECT Id, Hora, DiasSemana, UltimaEjecucionAuto
               FROM MARKET.dbo.TareasProgramadas
               WHERE Eliminado = 0 AND Activa = 1", cancellationToken: ct));
 
@@ -181,8 +183,8 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
                 continue;
             if (!TimeSpan.TryParse((string)(r.Hora ?? "00:00"), out var hora)) continue;
             if (ahora.TimeOfDay < hora) continue;
-            DateTime? ultima = r.UltimaEjecucion;
-            if (ultima is not null && ultima.Value.Date >= ahora.Date) continue;   // ya corrió hoy
+            DateTime? ultimaAuto = r.UltimaEjecucionAuto;
+            if (ultimaAuto is not null && ultimaAuto.Value.Date >= ahora.Date) continue;   // ya corrió hoy (automática)
             pendientes.Add((int)r.Id);
         }
         return pendientes;
@@ -211,10 +213,11 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
             new { id }, cancellationToken: ct));
         if (tarea is null) return;
 
-        // AUTO: marcamos UltimaEjecucion al arrancar para no re-disparar (loop de 60s / reinicio).
+        // AUTO: marcamos UltimaEjecucionAuto al arrancar para que el scheduler no re-dispare hoy
+        // (loop de 60s / reinicio). El manual NO la toca, así no cancela la corrida nocturna.
         if (origen == "AUTO")
             await cn.ExecuteAsync(new CommandDefinition(
-                "UPDATE MARKET.dbo.TareasProgramadas SET UltimaEjecucion = GETDATE() WHERE Id = @id",
+                "UPDATE MARKET.dbo.TareasProgramadas SET UltimaEjecucionAuto = GETDATE() WHERE Id = @id",
                 new { id }, cancellationToken: ct));
 
         var logId = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
@@ -244,8 +247,10 @@ CREATE TABLE MARKET.dbo.TareasProgramadasLog (
             "UPDATE MARKET.dbo.TareasProgramadasLog SET Fin = GETDATE(), Ok = @ok, Resultado = @resultado WHERE Id = @logId",
             new { ok, resultado, logId }, cancellationToken: ct));
 
+        // La fecha visible (UltimaEjecucion) se actualiza SIEMPRE, manual o automática.
         await cn.ExecuteAsync(new CommandDefinition(
-            @"UPDATE MARKET.dbo.TareasProgramadas SET UltimoOk = @ok, UltimoResultado = @resultado
+            @"UPDATE MARKET.dbo.TareasProgramadas
+              SET UltimaEjecucion = GETDATE(), UltimoOk = @ok, UltimoResultado = @resultado
               WHERE Id = @id",
             new { ok, resultado = Recortar(resultado, 500), id }, cancellationToken: ct));
     }
