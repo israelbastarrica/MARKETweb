@@ -1,0 +1,38 @@
+.esta-pc {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    border: 1px solid var(--mk-border);
+    background: var(--mk-surface);
+    color: var(--mk-text);
+    border-radius: 999px;
+    padding: .3rem .8rem;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.esta-pc i { color: #f59e0b; }
+
+.esta-pc:hover { border-color: #f59e0b; }
+
+/* Sin configurar: ámbar para que se note que hay que elegirla. */
+.esta-pc-sin {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, .12);
+    color: #b45309;
+}
+
+.esta-pc-sin i { color: #b45309; }
+
+html[data-theme="dark"] .esta-pc-sin { color: #f0b357; }
+html[data-theme="dark"] .esta-pc-sin i { color: #f0b357; }
+
+@media (max-width: 768px) {
+    .esta-pc span { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+}

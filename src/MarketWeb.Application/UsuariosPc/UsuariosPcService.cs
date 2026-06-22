@@ -106,6 +106,19 @@ public sealed class UsuariosPcService : IUsuariosPcService
         return rows.ToList();
     }
 
+    public async Task<IReadOnlyList<UsuarioPcDto>> ListarTodasPcsAsync(CancellationToken ct = default)
+    {
+        // PCs físicas reales: con nombre y que no sean solicitudes web (PC = mail con '@').
+        const string sql = """
+            SELECT ID AS Id, PC AS Pc FROM UsuariosPC
+            WHERE Eliminado = 0 AND PC IS NOT NULL AND LTRIM(RTRIM(PC)) <> '' AND PC NOT LIKE '%@%'
+            ORDER BY PC;
+            """;
+        using var cn = _db.Create();
+        var rows = await cn.QueryAsync<UsuarioPcDto>(new CommandDefinition(sql, cancellationToken: ct));
+        return rows.ToList();
+    }
+
     public async Task ReclamarPcAsync(int pcId, string mail, CancellationToken ct = default)
     {
         var m = (mail ?? "").Trim().ToLowerInvariant();

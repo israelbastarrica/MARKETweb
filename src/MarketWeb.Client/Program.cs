@@ -8,8 +8,18 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Misma URL base que la API que hostea esta SPA.
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
+// Identidad del equipo físico (por navegador) + header X-Pc en cada request.
+builder.Services.AddSingleton<DevicePcState>();
+
+// Misma URL base que la API que hostea esta SPA. El handler agrega el header X-Pc.
+builder.Services.AddScoped(sp =>
+{
+    var handler = new DevicePcHandler(sp.GetRequiredService<DevicePcState>())
+    {
+        InnerHandler = new HttpClientHandler()
+    };
+    return new HttpClient(handler) { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) };
+});
 
 // --- Clientes de API por feature ---
 builder.Services.AddScoped<LocalesApi>();

@@ -13,6 +13,10 @@ public sealed class AuthApi
     public async Task<List<UsuarioPcDto>> PcsDisponiblesAsync()
         => await _http.GetFromJsonAsync<List<UsuarioPcDto>>("api/auth/pcs-disponibles") ?? new();
 
+    /// <summary>Todas las PCs físicas, para el selector "Esta PC" por dispositivo.</summary>
+    public async Task<List<UsuarioPcDto>> PcsTodasAsync()
+        => await _http.GetFromJsonAsync<List<UsuarioPcDto>>("api/auth/pcs") ?? new();
+
     public async Task<(bool Ok, string? Error)> ReclamarPcAsync(int pcId)
     {
         var resp = await _http.PostAsJsonAsync("api/auth/reclamar-pc", new { pcId });

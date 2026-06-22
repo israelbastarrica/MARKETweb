@@ -1,0 +1,129 @@
+@using MarketWeb.Shared.UsuariosPc
+@inject AuthApi Api
+@inject DevicePcState Pc
+@inject IJSRuntime JS
+@implements IDisposable
+
+@if (_visible)
+{
+    <button class="esta-pc @(Pc.Configurada ? "" : "esta-pc-sin")" @onclick="Abrir"
+            title="@(Pc.Configurada ? "Esta PC: " + Pc.PcNombre : "Asigná un nombre a esta computadora")">
+        <i class="fa-solid fa-desktop"></i>
+        <span>@(Pc.Configurada ? Pc.PcNombre : "Configurá esta PC")</span>
+    </button>
+}
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Esta PC</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Elegí qué computadora es <strong>esta</strong>. Queda guardado en este equipo
+                        (no afecta a las demás) y se usa para los remitos impresos.
+                    </p>
+                    @if (_cargando)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Cargando PCs...</p>
+                    }
+                    else
+                    {
+                        <select class="form-select" @bind="_sel">
+                            <option value="0">— Elegí esta PC —</option>
+                            @foreach (var p in _pcs)
+                            {
+                                <option value="@p.Id">@p.Pc</option>
+                            }
+                        </select>
+                        @if (_pcs.Count == 0)
+                        {
+                            <div class="alert alert-warning mt-2 mb-0 py-2 small">
+                                No hay PCs cargadas. Pedile a Sistemas que dé de alta esta máquina en Configuración → Usuarios.
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="Guardar" disabled="@(_sel == 0)">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool _visible;
+    private bool _modal, _cargando;
+    private int _sel;
+    private List<UsuarioPcDto> _pcs = new();
+
+    protected override void OnInitialized() => Pc.OnChange += OnPcChange;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Solo para usuarios habilitados (estado ok).
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            var ok = state.User.Identity?.IsAuthenticated == true
+                     && string.Equals(state.User.FindFirst("estado")?.Value, "ok", StringComparison.OrdinalIgnoreCase);
+            if (ok != _visible) { _visible = ok; StateHasChanged(); }
+            if (!ok) return;
+        }
+
+        // Carga la PC de ESTE navegador (si ya se eligió antes).
+        if (!Pc.Configurada)
+        {
+            try
+            {
+                var idTxt = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyId);
+                var nombre = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre);
+                if (int.TryParse(idTxt, out var id) && id > 0)
+                {
+                    Pc.Set(id, nombre);
+                    StateHasChanged();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void OnPcChange() => InvokeAsync(StateHasChanged);
+
+    private async Task Abrir()
+    {
+        _modal = true;
+        _sel = Pc.PcId ?? 0;
+        _cargando = true;
+        try { _pcs = await Api.PcsTodasAsync(); } catch { _pcs = new(); }
+        _cargando = false;
+    }
+
+    private async Task Guardar()
+    {
+        if (_sel == 0) return;
+        var pc = _pcs.FirstOrDefault(p => p.Id == _sel);
+        if (pc is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", DevicePcState.KeyId, _sel.ToString());
+            await JS.InvokeVoidAsync("localStorage.setItem", DevicePcState.KeyNombre, pc.Pc ?? "");
+        }
+        catch { }
+        Pc.Set(_sel, pc.Pc);
+        _modal = false;
+    }
+
+    public void Dispose() => Pc.OnChange -= OnPcChange;
+}

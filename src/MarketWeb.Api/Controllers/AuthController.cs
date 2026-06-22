@@ -55,6 +55,12 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> PcsDisponibles([FromServices] IUsuariosPcService usuarios, CancellationToken ct)
         => Ok(await usuarios.ListarDisponiblesAsync(ct));
 
+    /// <summary>Todas las PCs físicas activas, para el selector "Esta PC" por dispositivo.</summary>
+    [Authorize]
+    [HttpGet("pcs")]
+    public async Task<IActionResult> Pcs([FromServices] IUsuariosPcService usuarios, CancellationToken ct)
+        => Ok(await usuarios.ListarTodasPcsAsync(ct));
+
     /// <summary>El usuario reclama una PC. Queda pendiente de aprobación.</summary>
     [Authorize]
     [HttpPost("reclamar-pc")]
