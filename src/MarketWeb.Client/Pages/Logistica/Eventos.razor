@@ -1,7 +1,9 @@
 @page "/logistica/eventos"
 @using MarketWeb.Shared.Reposicion
+@implements IDisposable
 @inject EventosApi Api
 @inject ReposicionApi RepoApi
+@inject PageStateService State
 @inject IJSRuntime JS
 
 <PageTitle>Eventos reposición</PageTitle>
@@ -213,7 +215,21 @@
     private EventoDetalleDto? _det;
     private string _accion = "", _accionComentario = "";
 
-    protected override async Task OnInitializedAsync() => await Cargar();
+    private const string StateKey = "eventos";
+    private sealed class Snap { public string Local = "TODOS"; public DateTime Desde; public DateTime Hasta; public bool VerTodos; public List<EventoDto> Items = new(); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        {
+            _local = s.Local; _desde = s.Desde; _hasta = s.Hasta; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
+            return;
+        }
+        await Cargar();
+    }
+
+    public void Dispose()
+        => State.Save(StateKey, new Snap { Local = _local, Desde = _desde, Hasta = _hasta, VerTodos = _verTodos, Items = _items }, 0);
 
     private static string TipoClase(string tipo) => tipo switch
     {

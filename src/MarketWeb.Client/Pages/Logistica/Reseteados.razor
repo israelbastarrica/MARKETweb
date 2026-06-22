@@ -1,7 +1,9 @@
 @page "/logistica/reseteados"
 @using MarketWeb.Shared.Reposicion
+@implements IDisposable
 @inject ReseteadosApi Api
 @inject ReemplazosApi ReempApi
+@inject PageStateService State
 @inject IJSRuntime JS
 
 <PageTitle>Reseteados</PageTitle>
@@ -137,11 +139,22 @@
     private int _ePacks;
     private string? _errorModal;
 
+    private const string StateKey = "reseteados";
+    private sealed class Snap { public List<string> Mobiliarios = new(); public string FLocal = "TODOS"; public string FMobiliario = "TODOS"; public string FArtCod = ""; public List<ReseteadoDto> Items = new(); }
+
     protected override async Task OnInitializedAsync()
     {
+        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        {
+            _mobiliarios = s.Mobiliarios; _fLocal = s.FLocal; _fMobiliario = s.FMobiliario; _fArtCod = s.FArtCod; _items = s.Items; _cargando = false;
+            return;
+        }
         try { _mobiliarios = await Api.MobiliariosAsync(); } catch { _mobiliarios = new(); }
         await Cargar();
     }
+
+    public void Dispose()
+        => State.Save(StateKey, new Snap { Mobiliarios = _mobiliarios, FLocal = _fLocal, FMobiliario = _fMobiliario, FArtCod = _fArtCod, Items = _items }, 0);
 
     private async Task Cargar()
     {
