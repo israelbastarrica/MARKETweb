@@ -1,6 +1,8 @@
 @page "/logistica/reporte-articulos"
 @using MarketWeb.Shared.Reposicion
+@implements IDisposable
 @inject ReporteArticulosApi Api
+@inject PageStateService State
 @inject IJSRuntime JS
 
 <PageTitle>Reporte Artículos</PageTitle>
@@ -189,7 +191,7 @@
 
 @code {
     private ReporteArticulosCombosDto _c = new();
-    private readonly ReporteArticulosFiltro _f = new();
+    private ReporteArticulosFiltro _f = new();
     private string _provSel = "";
     private string _anioSel = "";
     private List<ArticuloReporteDto> _items = new();
@@ -201,10 +203,43 @@
     private int _cant = 60, _reemp = 1;
     private string? _errorPacks;
 
+    private const string StateKey = "reporte-articulos";
+
+    private sealed class Snap
+    {
+        public ReporteArticulosCombosDto Combos = new();
+        public ReporteArticulosFiltro Filtro = new();
+        public string ProvSel = "";
+        public string AnioSel = "";
+        public List<ArticuloReporteDto> Items = new();
+        public List<string> Sel = new();
+        public bool Busco;
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        // Restaura la consulta al volver (ej. de la ficha del artículo) sin re-buscar ni recargar combos.
+        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        {
+            _c = s.Combos;
+            _f = s.Filtro;
+            _provSel = s.ProvSel;
+            _anioSel = s.AnioSel;
+            _items = s.Items;
+            _busco = s.Busco;
+            _sel.Clear();
+            foreach (var cod in s.Sel) _sel.Add(cod);
+            return;
+        }
         try { _c = await Api.CombosAsync(); } catch { _c = new(); }
     }
+
+    public void Dispose()
+        => State.Save(StateKey, new Snap
+        {
+            Combos = _c, Filtro = _f, ProvSel = _provSel, AnioSel = _anioSel,
+            Items = _items, Sel = _sel.ToList(), Busco = _busco
+        }, 0);
 
     private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
 
