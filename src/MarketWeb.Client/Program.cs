@@ -41,6 +41,7 @@ builder.Services.AddScoped<ReposicionApi>();
 builder.Services.AddScoped<EventosApi>();
 builder.Services.AddScoped<ReseteadosApi>();
 builder.Services.AddScoped<ControlRemitosApi>();
+builder.Services.AddScoped<ReporteArticulosApi>();
 builder.Services.AddScoped<TareasApi>();
 builder.Services.AddSingleton<PageStateService>();
 

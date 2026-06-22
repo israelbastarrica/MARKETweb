@@ -1,0 +1,259 @@
+@page "/logistica/reporte-articulos"
+@using MarketWeb.Shared.Reposicion
+@inject ReporteArticulosApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Reporte Artículos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Reporte Artículos" Icono="fa-solid fa-shirt" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Artículos con su configuración de packs. Seleccioná filas y usá <strong>Editar packs</strong> para fijar Cant. por pack / packs de reemplazo en masa.
+    </p>
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Código</label>
+                <input class="form-control form-control-sm" @bind="_f.CodArt" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Descripción</label>
+                <input class="form-control form-control-sm" @bind="_f.Descripcion" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Tipo</label>
+                <select class="form-select form-select-sm" @bind="_f.Tipo">
+                    <option value="TODOS">TODOS</option>
+                    @foreach (var x in _c.Tipos) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Combo</label>
+                <select class="form-select form-select-sm" @bind="_f.Combo">
+                    <option value="TODOS">TODOS</option>
+                    @foreach (var x in _c.Combos) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Proveedor</label>
+                <select class="form-select form-select-sm" @bind="_provSel">
+                    <option value="">TODOS</option>
+                    @foreach (var p in _c.Proveedores) { <option value="@p.Cod">@p.Nombre</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Familia</label>
+                <select class="form-select form-select-sm" @bind="_f.Familia">
+                    <option value="TODOS">TODOS</option>
+                    @foreach (var x in _c.Familias) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Categoría</label>
+                <select class="form-select form-select-sm" @bind="_f.Categoria">
+                    <option value="TODOS">TODOS</option>
+                    @foreach (var x in _c.Categorias) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Temporada</label>
+                <select class="form-select form-select-sm" @bind="_f.Temporada">
+                    <option value="TODOS">TODOS</option>
+                    @foreach (var x in _c.Temporadas) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Año</label>
+                <select class="form-select form-select-sm" @bind="_anioSel">
+                    <option value="">TODOS</option>
+                    @foreach (var x in _c.Anios) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Stock</label>
+                <select class="form-select form-select-sm" @bind="_f.Stock">
+                    <option value="0">—</option>
+                    <option value="1">En CENTRAL</option>
+                    <option value="5">En CCENTRAL</option>
+                    <option value="2">En LURO</option>
+                    <option value="3">En PERALTA</option>
+                    <option value="4">En LOCALES</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-auto d-flex">
+                <button class="btn btn-primary btn-sm flex-grow-1" @onclick="Buscar" disabled="@_cargando">
+                    @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                    else { <i class="fa-solid fa-magnifying-glass me-1"></i> }
+                    Buscar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_items.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="() => MarcarTodo(true)">Marcar todo</button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="() => MarcarTodo(false)">Desmarcar todo</button>
+            <button class="btn btn-primary btn-sm" @onclick="AbrirPacks" disabled="@(_sel.Count == 0)">
+                <i class="fa-solid fa-box me-1"></i> Editar packs (@_sel.Count)
+            </button>
+            <span class="text-muted small ms-auto">@_items.Count artículo(s)</span>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-shirt"></i><p>@(_busco ? "No se encontraron artículos con esos filtros." : "Aplicá filtros y tocá Buscar.")</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive ra-mov">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:42px"></th>
+                        <th class="text-end">Orden</th><th>Código</th><th>Descripción</th><th>Proveedor</th>
+                        <th>Combo</th><th>Familia</th><th>Tipo</th><th>Temporada</th><th class="text-center">Año</th><th>Categoría</th>
+                        <th class="text-end">Cant. Pack</th><th class="text-end">Packs Reemp.</th><th>Fecha Pack</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in _items)
+                    {
+                        <tr class="@(_sel.Contains(a.Codigo) ? "ra-sel" : "")">
+                            <td class="text-center"><input type="checkbox" checked="@_sel.Contains(a.Codigo)" @onchange="e => Toggle(a.Codigo, (bool)e.Value!)" /></td>
+                            <td class="text-end">@a.Orden</td>
+                            <td><ArticuloLink Codigo="@a.Codigo" /></td>
+                            <td>@a.Descripcion</td>
+                            <td>@a.Proveedor</td>
+                            <td>@a.Combo</td>
+                            <td>@a.Familia</td>
+                            <td>@a.Tipo</td>
+                            <td>@a.Temporada</td>
+                            <td class="text-center">@a.Anio</td>
+                            <td>@a.Categoria</td>
+                            <td class="text-end fw-bold">@(a.CantPack?.ToString("N0") ?? "—")</td>
+                            <td class="text-end">@(a.PacksReemplazo?.ToString("N0") ?? "—")</td>
+                            <td class="small">@(a.FechaPack?.ToString("dd/MM/yyyy") ?? "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_modalPacks)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-box me-2"></i>Editar packs — @_sel.Count artículo(s)</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalPacks = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_errorPacks is not null) { <div class="alert alert-danger py-2">@_errorPacks</div> }
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="chkCant" @bind="_modCant" />
+                        <label class="form-check-label" for="chkCant">Modificar <strong>Cant. por pack</strong></label>
+                    </div>
+                    <input type="number" min="1" class="form-control mb-3" @bind="_cant" disabled="@(!_modCant)" />
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="chkReemp" @bind="_modReemp" />
+                        <label class="form-check-label" for="chkReemp">Modificar <strong>Packs de reemplazo</strong></label>
+                    </div>
+                    <input type="number" min="0" class="form-control" @bind="_reemp" disabled="@(!_modReemp)" />
+
+                    <div class="form-text mt-2">Se aplica a los @_sel.Count artículos seleccionados. Si el artículo no tenía configuración, se crea.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalPacks = false">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="GuardarPacks" disabled="@_guardando">
+                        @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private ReporteArticulosCombosDto _c = new();
+    private readonly ReporteArticulosFiltro _f = new();
+    private string _provSel = "";
+    private string _anioSel = "";
+    private List<ArticuloReporteDto> _items = new();
+    private readonly HashSet<string> _sel = new(StringComparer.OrdinalIgnoreCase);
+    private bool _cargando, _busco;
+
+    private bool _modalPacks, _guardando;
+    private bool _modCant = true, _modReemp;
+    private int _cant = 60, _reemp = 1;
+    private string? _errorPacks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _c = await Api.CombosAsync(); } catch { _c = new(); }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
+
+    private async Task Buscar()
+    {
+        _cargando = true; _busco = true;
+        _f.ProveedorCod = _provSel;
+        _f.Anio = int.TryParse(_anioSel, out var a) ? a : 0;
+        try { _items = await Api.ListarAsync(_f); }
+        catch { _items = new(); }
+        finally { _cargando = false; }
+        // Limpia selección de filas que ya no están.
+        _sel.RemoveWhere(c => !_items.Any(i => string.Equals(i.Codigo, c, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void Toggle(string cod, bool on)
+    {
+        if (on) _sel.Add(cod); else _sel.Remove(cod);
+    }
+
+    private void MarcarTodo(bool on)
+    {
+        _sel.Clear();
+        if (on) foreach (var a in _items) _sel.Add(a.Codigo);
+    }
+
+    private void AbrirPacks()
+    {
+        if (_sel.Count == 0) return;
+        _errorPacks = null;
+        _modalPacks = true;
+    }
+
+    private async Task GuardarPacks()
+    {
+        if (!_modCant && !_modReemp) { _errorPacks = "Elegí al menos un campo para modificar."; return; }
+        _guardando = true; _errorPacks = null;
+        var n = await Api.GuardarPacksAsync(new GuardarPacksRequest
+        {
+            ArtCods = _sel.ToList(),
+            ModificarCantPack = _modCant,
+            CantPack = _cant,
+            ModificarPacksReemplazo = _modReemp,
+            PacksReemplazo = _reemp
+        });
+        _guardando = false;
+        if (n < 0) { _errorPacks = "No se pudo guardar."; return; }
+        _modalPacks = false;
+        await JS.InvokeVoidAsync("alert", $"{n} registro(s) actualizados.");
+        await Buscar();
+    }
+}

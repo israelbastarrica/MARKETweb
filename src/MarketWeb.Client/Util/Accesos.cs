@@ -31,6 +31,7 @@ public static class Accesos
         new("/logistica/eventos", "Eventos", "fa-solid fa-triangle-exclamation", "Logística"),
         new("/logistica/reseteados", "Reseteados", "fa-solid fa-rotate-left", "Logística"),
         new("/logistica/control-remitos", "Control de Remitos", "fa-solid fa-truck-ramp-box", "Logística"),
+        new("/logistica/reporte-articulos", "Reporte Artículos", "fa-solid fa-shirt", "Logística"),
         new("/configuracion/locales", "Locales", "fa-solid fa-shop", "Configuración"),
         new("/configuracion/tipos-locales", "Tipos de Locales", "fa-solid fa-warehouse", "Configuración"),
         new("/configuracion/usuarios", "Usuarios", "fa-solid fa-users", "Configuración"),

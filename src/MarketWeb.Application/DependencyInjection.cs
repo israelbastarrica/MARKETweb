@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IEventosService, EventosService>();
         services.AddScoped<IReseteadosService, ReseteadosService>();
         services.AddScoped<IControlRemitosService, ControlRemitosService>();
+        services.AddScoped<IReporteArticulosService, ReporteArticulosService>();
         services.AddSingleton<ReposicionJobs>();
         services.AddScoped<ITareasService, TareasService>();
         services.AddSingleton<TareasRunner>();
