@@ -10,6 +10,7 @@ using MarketWeb.Application.Mapeo;
 using MarketWeb.Application.Palets;
 using MarketWeb.Application.Reemplazos;
 using MarketWeb.Application.RemitoImpresion;
+using MarketWeb.Application.Reposicion;
 using MarketWeb.Application.TiposLocal;
 using MarketWeb.Application.Uso;
 using MarketWeb.Application.UsuariosPc;
@@ -47,6 +48,8 @@ public static class DependencyInjection
         services.AddScoped<ILogisticaDashboardService, LogisticaDashboardService>();
         services.AddScoped<IUsoService, UsoService>();
         services.AddScoped<IReemplazosService, ReemplazosService>();
+        services.AddScoped<IReposicionService, ReposicionService>();
+        services.AddSingleton<ReposicionJobs>();
         services.AddScoped<Common.ISmtpSender, Common.SmtpSender>();
 
         return services;

@@ -1,0 +1,213 @@
+@page "/logistica/reposicion"
+@using MarketWeb.Shared.Reposicion
+@inject ReposicionApi Api
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Reposición</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Reposición" Icono="fa-solid fa-clipboard-check" />
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" style="min-width: 160px" @bind="_local" disabled="@_corriendo">
+                <option value="TODOS">TODOS</option>
+                <option value="LURO">LURO</option>
+                <option value="PERALTA">PERALTA</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Simulación (corte 21:00)</label>
+            <input type="date" class="form-control" min="2026-05-20" max="@_hoyIso"
+                   @bind="_fecha" @bind:after="OnFechaChanged" disabled="@_corriendo" />
+        </div>
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="chkReemp" @bind="_generarReemplazos" disabled="@_corriendo" />
+            <label class="form-check-label small" for="chkReemp">Generar reemplazos</label>
+        </div>
+        <button class="btn btn-primary" @onclick="Calcular" disabled="@_corriendo">
+            @if (_corriendo) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+            else { <i class="fa-solid fa-calculator me-1"></i> }
+            Calcular
+        </button>
+    </div>
+
+    @if (_esSimulacion)
+    {
+        <div class="repo-sim mb-2">
+            <i class="fa-solid fa-flask me-1"></i> SIMULACIÓN del @_fecha.ToString("dd/MM/yyyy") a las 21:00
+        </div>
+    }
+
+    @if (_corriendo)
+    {
+        <div class="repo-procesando">
+            <div class="spinner-border text-warning" role="status"></div>
+            <div>
+                <div class="t">Calculando reposición de <strong>@_local</strong>…</div>
+                <div class="s">El cálculo tarda ~2 minutos. No cierres la pantalla. Transcurrido: <strong>@Transcurrido</strong></div>
+            </div>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i><div class="flex-grow-1">@_error</div>
+        </div>
+    }
+
+    @if (_resultado is not null && !_corriendo)
+    {
+        @if (_huerfanos > 0)
+        {
+            <div class="alert alert-info py-2 small d-flex align-items-center">
+                <i class="fa-solid fa-retweet me-2"></i>
+                <div>Esta corrida generó <strong>@_huerfanos</strong> reemplazo(s) por huérfano. Saldrán en el PDF (Fase 2).</div>
+            </div>
+        }
+
+        @if (_filas.Count == 0)
+        {
+            <div class="market-empty"><i class="fa-solid fa-clipboard-check"></i><p>No hay packs a reponer para el filtro.</p></div>
+        }
+        else
+        {
+            <div class="market-card table-responsive">
+                <table class="market-table align-middle repo-tabla">
+                    <thead>
+                        <tr>
+                            <th>Local</th>
+                            <th>Ubicación Depósito</th>
+                            <th>ARTCOD</th>
+                            <th>Descripción</th>
+                            <th class="text-end">Cant. Pack</th>
+                            <th>Últ. Remito</th>
+                            <th class="text-end">Pendiente</th>
+                            <th class="text-end">Packs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var f in _filas)
+                        {
+                            <tr class="@(f.EsVirtual ? "fila-virtual" : "")">
+                                <td>@f.LocalDestino</td>
+                                <td>@f.UbicacionDeposito</td>
+                                <td><ArticuloLink Codigo="@f.ArtCod" /></td>
+                                <td>@f.ArtDes</td>
+                                <td class="text-end">@f.CantPack.ToString("N0")</td>
+                                <td class="@(f.EsVirtual ? "ult-virtual" : "")">@f.UltRemitoTexto</td>
+                                <td class="text-end">@f.Pendiente.ToString("N0")</td>
+                                <td class="text-end fw-bold">@f.Packs.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="repo-footer">
+                <span>@_resultado.TotalArticulos.ToString("N0") artículo@(_resultado.TotalArticulos == 1 ? "" : "s")</span>
+                <span>·</span>
+                <span>@_resultado.TotalPacks.ToString("N0") pack@(_resultado.TotalPacks == 1 ? "" : "s") a reponer</span>
+                <span>·</span>
+                <span>@_resultado.TotalPrendas.ToString("N0") prenda@(_resultado.TotalPrendas == 1 ? "" : "s") en total</span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _local = "TODOS";
+    private DateTime _fecha = DateTime.Today;
+    private bool _generarReemplazos = true;
+
+    private bool _corriendo;
+    private string? _error;
+    private string? _jobId;
+    private DateTime _inicio;
+    private System.Threading.Timer? _tick;
+
+    private ReposicionResultadoDto? _resultado;
+    private List<ReposicionFilaDto> _filas = new();
+    private int _huerfanos;
+
+    private string _hoyIso = DateTime.Today.ToString("yyyy-MM-dd");
+    private bool _esSimulacion => _fecha.Date < DateTime.Today;
+    private string Transcurrido => (DateTime.Now - _inicio).ToString(@"mm\:ss");
+
+    private void OnFechaChanged() => StateHasChanged();
+
+    private async Task Calcular()
+    {
+        var aviso = _esSimulacion
+            ? $"Vas a SIMULAR la reposición de {_local} al {_fecha:dd/MM/yyyy}. Esta corrida procesa y persiste en producción. ¿Continuar?"
+            : $"Vas a calcular la reposición REAL de {_local}. Esta corrida procesa y persiste en producción. ¿Continuar?";
+        if (!await JS.InvokeAsync<bool>("confirm", aviso)) return;
+
+        _error = null;
+        _resultado = null;
+        _filas = new();
+        _huerfanos = 0;
+
+        var req = new ReposicionCalcularRequest
+        {
+            Local = _local,
+            FechaCorte = _esSimulacion ? _fecha.Date : null,
+            GenerarReemplazos = _generarReemplazos
+        };
+
+        _jobId = await Api.CalcularAsync(req);
+        if (_jobId is null)
+        {
+            _error = "No se pudo iniciar el cálculo.";
+            return;
+        }
+
+        _corriendo = true;
+        _inicio = DateTime.Now;
+        // Tick para refrescar el cronómetro cada segundo mientras corre.
+        _tick = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000);
+
+        await Poll();
+    }
+
+    private async Task Poll()
+    {
+        while (_corriendo)
+        {
+            await Task.Delay(2500);
+            var job = await Api.EstadoAsync(_jobId!);
+            if (job is null)
+            {
+                Finalizar();
+                _error = "Se perdió el seguimiento de la corrida (¿se reinició el servidor?). Volvé a calcular.";
+                return;
+            }
+            if (job.Estado == "done")
+            {
+                Finalizar();
+                _resultado = job.Resultado;
+                _filas = _resultado?.Filas.Where(f => !f.EsHuerfano).ToList() ?? new();
+                _huerfanos = _resultado?.Filas.Count(f => f.EsHuerfano && f.NuevoEstaCorrida) ?? 0;
+                return;
+            }
+            if (job.Estado == "error")
+            {
+                Finalizar();
+                _error = "Error al calcular reposición: " + (job.Error ?? "desconocido");
+                return;
+            }
+        }
+    }
+
+    private void Finalizar()
+    {
+        _corriendo = false;
+        _tick?.Dispose();
+        _tick = null;
+    }
+
+    public void Dispose() => _tick?.Dispose();
+}

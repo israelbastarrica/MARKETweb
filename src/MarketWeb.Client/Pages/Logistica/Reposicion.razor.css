@@ -1,0 +1,40 @@
+.repo-sim {
+    display: inline-block;
+    background: rgba(245, 158, 11, .14);
+    color: #b45309;
+    border: 1px solid rgba(245, 158, 11, .45);
+    border-radius: 8px;
+    padding: .35rem .7rem;
+    font-weight: 600;
+    font-size: .85rem;
+}
+
+.repo-procesando {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--mk-surface-2);
+    border: 1px solid var(--mk-border);
+    border-radius: 12px;
+    padding: 1.1rem 1.3rem;
+    margin-bottom: 1rem;
+}
+
+.repo-procesando .t { font-size: 1rem; font-weight: 600; color: var(--mk-text-strong); }
+.repo-procesando .s { font-size: .82rem; color: var(--mk-text-muted); margin-top: .2rem; }
+
+/* Filas "virtuales" (remito virtual): mismo resaltado ámbar que el desktop. */
+.repo-tabla .fila-virtual { background: rgba(245, 158, 11, .12); }
+.repo-tabla .ult-virtual { color: #b45309; font-weight: 700; }
+
+.repo-footer {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-top: .8rem;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--mk-text-strong);
+}
+
+.repo-footer span:nth-child(even) { color: var(--mk-text-muted); font-weight: 400; }
