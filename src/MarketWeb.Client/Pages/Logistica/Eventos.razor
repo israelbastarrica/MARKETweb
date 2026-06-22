@@ -1,0 +1,223 @@
+@page "/logistica/eventos"
+@using MarketWeb.Shared.Reposicion
+@inject EventosApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Eventos reposición</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Eventos" Icono="fa-solid fa-triangle-exclamation" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Sobrantes y faltantes que cargan los locales en piso. Doble clic / botón para ver el detalle, foto y marcarlo como procesado.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" @bind="_local">
+                <option value="TODOS">TODOS</option>
+                <option value="CENTRAL">CENTRAL</option>
+                <option value="LURO">LURO</option>
+                <option value="PERALTA">PERALTA</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Desde</label>
+            <input type="date" class="form-control" @bind="_desde" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Hasta</label>
+            <input type="date" class="form-control" @bind="_hasta" />
+        </div>
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="chkTodos" @bind="_verTodos" />
+            <label class="form-check-label small" for="chkTodos">Ver todos (incluye procesados)</label>
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-magnifying-glass me-1"></i> Buscar</button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-triangle-exclamation"></i><p>No hay eventos para el filtro.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle ev-tabla">
+                <thead>
+                    <tr>
+                        <th>Fecha</th><th>Local</th><th>ARTCOD</th><th>Descripción</th><th>Remito</th>
+                        <th class="text-center">Tipo</th><th class="text-end">Cant. Packs</th>
+                        <th class="text-center">Foto</th><th class="text-center">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ev in _items)
+                    {
+                        <tr class="@(ev.Estado != "PENDIENTE" ? "ev-cerrado" : "")" @ondblclick="() => AbrirDetalle(ev.Id)">
+                            <td class="small">@ev.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@ev.Local</td>
+                            <td>@if (!string.IsNullOrEmpty(ev.ArtCod)) { <ArticuloLink Codigo="@ev.ArtCod" /> }</td>
+                            <td>@ev.Descripcion</td>
+                            <td class="small">@ev.RemitoDisplay</td>
+                            <td class="text-center fw-bold @TipoClase(ev.TipoDiferencia)">@ev.TipoDiferencia</td>
+                            <td class="text-end">@ev.CantidadPacks</td>
+                            <td class="text-center">@(ev.TieneFoto ? "✓" : "")</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => AbrirDetalle(ev.Id)" title="Ver detalle">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">
+            @_items.Count evento@(_items.Count == 1 ? "" : "s") ·
+            @_items.Count(e => e.TipoDiferencia == "SOBRANTE") sobrante(s) ·
+            @_items.Count(e => e.TipoDiferencia == "FALTANTE") faltante(s)
+        </p>
+    }
+</div>
+
+@if (_modal && _det is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title @TipoClase(_det.TipoDiferencia)">
+                        EVENTO: @_det.TipoDiferencia — @_det.Local (@_det.TipoCodigo)
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="small text-muted mb-3">
+                        <span>Fecha: @_det.Fecha.ToString("dd/MM/yyyy HH:mm")</span>
+                        @if (!string.IsNullOrEmpty(_det.CodigoEscaneado)) { <span> · Código: @_det.CodigoEscaneado</span> }
+                        @if (!string.IsNullOrEmpty(_det.RemitoDisplay)) { <span> · Remito: @_det.RemitoDisplay</span> }
+                        @if (!string.IsNullOrEmpty(_det.DescripcionArt)) { <span> · @_det.DescripcionArt</span> }
+                        @if (!string.IsNullOrEmpty(_det.CantidadPacks)) { <span> · Cant. packs: @_det.CantidadPacks</span> }
+                        @if (!string.IsNullOrEmpty(_det.Usuario)) { <span> · Usuario: @_det.Usuario</span> }
+                    </div>
+
+                    <div class="row g-3">
+                        @if (_det.TieneFoto)
+                        {
+                            <div class="col-md-5">
+                                <a href="@($"api/eventos/{_det.Id}/foto")" target="_blank" rel="noopener" title="Ver grande">
+                                    <img src="@($"api/eventos/{_det.Id}/foto")" class="ev-foto" alt="Foto del evento" />
+                                </a>
+                            </div>
+                        }
+                        <div class="@(_det.TieneFoto ? "col-md-7" : "col-12")">
+                            @if (_det.Items.Count == 0)
+                            {
+                                <p class="text-muted small">@(_det.TipoCodigo == "REMITO" ? "(remito sin items o no encontrado en Dragon)" : "(sin remito asociado)")</p>
+                            }
+                            else
+                            {
+                                <table class="market-table align-middle">
+                                    <thead><tr><th>Cód.Art</th><th>Descripción</th><th>Color</th><th>Talle</th><th class="text-end">Cant.</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var it in _det.Items)
+                                        {
+                                            <tr>
+                                                <td>@it.ArtCod</td><td>@it.Descripcion</td><td>@it.Color</td>
+                                                <td class="text-center">@it.Talle</td><td class="text-end fw-bold">@it.Cantidad</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    @if (_det.Eliminado)
+                    {
+                        <span class="text-muted">Evento eliminado.</span>
+                    }
+                    else
+                    {
+                        <button class="btn btn-outline-danger me-auto" @onclick="Eliminar" disabled="@_accionando">
+                            <i class="fa-solid fa-trash me-1"></i> Eliminar (carga errada)
+                        </button>
+                        @if (_det.Procesado)
+                        {
+                            <span class="badge text-bg-secondary">YA PROCESADO</span>
+                        }
+                        else
+                        {
+                            <button class="btn btn-success" @onclick="MarcarProcesado" disabled="@_accionando">
+                                @if (_accionando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                                else { <i class="fa-solid fa-check me-1"></i> }
+                                Marcar procesado
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private string _local = "TODOS";
+    private DateTime _desde = DateTime.Today.AddDays(-30);
+    private DateTime _hasta = DateTime.Today;
+    private bool _verTodos;
+
+    private List<EventoDto> _items = new();
+    private bool _cargando = true;
+
+    private bool _modal, _accionando;
+    private EventoDetalleDto? _det;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private static string TipoClase(string tipo) => tipo switch
+    {
+        "SOBRANTE" => "ev-sobrante",
+        "FALTANTE" => "ev-faltante",
+        _ => ""
+    };
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _items = await Api.ListarAsync(_local, _desde, _hasta, _verTodos); }
+        catch { _items = new(); }
+        finally { _cargando = false; }
+    }
+
+    private async Task AbrirDetalle(int id)
+    {
+        _det = await Api.DetalleAsync(id);
+        if (_det is not null) _modal = true;
+    }
+
+    private async Task MarcarProcesado()
+    {
+        if (_det is null) return;
+        _accionando = true;
+        if (await Api.MarcarProcesadoAsync(_det.Id)) _det.Procesado = true;
+        _accionando = false;
+        await Cargar();
+    }
+
+    private async Task Eliminar()
+    {
+        if (_det is null) return;
+        if (!await JS.InvokeAsync<bool>("confirm", "¿Eliminar este evento? Es para cargas erradas, no para procesarlo.")) return;
+        _accionando = true;
+        if (await Api.EliminarAsync(_det.Id)) { _modal = false; await Cargar(); }
+        _accionando = false;
+    }
+}

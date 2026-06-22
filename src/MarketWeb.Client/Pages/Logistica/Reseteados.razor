@@ -1,0 +1,206 @@
+@page "/logistica/reseteados"
+@using MarketWeb.Shared.Reposicion
+@inject ReseteadosApi Api
+@inject ReemplazosApi ReempApi
+@inject IJSRuntime JS
+
+<PageTitle>Reseteados</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Reseteados" Icono="fa-solid fa-rotate-left" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Artículos cuyo contador de reposición se reseteó, con los packs detectados en ese momento.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div>
+            <label class="form-label small text-muted mb-1">Local</label>
+            <select class="form-select" @bind="_fLocal" @bind:after="Cargar">
+                <option value="TODOS">TODOS</option>
+                <option value="LURO">LURO</option>
+                <option value="PERALTA">PERALTA</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Mobiliario</label>
+            <select class="form-select" style="min-width:200px" @bind="_fMobiliario" @bind:after="Cargar">
+                <option value="TODOS">TODOS</option>
+                @foreach (var m in _mobiliarios) { <option value="@m">@m</option> }
+            </select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Artículo</label>
+            <input class="form-control" placeholder="Código..." @bind="_fArtCod" @bind:event="oninput" @onkeyup="OnKey" />
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-magnifying-glass me-1"></i> Buscar</button>
+        <button class="btn btn-primary" @onclick="AbrirAlta"><i class="fa-solid fa-plus me-1"></i> Nuevo</button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-rotate-left"></i><p>No hay reseteados para el filtro.</p></div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Fecha</th><th>Local</th><th>Mobiliario</th><th>ARTCOD</th><th>Descripción</th>
+                        <th class="text-end">Packs Det.</th><th class="text-center" style="width:96px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _items)
+                    {
+                        <tr @ondblclick="() => AbrirModif(r)">
+                            <td class="small">@r.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@r.Local</td>
+                            <td>@r.Mobiliario</td>
+                            <td><ArticuloLink Codigo="@r.ArtCod" /></td>
+                            <td>@r.ArtDes</td>
+                            <td class="text-end fw-bold">@r.PacksDetectados.ToString("N0")</td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModif(r)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(r)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">@_items.Count registro(s).</p>
+    }
+</div>
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editId > 0 ? "Modificar reseteado" : "Nuevo reseteado")</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
+                    <div class="mb-3">
+                        <label class="form-label">Local</label>
+                        <select class="form-select" @bind="_eLocal">
+                            <option value="LURO">LURO</option>
+                            <option value="PERALTA">PERALTA</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mobiliario</label>
+                        <select class="form-select" @bind="_eMobiliario">
+                            <option value="">— Elegí el mobiliario —</option>
+                            @foreach (var m in _mobiliarios) { <option value="@m">@m</option> }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Artículo (código)</label>
+                        <input class="form-control" @bind="_eArtCod" @bind:after="BuscarDesc" placeholder="ARTCOD" />
+                        @if (!string.IsNullOrEmpty(_eDesc)) { <div class="small text-muted mt-1">@_eDesc</div> }
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Packs detectados</label>
+                        <input type="number" min="0" class="form-control" @bind="_ePacks" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                        @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<string> _mobiliarios = new();
+    private List<ReseteadoDto> _items = new();
+    private string _fLocal = "TODOS", _fMobiliario = "TODOS", _fArtCod = "";
+    private bool _cargando = true;
+
+    private bool _modal, _guardando;
+    private int _editId;
+    private string _eLocal = "LURO", _eMobiliario = "", _eArtCod = "", _eDesc = "";
+    private int _ePacks;
+    private string? _errorModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _mobiliarios = await Api.MobiliariosAsync(); } catch { _mobiliarios = new(); }
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _items = await Api.ListarAsync(_fLocal, _fMobiliario, _fArtCod.Trim()); }
+        catch { _items = new(); }
+        finally { _cargando = false; }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Cargar(); }
+
+    private void AbrirAlta()
+    {
+        _editId = 0;
+        _eLocal = _fLocal is "LURO" or "PERALTA" ? _fLocal : "LURO";
+        _eMobiliario = ""; _eArtCod = ""; _eDesc = ""; _ePacks = 0; _errorModal = null;
+        _modal = true;
+    }
+
+    private async Task AbrirModif(ReseteadoDto r)
+    {
+        var ed = await Api.ObtenerAsync(r.Id);
+        if (ed is null) return;
+        _editId = ed.Id;
+        _eLocal = ed.Local; _eMobiliario = ed.Mobiliario; _eArtCod = ed.ArtCod; _eDesc = ed.ArtDes; _ePacks = ed.PacksDetectados;
+        _errorModal = null;
+        _modal = true;
+    }
+
+    private async Task BuscarDesc()
+    {
+        _eDesc = "";
+        var c = (_eArtCod ?? "").Trim();
+        if (c.Length == 0) return;
+        var a = await ReempApi.ArticuloAsync(c);
+        _eDesc = a is null || string.IsNullOrEmpty(a.Descripcion) ? "(no existe en Dragonfish)" : a.Descripcion;
+    }
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(_eMobiliario)) { _errorModal = "Elegí un mobiliario."; return; }
+        if (string.IsNullOrWhiteSpace(_eArtCod)) { _errorModal = "Ingresá un ARTCOD."; return; }
+        if (_ePacks < 0) { _errorModal = "Packs detectados no puede ser negativo."; return; }
+
+        _guardando = true; _errorModal = null;
+        var ok = await Api.GuardarAsync(new ReseteadoSaveRequest
+        {
+            Id = _editId, Local = _eLocal, Mobiliario = _eMobiliario, ArtCod = _eArtCod.Trim(), PacksDetectados = _ePacks
+        });
+        _guardando = false;
+        if (!ok) { _errorModal = "No se pudo guardar."; return; }
+        _modal = false;
+        await Cargar();
+    }
+
+    private async Task Eliminar(ReseteadoDto r)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el reseteado de {r.ArtCod} ({r.Local})?")) return;
+        await Api.EliminarAsync(r.Id);
+        await Cargar();
+    }
+}

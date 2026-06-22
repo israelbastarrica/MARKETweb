@@ -51,6 +51,8 @@ public static class DependencyInjection
         services.AddScoped<IReemplazosService, ReemplazosService>();
         services.AddScoped<IReposicionService, ReposicionService>();
         services.AddScoped<IReposicionPdf, ReposicionPdf>();
+        services.AddScoped<IEventosService, EventosService>();
+        services.AddScoped<IReseteadosService, ReseteadosService>();
         services.AddSingleton<ReposicionJobs>();
         services.AddScoped<ITareasService, TareasService>();
         services.AddSingleton<TareasRunner>();

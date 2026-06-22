@@ -1,0 +1,17 @@
+.ev-sobrante { color: #2e7d32; }
+.ev-faltante { color: #c0392b; }
+
+html[data-theme="dark"] .ev-sobrante { color: #6fcf76; }
+html[data-theme="dark"] .ev-faltante { color: #ff7b6b; }
+
+.ev-tabla .ev-cerrado { opacity: .55; }
+
+.ev-foto {
+    width: 100%;
+    max-height: 380px;
+    object-fit: contain;
+    border: 1px solid var(--mk-border);
+    border-radius: 8px;
+    background: var(--mk-surface-2);
+    cursor: zoom-in;
+}
