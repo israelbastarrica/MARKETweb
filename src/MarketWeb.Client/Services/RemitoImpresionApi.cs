@@ -32,4 +32,8 @@ public sealed class RemitoImpresionApi
 
     public async Task<List<RemitoEstadoDto>> EstadoAsync(IEnumerable<int> ids)
         => await _http.GetFromJsonAsync<List<RemitoEstadoDto>>($"api/remitoimpresion/estado?ids={string.Join(",", ids)}") ?? new();
+
+    /// <summary>Anula el remito: deja el pedido de RECHAZO en RemitoRecepcion.</summary>
+    public async Task<bool> AnularAsync(int id)
+        => (await _http.PostAsync($"api/remitoimpresion/{id}/anular", null)).IsSuccessStatusCode;
 }

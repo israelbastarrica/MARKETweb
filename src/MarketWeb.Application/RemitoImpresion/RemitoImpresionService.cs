@@ -91,4 +91,31 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
         using var cn = _db.Create();
         return (await cn.QueryAsync<RemitoEstadoDto>(new CommandDefinition(sql, new { ids }, cancellationToken: ct))).ToList();
     }
+
+    public async Task<bool> AnularRemitoAsync(int id, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+        var row = await cn.QuerySingleOrDefaultAsync(new CommandDefinition(
+            "SELECT RTRIM(RemitoCODIGO) AS Codigo, RTRIM(ISNULL(LocalOrigen,'')) AS Origen, RTRIM(ISNULL(LocalDestino,'')) AS Destino " +
+            "FROM ImpresorRemito_Cola WHERE ID = @id", new { id }, cancellationToken: ct));
+        if (row is null) return false;
+        string codigo = (string)row.Codigo;
+        string origen = (string)row.Origen;
+        string destino = (string)row.Destino;
+        if (string.IsNullOrWhiteSpace(codigo) || string.IsNullOrWhiteSpace(destino)) return false;
+
+        // Deja en RemitoRecepcion el pedido de RECHAZO: el agente, cuando vea el remito ya
+        // sincronizado en el local destino, llamará a RechazarMercaderia y el stock vuelve al origen.
+        // Upsert por la UNIQUE (RemitoCODIGO, LocalRecepcion).
+        var filas = await cn.ExecuteAsync(new CommandDefinition(
+            "UPDATE dbo.RemitoRecepcion SET Estado = 'PENDIENTE_API', Accion = 'RECHAZAR', Intentos = 0, " +
+            "FechaRecepcion = GETDATE(), FechaProcesado = NULL WHERE RemitoCODIGO = @c AND LocalRecepcion = @d",
+            new { c = codigo, d = destino }, cancellationToken: ct));
+        if (filas == 0)
+            await cn.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO dbo.RemitoRecepcion (RemitoCODIGO, LocalOrigen, LocalRecepcion, FechaRecepcion, Estado, Accion) " +
+                "VALUES (@c, @o, @d, GETDATE(), 'PENDIENTE_API', 'RECHAZAR')",
+                new { c = codigo, o = origen, d = destino }, cancellationToken: ct));
+        return true;
+    }
 }

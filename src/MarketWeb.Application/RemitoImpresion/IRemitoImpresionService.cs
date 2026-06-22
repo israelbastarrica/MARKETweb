@@ -21,4 +21,7 @@ public interface IRemitoImpresionService
     Task<bool> ReimprimirAsync(int id, string? localOrigen, CancellationToken ct = default);
 
     Task<IReadOnlyList<RemitoEstadoDto>> EstadoAsync(IReadOnlyList<int> ids, CancellationToken ct = default);
+
+    /// <summary>Anula el remito: deja un pedido de RECHAZO en RemitoRecepcion (Accion='RECHAZAR') para que el agente lo rechace en el destino.</summary>
+    Task<bool> AnularRemitoAsync(int id, CancellationToken ct = default);
 }

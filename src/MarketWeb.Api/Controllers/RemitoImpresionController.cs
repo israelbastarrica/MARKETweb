@@ -51,6 +51,13 @@ public sealed class RemitoImpresionController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
+    [HttpPost("{id:int}/anular")]
+    public async Task<ActionResult> Anular(int id, CancellationToken ct)
+    {
+        var ok = await _service.AnularRemitoAsync(id, ct);
+        return ok ? NoContent() : NotFound();
+    }
+
     [HttpGet("estado")]
     public async Task<ActionResult<IReadOnlyList<RemitoEstadoDto>>> Estado([FromQuery] string ids, CancellationToken ct)
     {

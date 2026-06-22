@@ -95,7 +95,7 @@
                         <th class="text-center">Int.</th>
                         <th>IP</th>
                         <th>Error</th>
-                        <th style="width: 120px" class="text-center">Acción</th>
+                        <th style="width: 200px" class="text-center">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -112,12 +112,16 @@
                             <td class="text-center">@r.Intentos</td>
                             <td class="small text-muted">@r.IpImpresora</td>
                             <td class="small text-danger">@r.ErrorMsg</td>
-                            <td class="text-center">
-                                <button class="btn btn-sm btn-outline-primary" title="Reimprimir" disabled="@(_seguimiento.Contains(r.Id))"
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Reimprimir" disabled="@(_seguimiento.Contains(r.Id))"
                                         @onclick="() => Reimprimir(r)">
                                     @if (_seguimiento.Contains(r.Id)) { <i class="fa-solid fa-spinner fa-spin"></i> }
                                     else { <i class="fa-solid fa-print me-1"></i> }
                                     Reimprimir
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Anular y pedir rechazo en el local"
+                                        @onclick="() => Anular(r)">
+                                    <i class="fa-solid fa-ban me-1"></i> Anular
                                 </button>
                             </td>
                         </tr>
@@ -219,6 +223,17 @@
         r.FechaImpreso = null;
         _seguimiento.Add(r.Id);
         ArrancarPolling();
+    }
+
+    private async Task Anular(RemitoColaDto r)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm",
+            $"¿Anular el remito {r.NroRemito} ({r.LocalDestino})? Se va a pedir que el local lo RECHACE y el stock vuelve al depósito.");
+        if (!confirma) return;
+        var ok = await Api.AnularAsync(r.Id);
+        await JS.InvokeVoidAsync("alert", ok
+            ? $"Remito {r.NroRemito}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado."
+            : "No se pudo anular el remito.");
     }
 
     private void ArrancarPolling()
