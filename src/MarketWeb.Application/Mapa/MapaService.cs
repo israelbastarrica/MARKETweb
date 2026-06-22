@@ -88,6 +88,88 @@ public sealed class MapaService : IMapaService
         return modulos.ToList();
     }
 
+    public async Task<IReadOnlyList<MapaReporteFila>> ReporteArticulosAsync(MapaReporteFiltro f, CancellationToken ct = default)
+    {
+        // Modo "Artículos" de frmRepoMapa (ConsultarArticulosSP): @StockNegativo=0, @MasDeUnaUbicacion=0,
+        // @SoloCentral=1, @Ordenamiento=1; @Stock = 0 si hay código, 1 (Central) si no. @SubFamilia no se pasa.
+        static object? Nz(string? s) => string.IsNullOrWhiteSpace(s) || s == "TODOS" ? null : s.Trim();
+        var hayCod = !string.IsNullOrWhiteSpace(f.CodArt);
+
+        var p = new DynamicParameters();
+        p.Add("@CodArt", hayCod ? f.CodArt!.Trim() : null);
+        p.Add("@SoloEnLocales", f.SoloEnLocales);
+        p.Add("@LocalesSinFotoGoogle", f.LocalesSinFotoGoogle);
+        p.Add("@Combo", Nz(f.Combo));
+        p.Add("@Tipo", Nz(f.Tipo));
+        p.Add("@Categoria", Nz(f.Categoria));
+        p.Add("@Descripcion", Nz(f.Descripcion));
+        p.Add("@Familia", Nz(f.Familia));
+        p.Add("@Temporada", Nz(f.Temporada));
+        p.Add("@Año", f.Anio);
+        p.Add("@Stock", hayCod ? 0 : 1);
+        p.Add("@CodProveedor", f.CodProveedor ?? "");
+        p.Add("@FiltraFechaAlta", f.FiltraFechaAlta);
+        p.Add("@FiltraFechaDesde", f.FechaDesde ?? DateTime.Today.AddMonths(-3));
+        p.Add("@FiltraFechaHasta", f.FechaHasta ?? DateTime.Today);
+        p.Add("@StockNegativo", 0);
+        p.Add("@MasDeUnaUbicacion", 0);
+        p.Add("@SoloCentral", 1);
+        p.Add("@Ordenamiento", 1);
+        p.Add("@Debug", 0);
+
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        var rows = await cn.QueryAsync(new CommandDefinition(
+            "sp_ConsultaArticulos", p, commandType: CommandType.StoredProcedure, commandTimeout: 60, cancellationToken: ct));
+
+        // Mapeo manual: las columnas del SP vienen con acentos ("Código", "Año"...) que Dapper no matchea solo.
+        var lista = new List<MapaReporteFila>();
+        foreach (var row in rows)
+        {
+            var d = (IDictionary<string, object>)row;
+            lista.Add(new MapaReporteFila
+            {
+                Orden = I(d, "Orden"),
+                Id = I(d, "ID", "Id"),
+                Codigo = S(d, "Código", "Codigo") ?? "",
+                Descripcion = S(d, "Descripción", "Descripcion"),
+                Proveedor = S(d, "Proveedor"),
+                Combo = S(d, "Combo"),
+                Familia = S(d, "Familia"),
+                Tipo = S(d, "Tipo"),
+                Temporada = S(d, "Temporada"),
+                Anio = I(d, "Año", "Ano", "Anio"),
+                Categoria = S(d, "Categoría", "Categoria"),
+                StockCentral = Dec(d, "StockCentral"),
+                StockCCentral = Dec(d, "StockCCentral"),
+                StockLuro = Dec(d, "StockLuro"),
+                StockPeralta = Dec(d, "StockPeralta"),
+                Posiciones = S(d, "Posiciones"),
+                CantUbis = I(d, "CantUbis")
+            });
+        }
+        return lista;
+    }
+
+    private static string? S(IDictionary<string, object> d, params string[] keys)
+    {
+        foreach (var k in keys)
+            if (d.TryGetValue(k, out var v) && v is not null and not DBNull) return v.ToString()?.Trim();
+        return null;
+    }
+    private static int I(IDictionary<string, object> d, params string[] keys)
+    {
+        foreach (var k in keys)
+            if (d.TryGetValue(k, out var v) && v is not null and not DBNull) return Convert.ToInt32(v);
+        return 0;
+    }
+    private static decimal Dec(IDictionary<string, object> d, params string[] keys)
+    {
+        foreach (var k in keys)
+            if (d.TryGetValue(k, out var v) && v is not null and not DBNull) return Convert.ToDecimal(v);
+        return 0m;
+    }
+
     private static async Task<IEnumerable<dynamic>> EjecutarBusquedaAsync(
         System.Data.Common.DbConnection cn, string? descripcion, string? codArt, CancellationToken ct)
     {

@@ -33,4 +33,9 @@ public sealed class MapaController : ControllerBase
     [HttpGet("buscar")]
     public async Task<ActionResult<IReadOnlyList<string>>> Buscar([FromQuery] string? q, CancellationToken ct)
         => Ok(await _svc.BuscarAsync(q, ct));
+
+    // Reporte de Artículos (sp_ConsultaArticulos) — vista Registros y base del resaltado del Mapa.
+    [HttpPost("reporte")]
+    public async Task<ActionResult<IReadOnlyList<MapaReporteFila>>> Reporte([FromBody] MapaReporteFiltro filtro, CancellationToken ct)
+        => Ok(await _svc.ReporteArticulosAsync(filtro, ct));
 }

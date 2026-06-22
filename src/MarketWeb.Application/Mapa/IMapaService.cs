@@ -12,4 +12,7 @@ public interface IMapaService
     Task<MapaModuloDetalleDto> ModuloAsync(string modulo, CancellationToken ct = default);
     Task<IReadOnlyList<string>> VaciosAsync(CancellationToken ct = default);
     Task<IReadOnlyList<string>> BuscarAsync(string? q, CancellationToken ct = default);
+
+    /// <summary>Reporte de Artículos (sp_ConsultaArticulos), modo "Artículos" de frmRepoMapa.</summary>
+    Task<IReadOnlyList<MapaReporteFila>> ReporteArticulosAsync(MapaReporteFiltro f, CancellationToken ct = default);
 }
