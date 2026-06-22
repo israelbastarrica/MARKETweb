@@ -18,19 +18,17 @@
                     @foreach (var l in _locales) { <option value="@l">@l</option> }
                 </select>
             </div>
-            @if (_esLogistica)
+            @if (_saltafwFijo is not null)
             {
-                <div class="col-6 col-md-3">
-                    <label class="form-label small text-muted mb-1">
-                        <i class="fa-solid fa-desktop me-1"></i>Esta PC (impresora)
-                    </label>
-                    <select class="form-select form-select-sm" @bind="_saltafwSel" @bind:after="OnCambioEquipo">
-                        <option value="">Todas</option>
-                        @foreach (var im in _impresoras)
-                        {
-                            <option value="@im.Saltafw">@im.Saltafw@(string.IsNullOrWhiteSpace(im.Ip) ? "" : $" · {im.Ip}")</option>
-                        }
-                    </select>
+                <div class="col-12 col-md-auto">
+                    <label class="form-label small text-muted mb-1"><i class="fa-solid fa-print me-1"></i>Impresora</label>
+                    <div class="d-flex align-items-center gap-2" style="height:31px">
+                        <span class="badge text-bg-light border"><i class="fa-solid fa-desktop me-1"></i>@_miPc</span>
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="chkTodosPc" @bind="_verTodos" @bind:after="Buscar" />
+                            <label class="form-check-label small" for="chkTodosPc">Ver todos</label>
+                        </div>
+                    </div>
                 </div>
             }
             <div class="col-6 col-md-2">
@@ -153,11 +151,16 @@
     private string _estado = "TODOS";
     private bool _soloErrores;
 
-    // Solo logística: identificar el equipo por su impresora (SALTAFW), guardado en el navegador.
-    private bool _esLogistica;
-    private List<ImpresoraColaDto> _impresoras = new();
-    private string _saltafwSel = "";   // "" = todas; si no, el SALTAFW de esta PC
-    private const string SaltafwKey = "marketweb.saltafw";
+    // Impresora fija por equipo: mapeo "Esta PC" → SALTAFW (usuario/terminal de Dragon), igual que el .Net.
+    // La PC se identifica con el nombre de "Esta PC" (localStorage marketweb.pc, el del chip de la barra).
+    private static readonly Dictionary<string, int> _saltafwPorPc = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["DESKTOP-4MMOK3S"] = 809131,
+        ["DESKTOP-1DR5A7F"] = 809129,
+    };
+    private string _miPc = "";
+    private int? _saltafwFijo;   // null = esta PC no tiene impresora asignada → ve todo
+    private bool _verTodos;      // override para ver la cola completa
 
     private List<RemitoColaDto> _remitos = new();
     private bool _cargando = true;
@@ -184,13 +187,9 @@
         var propio = _locales.FirstOrDefault(l => string.Equals(l, scopeName, StringComparison.OrdinalIgnoreCase));
         if (propio is not null) { _local = propio; _localFijo = true; }
 
-        // Solo logística: cargar impresoras y recordar la de ESTE equipo (localStorage del navegador).
-        _esLogistica = string.Equals(perfil, "LOGISTICA", StringComparison.OrdinalIgnoreCase);
-        if (_esLogistica)
-        {
-            try { _impresoras = await Api.ListarImpresorasAsync(); } catch (Exception ex) { Console.Error.WriteLine(ex); }
-            try { _saltafwSel = await JS.InvokeAsync<string>("localStorage.getItem", SaltafwKey) ?? ""; } catch { _saltafwSel = ""; }
-        }
+        // Impresora fija de ESTE equipo según su "Esta PC" (el nombre del chip de la barra).
+        try { _miPc = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre) ?? ""; } catch { _miPc = ""; }
+        if (!string.IsNullOrWhiteSpace(_miPc) && _saltafwPorPc.TryGetValue(_miPc.Trim(), out var sf)) _saltafwFijo = sf;
 
         await Buscar();
     }
@@ -198,18 +197,11 @@
     private async Task Buscar()
     {
         _cargando = true; _error = null;
-        // Solo en logística filtramos por la impresora (SALTAFW) de este equipo; "" = todas.
-        int? saltafw = (_esLogistica && int.TryParse(_saltafwSel, out var sf)) ? sf : null;
+        // Si esta PC tiene impresora asignada y no se pidió "ver todos", filtramos por su SALTAFW.
+        int? saltafw = (_saltafwFijo is int s && !_verTodos) ? s : null;
         try { _remitos = await Api.ListarAsync(_desde, _hasta, _local, _estado, _soloErrores, saltafw); }
         catch (Exception ex) { _remitos = new(); _error = "No se pudo cargar la cola de impresión."; Console.Error.WriteLine(ex); }
         finally { _cargando = false; }
-    }
-
-    private async Task OnCambioEquipo()
-    {
-        // Guarda la impresora de ESTE equipo en el navegador y re-filtra.
-        try { await JS.InvokeVoidAsync("localStorage.setItem", SaltafwKey, _saltafwSel ?? ""); } catch { }
-        await Buscar();
     }
 
     private async Task Reimprimir(RemitoColaDto r)
