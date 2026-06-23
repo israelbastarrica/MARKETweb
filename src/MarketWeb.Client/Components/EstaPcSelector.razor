@@ -10,6 +10,13 @@
             title="@(Pc.Configurada ? "Esta PC: " + Pc.PcNombre : "Asigná un nombre a esta computadora")">
         <i class="fa-solid fa-desktop"></i>
         <span>@(Pc.Configurada ? Pc.PcNombre : "Configurá esta PC")</span>
+        @if (Pc.Configurada && LicenciasTablet.Licencia(Pc.PcNombre) is string lic)
+        {
+            <span title="Licencia / impresora de esta tablet"
+                  style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:.78em;background:rgba(255,255,255,.18);white-space:nowrap">
+                <i class="fa-solid fa-print"></i> @lic
+            </span>
+        }
     </button>
 }
 

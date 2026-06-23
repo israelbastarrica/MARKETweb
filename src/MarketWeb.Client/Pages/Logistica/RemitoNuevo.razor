@@ -107,14 +107,6 @@
         ("809131", "Impresora 1"),
         ("809129", "Impresora 2"),
     };
-    // Mapa "Esta PC" (nombre de cada tablet) → su licencia, para que cada tablet salga a su impresora.
-    // COMPLETAR con los nombres reales de "Esta PC" de cada tablet:
-    private static readonly Dictionary<string, string> LicenciaPorTablet = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["TabletLog1"] = "809131",
-        ["TabletLog2"] = "809129",
-    };
-
     private string _local = "LURO";
     private string _licencia = Impresoras[0].Licencia;
     private string _etiquetaPc = "esta tablet";
@@ -138,7 +130,7 @@
         if (!string.IsNullOrEmpty(pc))
         {
             _etiquetaPc = pc;
-            if (LicenciaPorTablet.TryGetValue(pc, out var lic)) { _licencia = lic; StateHasChanged(); }
+            if (LicenciasTablet.Licencia(pc) is string lic) { _licencia = lic; StateHasChanged(); }
         }
     }
 
