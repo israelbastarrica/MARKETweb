@@ -48,11 +48,12 @@ public sealed class DragonfishService : IDragonfishService
             MercaderiaConsignacion = false,
             Vendedor = "",
             ForPago = "",
+            InformacionAdicional = (req.InformacionAdicional ?? "").Trim(),
             FacturaDetalle = req.Items.Select(i => new
             {
                 Articulo = (i.Articulo ?? "").Trim(),
-                Color = "",
-                Talle = "",
+                Color = (i.Color ?? "").Trim(),
+                Talle = (i.Talle ?? "").Trim(),
                 Cantidad = i.Cantidad,
                 Precio = 0
             }).ToList()

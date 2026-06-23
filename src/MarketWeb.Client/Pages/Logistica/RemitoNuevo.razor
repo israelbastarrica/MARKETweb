@@ -1,0 +1,198 @@
+@page "/logistica/remito-nuevo"
+@inject DragonApi Api
+@inject IJSRuntime JS
+@inject UiService Ui
+
+<PageTitle>Remito nuevo</PageTitle>
+
+<div class="market-page rn">
+    <PageHeader Modulo="Logística" Titulo="Remito nuevo" Icono="fa-solid fa-file-circle-plus" />
+
+    @if (_dragonOff)
+    {
+        <div class="alert alert-warning"><i class="fa-solid fa-triangle-exclamation me-2"></i>La API Dragonfish no está configurada en el servidor — no se puede dar de alta el remito.</div>
+    }
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Local destino</label>
+                <select class="form-select form-select-lg" @bind="_local">
+                    <option value="LURO">LURO</option>
+                    <option value="PERALTA">PERALTA</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5">
+                <label class="form-label">Impresora <span class="text-muted small">(@_etiquetaPc)</span></label>
+                <select class="form-select form-select-lg" @bind="_licencia">
+                    @foreach (var imp in Impresoras) { <option value="@imp.Licencia">@imp.Nombre (@imp.Licencia)</option> }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Carga de renglones ---- *@
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Código (ARTCOD)</label>
+                <input class="form-control form-control-lg" @bind="_artcod" @ref="_inpArt" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Color</label>
+                <input class="form-control form-control-lg" @bind="_color" />
+            </div>
+            <div class="col-4 col-md-2">
+                <label class="form-label small text-muted mb-1">Talle</label>
+                <input class="form-control form-control-lg" @bind="_talle" />
+            </div>
+            <div class="col-4 col-md-2">
+                <label class="form-label small text-muted mb-1">Cantidad</label>
+                <input type="number" min="1" class="form-control form-control-lg" @bind="_cant" @onkeyup="OnKeyCant" />
+            </div>
+            <div class="col-4 col-md-2 d-grid">
+                <button class="btn btn-primary btn-lg" @onclick="Agregar"><i class="fa-solid fa-plus me-1"></i>Agregar</button>
+            </div>
+        </div>
+    </div>
+
+    @if (_items.Count > 0)
+    {
+        <div class="market-card table-responsive mb-3">
+            <table class="market-table align-middle rn-table">
+                <thead>
+                    <tr><th>Código</th><th>Color</th><th>Talle</th><th class="text-end">Cant.</th><th style="width:60px"></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var it in _items)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@it.Articulo</td>
+                            <td>@it.Color</td>
+                            <td>@it.Talle</td>
+                            <td class="text-end">@it.Cantidad</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Quitar(it)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="fw-semibold"><td colspan="3" class="text-end">Total</td><td class="text-end">@_items.Sum(i => i.Cantidad)</td><td></td></tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="d-grid d-md-flex justify-content-md-end">
+            <button class="btn btn-success btn-lg" @onclick="DarDeAlta" disabled="@(_enviando || _dragonOff)">
+                @if (_enviando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                <i class="fa-solid fa-paper-plane me-1"></i> Dar de alta el remito (@_items.Count renglón(es))
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="market-empty"><i class="fa-solid fa-boxes-stacked"></i><p>Agregá renglones (código, color, talle, cantidad) y después dale <strong>Dar de alta</strong>.</p></div>
+    }
+</div>
+
+<style>
+    .rn-table td, .rn-table th { font-size: 1.05rem; }
+</style>
+
+@code {
+    // Impresoras = licencias destino (van a InformacionAdicional; el agente rutea por ahí cuando ve SALTAFW del server).
+    private static readonly (string Licencia, string Nombre)[] Impresoras =
+    {
+        ("809131", "Impresora 1"),
+        ("809129", "Impresora 2"),
+    };
+    // Mapa "Esta PC" (nombre de cada tablet) → su licencia, para que cada tablet salga a su impresora.
+    // COMPLETAR con los nombres reales de "Esta PC" de cada tablet:
+    private static readonly Dictionary<string, string> LicenciaPorTablet = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // ["TABLET-1"] = "809131",
+        // ["TABLET-2"] = "809129",
+    };
+
+    private string _local = "LURO";
+    private string _licencia = Impresoras[0].Licencia;
+    private string _etiquetaPc = "esta tablet";
+    private readonly List<DragonRemitoItemDto> _items = new();
+    private string _artcod = "", _color = "", _talle = "";
+    private int _cant = 1;
+    private bool _enviando, _dragonOff;
+    private ElementReference _inpArt;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dragonOff = !await Api.ConfiguradoRemitoAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var pc = "";
+        try { pc = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre) ?? ""; } catch { }
+        pc = pc.Trim();
+        if (!string.IsNullOrEmpty(pc))
+        {
+            _etiquetaPc = pc;
+            if (LicenciaPorTablet.TryGetValue(pc, out var lic)) { _licencia = lic; StateHasChanged(); }
+        }
+    }
+
+    private async Task OnKeyCant(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Agregar();
+    }
+
+    private async Task Agregar()
+    {
+        var cod = (_artcod ?? "").Trim();
+        if (string.IsNullOrEmpty(cod)) { Ui.Error("Poné el código del artículo."); return; }
+        if (_cant <= 0) { Ui.Error("La cantidad tiene que ser mayor a 0."); return; }
+        _items.Add(new DragonRemitoItemDto
+        {
+            Articulo = cod,
+            Color = (_color ?? "").Trim(),
+            Talle = (_talle ?? "").Trim(),
+            Cantidad = _cant
+        });
+        _artcod = ""; _color = ""; _talle = ""; _cant = 1;
+        try { await _inpArt.FocusAsync(); } catch { }
+    }
+
+    private void Quitar(DragonRemitoItemDto it) => _items.Remove(it);
+
+    private async Task DarDeAlta()
+    {
+        if (_items.Count == 0) return;
+        var nombreImp = Impresoras.FirstOrDefault(i => i.Licencia == _licencia).Nombre ?? _licencia;
+        if (!await Ui.ConfirmAsync(
+            $"Dar de alta el remito a {_local} con {_items.Count} renglón(es), para imprimir en {nombreImp}?", "Dar de alta remito"))
+            return;
+
+        _enviando = true;
+        try
+        {
+            var res = await Api.CrearRemitoAsync(new DragonRemitoRequest
+            {
+                Local = _local,
+                InformacionAdicional = _licencia,
+                Items = _items.ToList()
+            });
+            if (res.Ok)
+            {
+                Ui.Exito($"Remito creado en Dragon (N° {res.Numero?.ToString() ?? "?"}). Va a imprimir en {nombreImp}.");
+                _items.Clear();
+            }
+            else
+            {
+                Ui.Error("No se pudo crear el remito: " + (res.Error ?? res.Respuesta ?? "error desconocido"));
+            }
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _enviando = false; }
+    }
+}

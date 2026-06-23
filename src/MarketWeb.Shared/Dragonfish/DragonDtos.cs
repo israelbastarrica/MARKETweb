@@ -1,9 +1,11 @@
 namespace MarketWeb.Shared.Dragonfish;
 
-/// <summary>Un renglón del remito de insumos a crear en Dragonfish.</summary>
+/// <summary>Un renglón del remito a crear en Dragonfish.</summary>
 public sealed class DragonRemitoItemDto
 {
-    public string Articulo { get; set; } = "";   // ARTCOD (insumos empiezan con ZZ)
+    public string Articulo { get; set; } = "";   // ARTCOD
+    public string Color { get; set; } = "";       // vacío para artículos sin variante (ej. insumos ZZ)
+    public string Talle { get; set; } = "";
     public int Cantidad { get; set; }
 }
 
@@ -12,6 +14,9 @@ public sealed class DragonRemitoRequest
 {
     public string Local { get; set; } = "";       // LURO / PERALTA (Cliente del remito)
     public List<DragonRemitoItemDto> Items { get; set; } = new();
+    // Va al campo InformacionAdicional del remito: la licencia/terminal destino para que el
+    // agente de impresión sepa a qué impresora mandarlo (el alta por API queda con SALTAFW del server).
+    public string InformacionAdicional { get; set; } = "";
 }
 
 /// <summary>Resultado del POST a Dragonfish (incluye lo enviado y la respuesta cruda para diagnosticar).</summary>
