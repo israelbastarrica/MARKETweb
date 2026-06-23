@@ -141,7 +141,8 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
             await cn.ExecuteAsync(new CommandDefinition(
                 @"UPDATE MARKET.dbo.TareasProgramadas
                   SET Nombre = @Nombre, Tipo = @Tipo, Hora = @Hora, DiasSemana = @DiasSemana,
-                      Activa = @Activa, Parametros = @Parametros
+                      Activa = @Activa, Parametros = @Parametros,
+                      UltimaEjecucionAuto = NULL   -- reconfigurar = vuelve a correr a la hora nueva
                   WHERE Id = @Id",
                 new { req.Id, req.Nombre, req.Tipo, req.Hora, req.DiasSemana, req.Activa, Parametros = parametros },
                 cancellationToken: ct));
@@ -183,8 +184,10 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
                 continue;
             if (!TimeSpan.TryParse((string)(r.Hora ?? "00:00"), out var hora)) continue;
             if (ahora.TimeOfDay < hora) continue;
+            // Corre una vez por día a su hora. Al GUARDAR la tarea se resetea esta marca (UltimaEjecucionAuto=NULL),
+            // así vuelve a correr a la hora nueva configurada — haya salido bien o mal antes.
             DateTime? ultimaAuto = r.UltimaEjecucionAuto;
-            if (ultimaAuto is not null && ultimaAuto.Value.Date >= ahora.Date) continue;   // ya corrió hoy (automática)
+            if (ultimaAuto is not null && ultimaAuto.Value.Date >= ahora.Date) continue;
             pendientes.Add((int)r.Id);
         }
         return pendientes;
