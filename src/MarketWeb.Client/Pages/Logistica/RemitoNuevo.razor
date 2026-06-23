@@ -23,10 +23,17 @@
                 </select>
             </div>
             <div class="col-12 col-md-5">
-                <label class="form-label">Impresora <span class="text-muted small">(@_etiquetaPc)</span></label>
-                <select class="form-select form-select-lg" @bind="_licencia">
-                    @foreach (var imp in Impresoras) { <option value="@imp.Licencia">@imp.Nombre (@imp.Licencia)</option> }
-                </select>
+                <label class="form-label">Impresora</label>
+                <div class="form-control form-control-lg d-flex align-items-center">
+                    @if (string.IsNullOrEmpty(_licencia))
+                    {
+                        <span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-2"></i>Esta tablet no tiene impresora asignada — configurá "Esta PC".</span>
+                    }
+                    else
+                    {
+                        <span><i class="fa-solid fa-print me-2"></i>@NombreImpresora(_licencia) <span class="text-muted">· @_etiquetaPc</span></span>
+                    }
+                </div>
             </div>
         </div>
     </div>
@@ -84,7 +91,7 @@
         </div>
 
         <div class="d-grid d-md-flex justify-content-md-end">
-            <button class="btn btn-success btn-lg" @onclick="DarDeAlta" disabled="@(_enviando || _dragonOff)">
+            <button class="btn btn-success btn-lg" @onclick="DarDeAlta" disabled="@(_enviando || _dragonOff || string.IsNullOrEmpty(_licencia))">
                 @if (_enviando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
                 <i class="fa-solid fa-paper-plane me-1"></i> Dar de alta el remito (@_items.Count renglón(es))
             </button>
@@ -108,8 +115,14 @@
         ("809129", "Impresora 2"),
     };
     private string _local = "LURO";
-    private string _licencia = Impresoras[0].Licencia;
+    private string _licencia = "";   // sale de "Esta PC" (cada tablet su impresora); vacío = PC sin impresora asignada
     private string _etiquetaPc = "esta tablet";
+
+    private static string NombreImpresora(string lic)
+    {
+        var m = Impresoras.FirstOrDefault(i => i.Licencia == lic);
+        return string.IsNullOrEmpty(m.Nombre) ? $"Impresora {lic}" : $"{m.Nombre} ({lic})";
+    }
     private readonly List<DragonRemitoItemDto> _items = new();
     private string _artcod = "", _color = "", _talle = "";
     private int _cant = 1;
@@ -127,11 +140,9 @@
         var pc = "";
         try { pc = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre) ?? ""; } catch { }
         pc = pc.Trim();
-        if (!string.IsNullOrEmpty(pc))
-        {
-            _etiquetaPc = pc;
-            if (LicenciasTablet.Licencia(pc) is string lic) { _licencia = lic; StateHasChanged(); }
-        }
+        if (!string.IsNullOrEmpty(pc)) _etiquetaPc = pc;
+        _licencia = LicenciasTablet.Licencia(pc) ?? "";
+        StateHasChanged();
     }
 
     private async Task OnKeyCant(KeyboardEventArgs e)

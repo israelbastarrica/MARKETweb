@@ -1,12 +1,17 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject MarketWeb.Client.Services.UsoApi Uso
 
-<div class="market-shell @(_menuAbierto ? "menu-abierto" : null)">
+<div class="market-shell @(_menuAbierto ? "menu-abierto" : null) @(_menuColapsado ? "menu-colapsado" : null)">
     <NavMenu />
     <div class="market-backdrop" @onclick="CerrarMenu"></div>
     <main class="market-content">
+        <button class="market-colapsar no-print" @onclick="ToggleColapsar"
+                title="@(_menuColapsado ? "Mostrar menú" : "Ocultar menú")" aria-label="Menú">
+            <i class="fa-solid @(_menuColapsado ? "fa-bars" : "fa-angles-left")"></i>
+        </button>
         <div class="market-topbar">
             <button class="market-burger" @onclick="ToggleMenu" title="Menú" aria-label="Menú">
                 <i class="fa-solid fa-bars"></i>
@@ -23,11 +28,31 @@
     // Drawer mobile: en celular el menú es un panel que entra desde el costado.
     // En desktop el sidebar está siempre visible (este estado no aplica).
     private bool _menuAbierto;
+    // Colapsar el sidebar en desktop/tablet (gana pantalla). Se recuerda por equipo.
+    private bool _menuColapsado;
+    private const string KeyColapsado = "marketweb.menuColapsado";
 
     protected override void OnInitialized()
     {
         Nav.LocationChanged += OnLocationChanged;
         RegistrarUso();   // página inicial
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var v = await JS.InvokeAsync<string>("localStorage.getItem", KeyColapsado);
+            if (v == "1") { _menuColapsado = true; StateHasChanged(); }
+        }
+        catch { }
+    }
+
+    private async Task ToggleColapsar()
+    {
+        _menuColapsado = !_menuColapsado;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", KeyColapsado, _menuColapsado ? "1" : "0"); } catch { }
     }
 
     private void ToggleMenu() => _menuAbierto = !_menuAbierto;
