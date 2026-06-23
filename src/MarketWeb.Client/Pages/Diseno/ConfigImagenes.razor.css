@@ -1,0 +1,105 @@
+/* Galería de tarjetas (espejo del flpGaleria del desktop). */
+.ci-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.ci-card {
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: .6rem;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--bs-body-bg, #fff);
+    transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.ci-card:hover {
+    box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .12);
+    transform: translateY(-2px);
+}
+
+.ci-card.sel {
+    border-color: var(--bs-primary, #0d6efd);
+    box-shadow: 0 0 0 2px var(--bs-primary, #0d6efd);
+}
+
+.ci-thumb {
+    aspect-ratio: 4 / 3;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.ci-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ci-noimg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .35rem;
+    color: #9ca3af;
+    font-size: 1.75rem;
+}
+
+.ci-noimg span {
+    font-size: .8rem;
+}
+
+.ci-body {
+    padding: .55rem .65rem;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.ci-tipo {
+    align-self: flex-start;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.ci-desc {
+    font-weight: 600;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.ci-match {
+    font-size: .72rem;
+    color: var(--bs-secondary-color, #6c757d);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Preview dentro del modal ABM. */
+.ci-preview {
+    border: 1px dashed var(--bs-border-color, #dee2e6);
+    border-radius: .5rem;
+    aspect-ratio: 4 / 3;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.ci-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
