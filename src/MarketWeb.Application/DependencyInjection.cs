@@ -1,4 +1,5 @@
 using MarketWeb.Application.Articulos;
+using MarketWeb.Application.ConfigImagenes;
 using MarketWeb.Application.Costos;
 using MarketWeb.Application.Dashboard;
 using MarketWeb.Application.Data;
@@ -39,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IArticulosService, ArticulosService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IMapeoService, MapeoService>();
+        services.AddScoped<IConfigImagenesService, ConfigImagenesService>();
         services.AddScoped<IDespachosService, DespachosService>();
         services.AddScoped<IRemitoImpresionService, RemitoImpresionService>();
         services.AddScoped<IPaletsService, PaletsService>();
