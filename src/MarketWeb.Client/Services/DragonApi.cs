@@ -46,5 +46,23 @@ public sealed class DragonApi
         return new DragonRemitoResultDto { Ok = false, Error = $"HTTP {(int)resp.StatusCode}" };
     }
 
+    public async Task<List<UltimaRepoItemDto>> UltimaRepoAsync(string local)
+    {
+        try { return await _http.GetFromJsonAsync<List<UltimaRepoItemDto>>($"api/remitos/ultima-repo?local={Uri.EscapeDataString(local)}") ?? new(); }
+        catch { return new(); }
+    }
+
+    public async Task<ArticuloLookupDto?> BuscarArticuloAsync(string cod)
+    {
+        try
+        {
+            var r = await _http.GetAsync($"api/remitos/articulo/{Uri.EscapeDataString(cod)}");
+            if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            if (r.IsSuccessStatusCode) return await r.Content.ReadFromJsonAsync<ArticuloLookupDto>();
+            return null;
+        }
+        catch { return null; }
+    }
+
     private sealed class EstadoResp { public bool Configurado { get; set; } }
 }

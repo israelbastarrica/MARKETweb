@@ -11,6 +11,7 @@ using MarketWeb.Application.Mapeo;
 using MarketWeb.Application.Palets;
 using MarketWeb.Application.Reemplazos;
 using MarketWeb.Application.RemitoImpresion;
+using MarketWeb.Application.Remitos;
 using MarketWeb.Application.Reposicion;
 using MarketWeb.Application.Tareas;
 using MarketWeb.Application.TiposLocal;
@@ -51,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<ILogisticaDashboardService, LogisticaDashboardService>();
         services.AddScoped<IUsoService, UsoService>();
         services.AddScoped<IReemplazosService, ReemplazosService>();
+        services.AddScoped<IRemitosLookupService, RemitosLookupService>();
         services.AddScoped<IReposicionService, ReposicionService>();
         services.AddScoped<IReposicionPdf, ReposicionPdf>();
         services.AddScoped<IEventosService, EventosService>();

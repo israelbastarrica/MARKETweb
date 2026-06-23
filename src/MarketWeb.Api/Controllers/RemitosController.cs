@@ -1,4 +1,5 @@
 using MarketWeb.Application.Dragonfish;
+using MarketWeb.Application.Remitos;
 using MarketWeb.Shared.Dragonfish;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,10 +13,31 @@ namespace MarketWeb.Api.Controllers;
 public sealed class RemitosController : ControllerBase
 {
     private readonly IDragonfishService _dragon;
-    public RemitosController(IDragonfishService dragon) => _dragon = dragon;
+    private readonly IRemitosLookupService _lookup;
+
+    public RemitosController(IDragonfishService dragon, IRemitosLookupService lookup)
+    {
+        _dragon = dragon;
+        _lookup = lookup;
+    }
 
     [HttpGet("estado")]
     public IActionResult Estado() => Ok(new { configurado = _dragon.Configurado });
+
+    [HttpGet("ultima-repo")]
+    public async Task<IActionResult> UltimaRepo([FromQuery] string local, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(local)) return BadRequest("local requerido");
+        return Ok(await _lookup.UltimaRepoAsync(local, ct));
+    }
+
+    [HttpGet("articulo/{cod}")]
+    public async Task<IActionResult> BuscarArticulo(string cod, CancellationToken ct)
+    {
+        var res = await _lookup.BuscarArticuloAsync(cod, ct);
+        if (res is null) return NotFound();
+        return Ok(res);
+    }
 
     [HttpPost]
     public async Task<ActionResult<DragonRemitoResultDto>> Crear([FromBody] DragonRemitoRequest req, CancellationToken ct)
