@@ -29,10 +29,13 @@ public sealed class ReposicionService : IReposicionService
             inicioRun = Convert.ToDateTime(await cmdNow.ExecuteScalarAsync(ct));
 
         var filas = new List<ReposicionFilaDto>();
+        // El SP lee los locales EN VIVO por OPENQUERY; si un local responde lento, tarda más.
+        // La corrida automática (scheduler) es de fondo → más timeout; la interactiva falla rápido (5 min).
+        int cmdTimeout = machineName == "MARKETWEB-SCHED" ? 1200 : 300;
         await using (var cmd = new SqlCommand("SP_RepoCalcularPacks", cn)
         {
             CommandType = CommandType.StoredProcedure,
-            CommandTimeout = 300
+            CommandTimeout = cmdTimeout
         })
         {
             cmd.Parameters.AddWithValue("@Local", local);
@@ -94,6 +97,7 @@ public sealed class ReposicionService : IReposicionService
             "INNER JOIN MARKET.dbo.Ubicaciones U ON U.ID = R.IDUbicacion " +
             "WHERE R.Fecha >= @inicio AND R.Eliminado = 0", cn))
         {
+            cmd2.CommandTimeout = cmdTimeout;
             cmd2.Parameters.Add("@inicio", SqlDbType.DateTime).Value = inicioRun;
             await using var rdr2 = await cmd2.ExecuteReaderAsync(ct);
             while (await rdr2.ReadAsync(ct))
