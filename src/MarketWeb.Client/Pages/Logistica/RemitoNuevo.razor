@@ -22,18 +22,15 @@
                     <option value="PERALTA">PERALTA</option>
                 </select>
             </div>
-            <div class="col-12 col-md-5">
-                <label class="form-label">Impresora</label>
-                <div class="form-control form-control-lg d-flex align-items-center">
-                    @if (string.IsNullOrEmpty(_licencia))
-                    {
-                        <span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-2"></i>Esta tablet no tiene impresora asignada — configurá "Esta PC".</span>
-                    }
-                    else
-                    {
-                        <span><i class="fa-solid fa-print me-2"></i>@NombreImpresora(_licencia) <span class="text-muted">· @_etiquetaPc</span></span>
-                    }
-                </div>
+            <div class="col-12 col-md-8 d-flex align-items-center" style="min-height:48px">
+                @if (string.IsNullOrEmpty(_licencia))
+                {
+                    <span class="text-danger small"><i class="fa-solid fa-triangle-exclamation me-1"></i>Esta tablet no tiene impresora asignada — configurá "Esta PC".</span>
+                }
+                else
+                {
+                    <span class="text-muted small"><i class="fa-solid fa-print me-1"></i>Imprime en <strong>@NombreImpresora(_licencia)</strong></span>
+                }
             </div>
         </div>
     </div>
