@@ -36,7 +36,8 @@ public sealed class ControlRemitosService : IControlRemitosService
                 Despachados = Convert.ToInt32(rdr["Despachados"]),
                 Recibidos = Convert.ToInt32(rdr["Recibidos"]),
                 NoRecibidos = Convert.ToInt32(rdr["NoRecibidos"]),
-                Aceptados = Convert.ToInt32(rdr["Aceptados"])
+                Aceptados = Convert.ToInt32(rdr["Aceptados"]),
+                Rechazados = Convert.ToInt32(rdr["Rechazados"])
             });
         }
         return lista;
@@ -61,6 +62,7 @@ public sealed class ControlRemitosService : IControlRemitosService
             var despachoId = Int(rdr, "DespachoID");
             var idDestDespacho = Int(rdr, "IDLocalDestinoDespacho");
             var esQR = !IsNull(rdr, "EsQRDePantalla") && Convert.ToBoolean(rdr["EsQRDePantalla"]);
+            var rechazado = !IsNull(rdr, "Rechazado") && Convert.ToBoolean(rdr["Rechazado"]);
             var estadoDragon = IsNull(rdr, "EstadoDragon") ? "NO ACEPTADO" : rdr["EstadoDragon"].ToString()!;
             var estadoDespacho = rdr["EstadoDespacho"]?.ToString() ?? "";
 
@@ -91,15 +93,17 @@ public sealed class ControlRemitosService : IControlRemitosService
                 IdLocalDestino = idDest,
                 IdLocalDestinoDespacho = idDestDespacho,
                 EsQrPantalla = esQR,
-                ColorHint = ColorHint(estadoTxt, esQR, esCruzado, estadoDragon)
+                Rechazado = rechazado,
+                ColorHint = ColorHint(estadoTxt, esQR, esCruzado, estadoDragon, rechazado)
             });
         }
         return lista;
     }
 
-    private static string ColorHint(string estado, bool esQR, bool esCruzado, string estadoDragon)
+    private static string ColorHint(string estado, bool esQR, bool esCruzado, string estadoDragon, bool rechazado)
     {
         if (esCruzado) return "cruzado";
+        if (rechazado) return "rechazado";
         if (esQR && estado == "RECIBIDO") return "qrpc";
         return estado switch
         {
