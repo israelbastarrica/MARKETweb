@@ -34,22 +34,25 @@
         </div>
     </div>
 
-    @* Barra de acciones (espejo de pnlBotones: Agregar / Modificar / Eliminar) *@
-    <div class="d-flex flex-wrap gap-2 mb-3">
-        <button class="btn btn-primary" @onclick="AbrirAlta">
-            <i class="fa-solid fa-plus me-1"></i> Agregar
-        </button>
-        <button class="btn btn-outline-primary" disabled="@(_seleccionado is null)"
-                @onclick="() => AbrirModificacion(_seleccionado!)">
-            <i class="fa-solid fa-pen me-1"></i> Modificar
-        </button>
-        <button class="btn btn-outline-danger" disabled="@(_seleccionado is null)" @onclick="EliminarSeleccionado">
-            <i class="fa-solid fa-trash me-1"></i> Eliminar
-        </button>
-        <span class="align-self-center text-muted small ci-hint">
+    @* Barra de acciones (espejo de pnlBotones: Agregar / Modificar / Eliminar).
+       Grid 1fr·auto·1fr → la leyenda queda centrada respecto de TODO el ancho de la pantalla. *@
+    <div class="ci-actionbar mb-3">
+        <div class="ci-acciones d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" @onclick="AbrirAlta">
+                <i class="fa-solid fa-plus me-1"></i> Agregar
+            </button>
+            <button class="btn btn-outline-primary" disabled="@(_seleccionado is null)"
+                    @onclick="() => AbrirModificacion(_seleccionado!)">
+                <i class="fa-solid fa-pen me-1"></i> Modificar
+            </button>
+            <button class="btn btn-outline-danger" disabled="@(_seleccionado is null)" @onclick="EliminarSeleccionado">
+                <i class="fa-solid fa-trash me-1"></i> Eliminar
+            </button>
+        </div>
+        <span class="ci-hint text-muted small">
             <i class="fa-solid fa-arrow-pointer me-1"></i>Tip: arrastrá una imagen a la pantalla para darla de alta.
         </span>
-        <span class="ms-auto align-self-center text-muted small">
+        <span class="ci-count text-muted small">
             @_items.Count imagen(es)@(_seleccionado is null ? "" : $" · seleccionada: {_seleccionado.Descripcion}")
         </span>
     </div>

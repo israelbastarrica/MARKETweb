@@ -1,3 +1,38 @@
+/* Barra de acciones: 3 columnas iguales para que la leyenda quede centrada en toda la pantalla. */
+.ci-actionbar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+}
+
+.ci-actionbar > .ci-acciones {
+    justify-self: start;
+}
+
+.ci-actionbar > .ci-hint {
+    justify-self: center;
+    text-align: center;
+}
+
+.ci-actionbar > .ci-count {
+    justify-self: end;
+    white-space: nowrap;
+}
+
+/* En pantallas chicas se apila a la izquierda (sin forzar el centro). */
+@media (max-width: 768px) {
+    .ci-actionbar {
+        grid-template-columns: 1fr;
+    }
+
+    .ci-actionbar > .ci-hint,
+    .ci-actionbar > .ci-count {
+        justify-self: start;
+        text-align: left;
+    }
+}
+
 /* Galería de tarjetas (espejo del flpGaleria del desktop). */
 .ci-grid {
     display: grid;
