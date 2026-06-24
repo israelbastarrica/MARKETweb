@@ -24,6 +24,15 @@ public sealed class RemitoImpresionApi
         return await _http.GetFromJsonAsync<List<RemitoColaDto>>(url) ?? new();
     }
 
+    /// <summary>Lista los remitos anulados (con pedido de rechazo) en el período/filtro dado.</summary>
+    public async Task<List<RemitoColaDto>> ListarAnuladosAsync(DateTime desde, DateTime hasta, string? local, int? saltafw = null)
+    {
+        var url = $"api/remitoimpresion/anulados?desde={desde:yyyy-MM-dd}&hasta={hasta:yyyy-MM-dd}";
+        if (!string.IsNullOrWhiteSpace(local) && local != "TODOS") url += $"&local={Uri.EscapeDataString(local)}";
+        if (saltafw is not null) url += $"&saltafw={saltafw.Value}";
+        return await _http.GetFromJsonAsync<List<RemitoColaDto>>(url) ?? new();
+    }
+
     public async Task<bool> ReimprimirAsync(int id)
     {
         var resp = await _http.PostAsync($"api/remitoimpresion/{id}/reimprimir", null);
