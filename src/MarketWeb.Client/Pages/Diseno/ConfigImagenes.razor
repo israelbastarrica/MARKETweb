@@ -1,4 +1,5 @@
 @page "/diseno/config-imagenes"
+@implements IAsyncDisposable
 @inject ConfigImagenesApi Api
 @inject IJSRuntime JS
 
@@ -33,22 +34,40 @@
         </div>
     </div>
 
-    @* Barra de acciones (espejo de pnlBotones: Agregar / Modificar / Eliminar) *@
-    <div class="d-flex flex-wrap gap-2 mb-3">
-        <button class="btn btn-primary" @onclick="AbrirAlta">
-            <i class="fa-solid fa-plus me-1"></i> Agregar
-        </button>
-        <button class="btn btn-outline-primary" disabled="@(_seleccionado is null)"
-                @onclick="() => AbrirModificacion(_seleccionado!)">
-            <i class="fa-solid fa-pen me-1"></i> Modificar
-        </button>
-        <button class="btn btn-outline-danger" disabled="@(_seleccionado is null)" @onclick="EliminarSeleccionado">
-            <i class="fa-solid fa-trash me-1"></i> Eliminar
-        </button>
-        <span class="ms-auto align-self-center text-muted small">
+    @* Barra de acciones (espejo de pnlBotones: Agregar / Modificar / Eliminar).
+       Grid 1fr·auto·1fr → la leyenda queda centrada respecto de TODO el ancho de la pantalla. *@
+    <div class="ci-actionbar mb-3">
+        <div class="ci-acciones d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" @onclick="AbrirAlta">
+                <i class="fa-solid fa-plus me-1"></i> Agregar
+            </button>
+            <button class="btn btn-outline-primary" disabled="@(_seleccionado is null)"
+                    @onclick="() => AbrirModificacion(_seleccionado!)">
+                <i class="fa-solid fa-pen me-1"></i> Modificar
+            </button>
+            <button class="btn btn-outline-danger" disabled="@(_seleccionado is null)" @onclick="EliminarSeleccionado">
+                <i class="fa-solid fa-trash me-1"></i> Eliminar
+            </button>
+        </div>
+        <span class="ci-hint text-muted small">
+            <i class="fa-solid fa-arrow-pointer me-1"></i>Tip: arrastrá una imagen a la pantalla para darla de alta.
+        </span>
+        <span class="ci-count text-muted small">
             @_items.Count imagen(es)@(_seleccionado is null ? "" : $" · seleccionada: {_seleccionado.Descripcion}")
         </span>
     </div>
+
+    @* Drag & drop invisible a nivel ventana (configImagenesDrop.js): se puede soltar la imagen
+       en cualquier parte de la galería. Este overlay aparece SOLO mientras arrastrás. *@
+    @if (_drag)
+    {
+        <div class="ci-dropoverlay">
+            <div class="ci-dropoverlay-box">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span>Soltá la imagen para dar de alta</span>
+            </div>
+        </div>
+    }
 
     @if (_mensaje is not null)
     {
@@ -213,6 +232,7 @@
     private ConfigImagenSaveRequest _editado = new();
     private string? _previewData;        // data:...;base64 de una imagen recién elegida
     private bool _tieneImagenActual;     // en modificación, ya hay imagen guardada
+    private bool _drag;                  // hover visual del dropzone
 
     // Qué mostrar en el preview del modal: la nueva elegida o la guardada.
     private string? PreviewSrc =>
@@ -287,10 +307,81 @@
 
     private void CerrarModal() => _modalAbierto = false;
 
+    // InputFile dentro del modal (botón Seleccionar archivo).
     private async Task OnArchivo(InputFileChangeEventArgs e)
     {
-        var file = e.File;
-        if (file is null) return;
+        if (e.File is not null) await CargarArchivoAsync(e.File);
+    }
+
+    // ---- Drag & drop invisible a nivel ventana (configImagenesDrop.js) ----
+    private IJSObjectReference? _dropModule;
+    private DotNetObjectReference<ConfigImagenes>? _selfRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _selfRef = DotNetObjectReference.Create(this);
+        _dropModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/configImagenesDrop.js");
+        await _dropModule.InvokeVoidAsync("init", _selfRef);
+    }
+
+    // JS avisa cuando entra/sale un archivo arrastrado: solo prende/apaga el overlay.
+    [JSInvokable]
+    public Task SetDragActivo(bool activo)
+    {
+        _drag = activo;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // JS al soltar una imagen: abre el alta con la foto ya cargada (espejo del DragDrop del desktop).
+    // Si el modal ya está abierto, reemplaza la imagen del registro en edición.
+    [JSInvokable]
+    public async Task RecibirImagenArrastrada(string nombre, string contentType, string b64)
+    {
+        _drag = false;
+        if (!EsImagenTipo(contentType, nombre))
+        {
+            _error = "Tenés que soltar un archivo de imagen (JPG, PNG, etc.).";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        if (!_modalAbierto) AbrirAlta();
+        _editado.ImagenBase64 = b64;
+        var ct = string.IsNullOrWhiteSpace(contentType) ? "image/png" : contentType;
+        _previewData = $"data:{ct};base64,{b64}";
+        _errorModal = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task RecibirErrorArrastre(string mensaje)
+    {
+        _drag = false;
+        _error = mensaje;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_dropModule is not null)
+            {
+                await _dropModule.InvokeVoidAsync("dispose");
+                await _dropModule.DisposeAsync();
+            }
+        }
+        catch { /* el circuito puede estar cerrándose */ }
+        _selfRef?.Dispose();
+    }
+
+    private async Task CargarArchivoAsync(IBrowserFile file)
+    {
+        if (!EsImagen(file))
+        {
+            _errorModal = "Tenés que soltar o elegir un archivo de imagen (JPG, PNG, etc.).";
+            return;
+        }
         try
         {
             using var ms = new MemoryStream();
@@ -311,6 +402,16 @@
             _errorModal = "No se pudo leer la imagen.";
             Console.Error.WriteLine(ex);
         }
+    }
+
+    private static bool EsImagen(IBrowserFile f) => EsImagenTipo(f.ContentType, f.Name);
+
+    private static bool EsImagenTipo(string? contentType, string? nombre)
+    {
+        if (!string.IsNullOrEmpty(contentType) && contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var ext = Path.GetExtension(nombre ?? "").ToLowerInvariant();
+        return ext is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif" or ".webp";
     }
 
     private async Task Guardar()
