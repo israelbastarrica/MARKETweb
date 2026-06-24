@@ -1,0 +1,237 @@
+@page "/produccion/packs"
+@inject PacksApi Api
+@inject IJSRuntime JS
+
+<PageTitle>Packs</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Producción" Titulo="Packs" Icono="fa-solid fa-boxes-stacked" />
+
+    @* Filtros (espejo de gpbDatos: N° Pedido + Cod Art + Ver desarmados) *@
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="form-label">N° Pedido</label>
+                <input class="form-control" placeholder="N° de pedido..."
+                       @bind="_nroPedido" @bind:event="oninput" @onkeyup="OnKeyUp" />
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Cód. Artículo</label>
+                <input class="form-control" placeholder="ARTCOD..."
+                       @bind="_codArt" @bind:event="oninput" @onkeyup="OnKeyUp" />
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-center pt-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="verDesarmados"
+                           @bind="_verDesarmados" @bind:after="Cargar" />
+                    <label class="form-check-label" for="verDesarmados">Ver desarmados</label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <button class="btn btn-outline-secondary w-100" @onclick="Procesar">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Procesar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @* Barra de acciones. "Agregar" abre el simulador de armado (todavía no migrado). *@
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <button class="btn btn-primary" disabled
+                title="El simulador de armado de packs todavía no fue migrado">
+            <i class="fa-solid fa-plus me-1"></i> Agregar
+            <span class="badge text-bg-light text-dark ms-1">próximamente</span>
+        </button>
+        <span class="ms-auto align-self-center text-muted small">@_items.Count fila(s)</span>
+    </div>
+
+    @if (_mensaje is not null)
+    {
+        <div class="alert alert-success alert-dismissible d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i> @_mensaje
+            <button type="button" class="btn-close" @onclick="() => _mensaje = null"></button>
+        </div>
+    }
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            <p>No se encontraron packs con esos filtros.</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-end ci-sort" style="width: 110px" @onclick='() => Ordenar("NroPedido")'>
+                            N° Pedido <i class="fa-solid @Flecha("NroPedido")"></i>
+                        </th>
+                        <th class="text-end ci-sort" style="width: 110px" @onclick='() => Ordenar("NroInterno")'>
+                            N° Interno <i class="fa-solid @Flecha("NroInterno")"></i>
+                        </th>
+                        <th class="ci-sort" @onclick='() => Ordenar("ArtCod")'>
+                            Artículo <i class="fa-solid @Flecha("ArtCod")"></i>
+                        </th>
+                        <th class="text-end ci-sort" style="width: 110px" @onclick='() => Ordenar("CantPacks")'>
+                            Packs <i class="fa-solid @Flecha("CantPacks")"></i>
+                        </th>
+                        <th class="text-end ci-sort" style="width: 110px" @onclick='() => Ordenar("CantBolsas")'>
+                            Bolsas <i class="fa-solid @Flecha("CantBolsas")"></i>
+                        </th>
+                        <th class="text-end ci-sort" style="width: 110px" @onclick='() => Ordenar("CantPrendas")'>
+                            Prendas <i class="fa-solid @Flecha("CantPrendas")"></i>
+                        </th>
+                        <th class="text-center" style="width: 90px">PDF</th>
+                        <th class="text-center" style="width: 90px">TXT</th>
+                        <th class="text-center" style="width: 90px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _items)
+                    {
+                        <tr>
+                            <td class="text-end">@p.NroPedido</td>
+                            <td class="text-end">@p.NroInterno</td>
+                            <td><ArticuloLink Codigo="@p.ArtCod" /></td>
+                            <td class="text-end">@p.CantPacks</td>
+                            <td class="text-end">@p.CantBolsas</td>
+                            <td class="text-end">@p.CantPrendas</td>
+                            <td class="text-center">
+                                @if (p.TienePdf)
+                                {
+                                    <a class="btn btn-sm btn-outline-danger" href="@PacksApi.PdfUrl(p.Id)" target="_blank"
+                                       title="Ver PDF"><i class="fa-solid fa-file-pdf"></i></a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted" title="Sin PDF">—</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (p.TieneTxt)
+                                {
+                                    <a class="btn btn-sm btn-outline-secondary" href="@PacksApi.TxtUrl(p.Id)" target="_blank"
+                                       title="Ver TXT"><i class="fa-solid fa-file-lines"></i></a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted" title="Sin TXT">—</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-danger" title="Desarmar pedido"
+                                        @onclick="() => Eliminar(p)">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<PackDto> _items = new();
+    private string _nroPedido = "";
+    private string _codArt = "";
+    private bool _verDesarmados;
+    private bool _cargando = true;
+    private string? _mensaje;
+    private string? _error;
+
+    // Orden de la grilla (igual que el desktop arranca por N° Pedido descendente).
+    private string _sortCol = "NroPedido";
+    private bool _sortAsc;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private Task Procesar() => Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            var datos = await Api.ListarAsync(_nroPedido, _codArt, _verDesarmados);
+            _items.Clear();
+            _items.AddRange(datos);
+            AplicarOrden();
+        }
+        catch (Exception ex)
+        {
+            _items.Clear();
+            _error = "No se pudieron cargar los packs. Verificá la conexión a la base de datos.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Cargar();
+    }
+
+    // ---- Ordenamiento por columna (mayor/menor) ----
+    private void Ordenar(string col)
+    {
+        if (_sortCol == col) _sortAsc = !_sortAsc;
+        else { _sortCol = col; _sortAsc = true; }
+        AplicarOrden();
+    }
+
+    private void AplicarOrden()
+    {
+        Func<PackDto, object> clave = _sortCol switch
+        {
+            "NroPedido"   => p => Num(p.NroPedido),
+            "NroInterno"  => p => Num(p.NroInterno),
+            "ArtCod"      => p => p.ArtCod ?? "",
+            "CantPacks"   => p => (long)p.CantPacks,
+            "CantBolsas"  => p => (long)p.CantBolsas,
+            "CantPrendas" => p => (long)p.CantPrendas,
+            _             => p => Num(p.NroPedido),
+        };
+        var ordenado = (_sortAsc ? _items.OrderBy(clave) : _items.OrderByDescending(clave)).ToList();
+        _items.Clear();
+        _items.AddRange(ordenado);
+    }
+
+    // N° Pedido / N° Interno son numéricos: si parsea, ordena por número; si no, al fondo.
+    private static long Num(string? s)
+        => long.TryParse((s ?? "").Trim(), out var n) ? n : long.MinValue;
+
+    private string Flecha(string col)
+        => _sortCol != col ? "fa-sort text-muted opacity-50" : (_sortAsc ? "fa-sort-up" : "fa-sort-down");
+
+    private async Task Eliminar(PackDto p)
+    {
+        var confirma = await JS.InvokeAsync<bool>("confirm",
+            $"¿Desarmar el pedido {p.NroPedido}? Esto da de baja todos sus packs y libera el número.");
+        if (!confirma) return;
+
+        await Api.EliminarAsync(p.NroPedido);
+        _mensaje = $"Pedido {p.NroPedido} desarmado correctamente.";
+        await Cargar();
+    }
+}

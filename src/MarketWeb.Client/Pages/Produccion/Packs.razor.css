@@ -1,0 +1,15 @@
+/* Encabezados ordenables (click para ordenar mayor/menor). */
+.ci-sort {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.ci-sort:hover {
+    background: var(--bs-tertiary-bg, #f1f3f5);
+}
+
+.ci-sort i {
+    margin-left: .25rem;
+    font-size: .8em;
+}
