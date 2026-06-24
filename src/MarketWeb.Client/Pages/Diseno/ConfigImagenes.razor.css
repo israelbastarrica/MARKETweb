@@ -86,6 +86,37 @@
     white-space: nowrap;
 }
 
+/* Overlay que aparece SOLO mientras arrastrás una imagen sobre la ventana (drag & drop invisible). */
+.ci-dropoverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 110, 253, .08);
+    border: 3px dashed var(--bs-primary, #0d6efd);
+    pointer-events: none; /* deja pasar el drop al listener de la ventana */
+}
+
+.ci-dropoverlay-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    padding: 1.5rem 2.25rem;
+    border-radius: .75rem;
+    background: var(--bs-body-bg, #fff);
+    box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .2);
+    color: var(--bs-primary, #0d6efd);
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.ci-dropoverlay-box i {
+    font-size: 2rem;
+}
+
 /* Preview dentro del modal ABM. */
 .ci-preview {
     border: 1px dashed var(--bs-border-color, #dee2e6);
