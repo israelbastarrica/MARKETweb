@@ -1,0 +1,484 @@
+@page "/produccion/telas"
+@inject TelasApi Api
+@inject UiService Ui
+
+<PageTitle>Telas</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Producción" Titulo="Telas" Icono="fa-solid fa-scroll" />
+
+    @* Filtros *@
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="form-label">Depósito</label>
+                <select class="form-select" @bind="_fDeposito">
+                    <option value="0">TODOS</option>
+                    @foreach (var d in _depositos)
+                    {
+                        <option value="@d.Id">@d.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Textil</label>
+                <select class="form-select" @bind="_fTextil">
+                    <option value="0">TODOS</option>
+                    @foreach (var t in _textiles)
+                    {
+                        <option value="@t.Id">@t.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Material</label>
+                <input class="form-control" placeholder="Buscar material..."
+                       @bind="_fMaterial" @bind:event="oninput" @onkeyup="OnKeyUp" />
+            </div>
+            <div class="col-12 col-md-3">
+                <button class="btn btn-outline-secondary w-100" @onclick="Procesar">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Procesar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @* Acciones *@
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <button class="btn btn-primary" @onclick="AbrirAlta">
+            <i class="fa-solid fa-plus me-1"></i> Agregar tela
+        </button>
+        <button class="btn btn-outline-secondary" @onclick="AbrirCatalogos">
+            <i class="fa-solid fa-sliders me-1"></i> Catálogos
+        </button>
+        <span class="ms-auto align-self-center text-muted small">@_items.Count tela(s)</span>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            <div class="flex-grow-1">@_error</div>
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-scroll"></i>
+            <p>No se encontraron telas con esos filtros.</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 14%">Depósito</th>
+                        <th>Material</th>
+                        <th style="width: 13%">Textil</th>
+                        <th class="text-end" style="width: 90px">Ancho (cm)</th>
+                        <th>Composición</th>
+                        <th class="text-end" style="width: 90px">Rinde (m/kg)</th>
+                        <th class="text-end" style="width: 100px">Gramos/m²</th>
+                        <th style="width: 12%">Color</th>
+                        <th class="text-center" style="width: 100px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _items)
+                    {
+                        <tr @ondblclick="() => AbrirModificacion(t)">
+                            <td>@t.Deposito</td>
+                            <td>@t.Material</td>
+                            <td>@t.Textil</td>
+                            <td class="text-end">@Num(t.AnchoCm)</td>
+                            <td>@t.Composicion</td>
+                            <td class="text-end">@Num(t.RindeMKg)</td>
+                            <td class="text-end">@Num(t.GramosM2)</td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(t.Color))
+                                {
+                                    <span class="tela-chip" style="background:@(t.ColorCodigo ?? "#ccc")"></span>
+                                    @t.Color
+                                }
+                            </td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModificacion(t)">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(t)">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* ===== Modal ABM tela ===== *@
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <EditForm Model="_editado" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_esAlta ? "Nueva tela" : "Modificar tela")</h5>
+                        <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_errorModal is not null)
+                        {
+                            <div class="alert alert-danger py-2">@_errorModal</div>
+                        }
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Depósito</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
+                                    <option value="0">— Seleccione —</option>
+                                    @foreach (var d in _depositos)
+                                    {
+                                        <option value="@d.Id">@d.Nombre</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="() => _editado.IdDeposito" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Textil / Proveedor</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdTextil">
+                                    <option value="">— (ninguno) —</option>
+                                    @foreach (var t in _textiles)
+                                    {
+                                        <option value="@t.Id">@t.Nombre</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Material</label>
+                                <InputText class="form-control" @bind-Value="_editado.Material" />
+                                <ValidationMessage For="() => _editado.Material" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Ancho (cm)</label>
+                                <InputNumber class="form-control" @bind-Value="_editado.AnchoCm" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Rinde (m/kg)</label>
+                                <InputNumber class="form-control" @bind-Value="_editado.RindeMKg" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Gramos/m² (calculado)</label>
+                                <input class="form-control" value="@GramosPreview()" disabled />
+                            </div>
+                            <div class="col-12 col-md-8">
+                                <label class="form-label">Composición</label>
+                                <InputText class="form-control" @bind-Value="_editado.Composicion"
+                                           placeholder="96% poliester / 4% elastano" />
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Color</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdColor">
+                                    <option value="">— (ninguno) —</option>
+                                    @foreach (var c in _colores)
+                                    {
+                                        <option value="@c.Id">@c.Nombre</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_guardando">
+                            @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                            Guardar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ===== Modal catálogos ===== *@
+@if (_modalCat)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Catálogos de Telas</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalCat = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="btn-group mb-3 w-100">
+                        <button class="btn @(_catTipo == CatalogoTela.Depositos ? "btn-primary" : "btn-outline-primary")"
+                                @onclick='() => CambiarTipo(CatalogoTela.Depositos)'>Depósitos</button>
+                        <button class="btn @(_catTipo == CatalogoTela.Textiles ? "btn-primary" : "btn-outline-primary")"
+                                @onclick='() => CambiarTipo(CatalogoTela.Textiles)'>Textiles</button>
+                        <button class="btn @(_catTipo == CatalogoTela.Colores ? "btn-primary" : "btn-outline-primary")"
+                                @onclick='() => CambiarTipo(CatalogoTela.Colores)'>Colores</button>
+                    </div>
+
+                    @if (_catError is not null)
+                    {
+                        <div class="alert alert-danger py-2">@_catError</div>
+                    }
+
+                    @* Alta / edición *@
+                    <div class="d-flex gap-2 mb-3">
+                        <input class="form-control" placeholder="Nombre..." @bind="_catEdit.Nombre" />
+                        @if (_catTipo == CatalogoTela.Colores)
+                        {
+                            <input type="color" class="form-control form-control-color" style="max-width:60px"
+                                   value="@(_catEdit.Codigo ?? "#000000")" @onchange="e => _catEdit.Codigo = e.Value?.ToString()" />
+                        }
+                        <button class="btn btn-primary text-nowrap" @onclick="GuardarCat">
+                            @(_catEditId is null ? "Agregar" : "Guardar")
+                        </button>
+                        @if (_catEditId is not null)
+                        {
+                            <button class="btn btn-outline-secondary" @onclick="CancelarEdicionCat">Cancelar</button>
+                        }
+                    </div>
+
+                    @if (_catItems.Count == 0)
+                    {
+                        <p class="text-muted small">Sin ítems.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var it in _catItems)
+                            {
+                                <li class="list-group-item d-flex align-items-center">
+                                    @if (_catTipo == CatalogoTela.Colores && !string.IsNullOrWhiteSpace(it.Codigo))
+                                    {
+                                        <span class="tela-chip" style="background:@it.Codigo"></span>
+                                    }
+                                    <span class="flex-grow-1">@it.Nombre</span>
+                                    <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => EditarCat(it)">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarCat(it)">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarCatalogos">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private readonly List<TelaDto> _items = new();
+    private List<CatalogoItemDto> _depositos = new();
+    private List<CatalogoItemDto> _textiles = new();
+    private List<CatalogoItemDto> _colores = new();
+
+    private int _fDeposito;
+    private int _fTextil;
+    private string _fMaterial = "";
+    private bool _cargando = true;
+    private string? _error;
+
+    // Modal tela
+    private bool _modal;
+    private bool _esAlta;
+    private bool _guardando;
+    private int _idEditado;
+    private string? _errorModal;
+    private TelaSaveRequest _editado = new();
+
+    // Modal catálogos
+    private bool _modalCat;
+    private string _catTipo = CatalogoTela.Depositos;
+    private List<CatalogoItemDto> _catItems = new();
+    private int? _catEditId;
+    private CatalogoSaveRequest _catEdit = new();
+    private string? _catError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCombos();
+        await Cargar();
+    }
+
+    private async Task CargarCombos()
+    {
+        try
+        {
+            _depositos = await Api.ListarCatalogoAsync(CatalogoTela.Depositos);
+            _textiles = await Api.ListarCatalogoAsync(CatalogoTela.Textiles);
+            _colores = await Api.ListarCatalogoAsync(CatalogoTela.Colores);
+        }
+        catch { /* el cartel de error de Cargar cubre la pantalla */ }
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            var datos = await Api.ListarAsync(_fDeposito, _fMaterial, _fTextil, null);
+            _items.Clear();
+            _items.AddRange(datos);
+        }
+        catch (Exception ex)
+        {
+            _items.Clear();
+            _error = "No se pudieron cargar las telas. Verificá la conexión a la base de datos.";
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private Task Procesar() => Cargar();
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Cargar();
+    }
+
+    private static string Num(decimal? d) => d?.ToString("0.##") ?? "";
+
+    private string GramosPreview()
+    {
+        var r = _editado.RindeMKg ?? 0;
+        var a = _editado.AnchoCm ?? 0;
+        if (r <= 0 || a <= 0) return "";
+        return (1000m / (r * (a / 100m))).ToString("0.##");
+    }
+
+    private void AbrirAlta()
+    {
+        _esAlta = true;
+        _idEditado = 0;
+        _editado = new TelaSaveRequest();
+        _errorModal = null;
+        _modal = true;
+    }
+
+    private void AbrirModificacion(TelaDto t)
+    {
+        _esAlta = false;
+        _idEditado = t.Id;
+        _editado = new TelaSaveRequest
+        {
+            IdDeposito = t.IdDeposito,
+            Material = t.Material,
+            IdTextil = t.IdTextil,
+            AnchoCm = t.AnchoCm,
+            Composicion = t.Composicion,
+            RindeMKg = t.RindeMKg,
+            IdColor = t.IdColor,
+        };
+        _errorModal = null;
+        _modal = true;
+    }
+
+    private async Task Guardar()
+    {
+        _guardando = true;
+        _errorModal = null;
+        var (ok, error) = _esAlta
+            ? await Api.CrearAsync(_editado)
+            : await Api.ModificarAsync(_idEditado, _editado);
+        _guardando = false;
+        if (!ok) { _errorModal = error; return; }
+        _modal = false;
+        Ui.Exito(_esAlta ? "Tela agregada." : "Tela modificada.");
+        await Cargar();
+    }
+
+    private async Task Eliminar(TelaDto t)
+    {
+        var ok = await Ui.ConfirmAsync($"¿Eliminar la tela \"{t.Material}\" ({t.Deposito})?",
+            "Eliminar tela", "Eliminar", "Cancelar", peligro: true);
+        if (!ok) return;
+        await Api.EliminarAsync(t.Id);
+        Ui.Exito("Tela eliminada.");
+        await Cargar();
+    }
+
+    // ---- Catálogos ----
+    private async Task AbrirCatalogos()
+    {
+        _modalCat = true;
+        await CambiarTipo(CatalogoTela.Depositos);
+    }
+
+    private async Task CambiarTipo(string tipo)
+    {
+        _catTipo = tipo;
+        _catError = null;
+        CancelarEdicionCat();
+        _catItems = await Api.ListarCatalogoAsync(tipo);
+    }
+
+    private void EditarCat(CatalogoItemDto it)
+    {
+        _catEditId = it.Id;
+        _catEdit = new CatalogoSaveRequest { Nombre = it.Nombre, Codigo = it.Codigo };
+    }
+
+    private void CancelarEdicionCat()
+    {
+        _catEditId = null;
+        _catEdit = new CatalogoSaveRequest();
+    }
+
+    private async Task GuardarCat()
+    {
+        _catError = null;
+        var (ok, error) = _catEditId is null
+            ? await Api.CrearCatalogoAsync(_catTipo, _catEdit)
+            : await Api.ModificarCatalogoAsync(_catTipo, _catEditId.Value, _catEdit);
+        if (!ok) { _catError = error; return; }
+        CancelarEdicionCat();
+        _catItems = await Api.ListarCatalogoAsync(_catTipo);
+        Ui.Exito("Catálogo actualizado.");
+    }
+
+    private async Task EliminarCat(CatalogoItemDto it)
+    {
+        var ok = await Ui.ConfirmAsync($"¿Eliminar \"{it.Nombre}\" del catálogo?",
+            "Eliminar", "Eliminar", "Cancelar", peligro: true);
+        if (!ok) return;
+        var (okDel, error) = await Api.EliminarCatalogoAsync(_catTipo, it.Id);
+        if (!okDel) { _catError = error; return; }
+        _catItems = await Api.ListarCatalogoAsync(_catTipo);
+        Ui.Exito("Ítem eliminado.");
+    }
+
+    private async Task CerrarCatalogos()
+    {
+        _modalCat = false;
+        // Pudo cambiar depósitos/textiles/colores → refrescar combos y grilla.
+        await CargarCombos();
+        await Cargar();
+    }
+}
