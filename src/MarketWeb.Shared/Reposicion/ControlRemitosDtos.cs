@@ -10,6 +10,7 @@ public sealed class ControlEstadoDto
     public int Recibidos { get; set; }
     public int NoRecibidos { get; set; }
     public int Aceptados { get; set; }
+    public int Rechazados { get; set; }
 }
 
 /// <summary>Un remito en el detalle de control (SP_RemitosControlListado), con estados ya formateados.</summary>
@@ -30,7 +31,8 @@ public sealed class RemitoControlDto
     public int IdLocalDestino { get; set; }             // destino esperado (para la foto del QR de pantalla)
     public int IdLocalDestinoDespacho { get; set; }
     public bool EsQrPantalla { get; set; }              // recibido escaneando un QR regenerado en pantalla (-PC)
-    public string ColorHint { get; set; } = "normal";   // cruzado / qrpc / aceptado / recibido / norecibido / normal
+    public bool Rechazado { get; set; }                 // rechazo confirmado en RemitoRecepcion (Estado='RECHAZADO_OK')
+    public string ColorHint { get; set; } = "normal";   // cruzado / rechazado / qrpc / aceptado / recibido / norecibido / normal
 }
 
 /// <summary>Una fila del log de QR regenerados en pantalla (RemitoQRGenerado_Log).</summary>

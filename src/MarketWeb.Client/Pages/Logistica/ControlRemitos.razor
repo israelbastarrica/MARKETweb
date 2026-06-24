@@ -41,13 +41,13 @@
                     <tr>
                         <th>Local Destino</th>
                         <th class="text-end">Generados</th><th class="text-end">Despachados</th>
-                        <th class="text-end">Recibidos</th><th class="text-end">No Recibidos</th><th class="text-end">Aceptados</th>
+                        <th class="text-end">Recibidos</th><th class="text-end">No Recibidos</th><th class="text-end">Aceptados</th><th class="text-end">Rechazados</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var grupo in _estado.GroupBy(e => e.FechaRemito.Date).OrderByDescending(g => g.Key))
                     {
-                        <tr class="cr-fecha"><td colspan="6">@grupo.Key.ToString("dddd dd/MM/yyyy")</td></tr>
+                        <tr class="cr-fecha"><td colspan="7">@grupo.Key.ToString("dddd dd/MM/yyyy")</td></tr>
                         @foreach (var f in grupo)
                         {
                             <tr class="cr-fila" @onclick="() => AbrirDetalle(IdLocal(f.LocalDestino), grupo.Key, grupo.Key)">
@@ -57,6 +57,7 @@
                                 <td class="text-end cr-rec">@f.Recibidos.ToString("N0")</td>
                                 <td class="text-end cr-norec">@f.NoRecibidos.ToString("N0")</td>
                                 <td class="text-end cr-acep">@f.Aceptados.ToString("N0")</td>
+                                <td class="text-end cr-rech">@f.Rechazados.ToString("N0")</td>
                             </tr>
                         }
                     }

@@ -12,11 +12,13 @@
 .cr-rec { color: #2e7d32; }
 .cr-norec { color: #c77700; }
 .cr-acep { color: #0a9d4a; font-weight: 600; }
+.cr-rech { color: #d32f2f; font-weight: 600; }
 
 html[data-theme="dark"] .cr-desp { color: #7aa8f0; }
 html[data-theme="dark"] .cr-rec { color: #6fcf76; }
 html[data-theme="dark"] .cr-norec { color: #e3a857; }
 html[data-theme="dark"] .cr-acep { color: #4ade80; }
+html[data-theme="dark"] .cr-rech { color: #f87171; }
 
 /* Estados de cada remito en el detalle (mismos colores que el desktop). */
 .cr-listado tr { cursor: pointer; }
@@ -25,6 +27,7 @@ html[data-theme="dark"] .cr-acep { color: #4ade80; }
 .cr-listado .cr-aceptado   { background: #b6f0cf; }
 .cr-listado .cr-recibido   { background: #c6efce; }
 .cr-listado .cr-norecibido { background: #ffeb9c; }
+.cr-listado .cr-rechazado  { background: #ff9d9d; color: #7a0d0d; font-weight: 600; }
 .cr-listado .cr-sel        { outline: 2px solid var(--mk-accent, #f59e0b); outline-offset: -2px; }
 
 .cr-foto {
@@ -42,3 +45,4 @@ html[data-theme="dark"] .cr-listado .cr-qrpc       { background: #1f3a5a; }
 html[data-theme="dark"] .cr-listado .cr-aceptado   { background: #1f5a37; }
 html[data-theme="dark"] .cr-listado .cr-recibido   { background: #244a2e; }
 html[data-theme="dark"] .cr-listado .cr-norecibido { background: #4a4220; }
+html[data-theme="dark"] .cr-listado .cr-rechazado  { background: #6e1f1f; color: #f5b5b5; }
