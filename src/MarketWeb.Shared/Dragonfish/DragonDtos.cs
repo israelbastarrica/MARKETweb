@@ -13,6 +13,7 @@ public sealed class DragonRemitoItemDto
 public sealed class DragonRemitoRequest
 {
     public string Local { get; set; } = "";       // LURO / PERALTA (Cliente del remito)
+    public string Motivo { get; set; } = "13";     // 02=REPOSICION, 13=insumos. Default 13 por compat.
     public List<DragonRemitoItemDto> Items { get; set; } = new();
     // Va al campo InformacionAdicional del remito: la licencia/terminal destino para que el
     // agente de impresión sepa a qué impresora mandarlo (el alta por API queda con SALTAFW del server).
@@ -31,8 +32,34 @@ public sealed class ArticuloLookupDto
 {
     public string Cod { get; set; } = "";
     public string Des { get; set; } = "";
-    public List<string> Colores { get; set; } = new();
-    public List<string> Talles { get; set; } = new();
+    /// <summary>Variantes (color+talle) reales del artículo, de COMB. Para armar la grilla de talles por color.</summary>
+    public List<ComboVarianteDto> Variantes { get; set; } = new();
+}
+
+/// <summary>Una variante color+talle de un artículo (fila de COMB).</summary>
+public sealed class ComboVarianteDto
+{
+    public string Color { get; set; } = "";
+    public string Talle { get; set; } = "";
+}
+
+/// <summary>Una bolsa del depósito (PacksBolsas) con su detalle, leída por código de barras (NroBolsa).</summary>
+public sealed class BolsaDto
+{
+    public string NroBolsa { get; set; } = "";
+    public int IdPackBolsa { get; set; }
+    public bool Eliminada { get; set; }   // se encontró solo cayendo al fallback sin filtro (bolsa con baja lógica)
+    public List<BolsaRenglonDto> Renglones { get; set; } = new();
+}
+
+/// <summary>Un renglón de una bolsa (PacksBolsasDetalle): artículo + color + talle + cantidad.</summary>
+public sealed class BolsaRenglonDto
+{
+    public string ArtCod { get; set; } = "";
+    public string ArtDes { get; set; } = "";
+    public string Color { get; set; } = "";
+    public string Talle { get; set; } = "";
+    public int Cantidad { get; set; }
 }
 
 /// <summary>Resultado del POST a Dragonfish (incluye lo enviado y la respuesta cruda para diagnosticar).</summary>

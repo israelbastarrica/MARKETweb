@@ -1,50 +1,19 @@
-// Service worker de producción (PWA). Cachea los assets estáticos publicados
-// para arranque rápido / instalable, pero NO intercepta el login OAuth ni la API.
-self.importScripts('./service-worker-assets.js');
-self.addEventListener('install', event => event.waitUntil(onInstall(event)));
-self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
-self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
+// Service worker AUTODESTRUCTIVO. Ya no usamos PWA: con deploys muy seguidos, el
+// caché del SW dejaba "pegada" la versión vieja en las tablets. Este SW lo único que
+// hace es limpiar todas las cachés, desregistrarse y recargar las pestañas abiertas.
+// El navegador chequea este archivo y, al ver que cambió, corre esta versión que se
+// suicida → la tablet vuelve a tomar siempre lo último con un simple refresco.
+self.addEventListener('install', event => self.skipWaiting());
 
-const cacheNamePrefix = 'offline-cache-';
-const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
-const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/, /\.webmanifest$/];
-const offlineAssetsExclude = [/^service-worker\.js$/];
+self.addEventListener('activate', event => event.waitUntil((async () => {
+    try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+    } catch (e) { /* ignorar */ }
 
-async function onInstall(event) {
-    self.skipWaiting();
-    const assetsRequests = self.assetsManifest.assets
-        .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
-        .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
-        .map(asset => new Request(asset.url, { integrity: asset.hash, cache: 'no-cache' }));
-    await caches.open(cacheName).then(cache => cache.addAll(assetsRequests));
-}
+    await self.registration.unregister();
 
-async function onActivate(event) {
-    await self.clients.claim();
-    // Borra cachés de versiones anteriores.
-    const cacheKeys = await caches.keys();
-    await Promise.all(cacheKeys
-        .filter(key => key.startsWith(cacheNamePrefix) && key !== cacheName)
-        .map(key => caches.delete(key)));
-}
-
-async function onFetch(event) {
-    let cachedResponse = null;
-    if (event.request.method === 'GET') {
-        // Solo servimos index.html desde caché para la navegación PRINCIPAL de la app
-        // (destination 'document'). OJO: un iframe también es mode 'navigate' pero su
-        // destination es 'iframe' → si le devolviéramos index.html, el iframe cargaría
-        // la app de nuevo adentro (los dashboards son iframes a *.html). El login de
-        // Google y la API van siempre a la red, nunca al caché.
-        const url = event.request.url;
-        const esNavegacionApp = event.request.mode === 'navigate'
-            && event.request.destination === 'document'
-            && !url.includes('/api/')
-            && !url.includes('/signin-google')
-            && !url.includes('/signout');
-        const request = esNavegacionApp ? 'index.html' : event.request;
-        const cache = await caches.open(cacheName);
-        cachedResponse = await cache.match(request);
-    }
-    return cachedResponse || fetch(event.request);
-}
+    // Recarga las pestañas abiertas para que tomen el contenido fresco (sin SW).
+    const clients = await self.clients.matchAll({ type: 'window' });
+    clients.forEach(c => c.navigate(c.url));
+})()));

@@ -717,7 +717,8 @@ public sealed class LogisticaDashboardService : ILogisticaDashboardService
         var corrida = await cn.QuerySingleOrDefaultAsync<CorridaRow>(new CommandDefinition("""
             SELECT TOP 1 ID AS Id, FechaHoraCorrida
             FROM MARKET.dbo.Reposicion
-            WHERE MachineName = 'DESKTOP-PGIO2QP' AND ISNULL(Eliminado, 0) = 0
+            -- Última corrida REAL: scheduler (MARKETWEB-SCHED), desktop viejo o web; excluye pruebas de agente.
+            WHERE ISNULL(MachineName, '') <> 'CLAUDE-AGENT' AND ISNULL(Eliminado, 0) = 0
             ORDER BY ID DESC;
             """, cancellationToken: ct));
         if (corrida is null) return res;
@@ -1144,7 +1145,7 @@ public sealed class LogisticaDashboardService : ILogisticaDashboardService
         try
         {
             corrida = await cn.ExecuteScalarAsync<DateTime?>(new CommandDefinition(
-                "SELECT MAX(FechaHoraCorrida) FROM MARKET.dbo.Reposicion WHERE MachineName='DESKTOP-PGIO2QP' AND ISNULL(Eliminado,0)=0",
+                "SELECT MAX(FechaHoraCorrida) FROM MARKET.dbo.Reposicion WHERE ISNULL(MachineName,'') <> 'CLAUDE-AGENT' AND ISNULL(Eliminado,0)=0",
                 cancellationToken: ct));
         }
         catch { }

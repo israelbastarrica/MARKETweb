@@ -64,5 +64,18 @@ public sealed class DragonApi
         catch { return null; }
     }
 
+    // Busca una bolsa del depósito por su código de barras (NroBolsa) y trae su detalle.
+    public async Task<BolsaDto?> BuscarBolsaAsync(string nroBolsa)
+    {
+        try
+        {
+            var r = await _http.GetAsync($"api/remitos/bolsa/{Uri.EscapeDataString(nroBolsa)}");
+            if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            if (r.IsSuccessStatusCode) return await r.Content.ReadFromJsonAsync<BolsaDto>();
+            return null;
+        }
+        catch { return null; }
+    }
+
     private sealed class EstadoResp { public bool Configurado { get; set; } }
 }

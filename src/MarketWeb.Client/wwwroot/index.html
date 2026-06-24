@@ -84,9 +84,14 @@
         };
     </script>
     <script>
-        // PWA: registra el service worker (instalable + arranque offline de assets).
+        // Sin PWA (deploys muy seguidos): desregistramos cualquier service worker viejo
+        // y borramos su caché, así cada deploy se ve con un simple refresco. NO registramos
+        // ningún SW nuevo. El service-worker.js publicado es autodestructivo (limpia y se va).
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
+            navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => { });
+            if (window.caches) {
+                caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => { });
+            }
         }
     </script>
 </body>

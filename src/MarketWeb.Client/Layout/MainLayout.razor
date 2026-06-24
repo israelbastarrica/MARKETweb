@@ -3,14 +3,15 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject MarketWeb.Client.Services.UsoApi Uso
+@inject MarketWeb.Client.Services.LayoutState Layout
 
-<div class="market-shell @(_menuAbierto ? "menu-abierto" : null) @(_menuColapsado ? "menu-colapsado" : null)">
+<div class="market-shell @(_menuAbierto ? "menu-abierto" : null) @(Layout.MenuColapsado ? "menu-colapsado" : null)">
     <NavMenu />
     <div class="market-backdrop" @onclick="CerrarMenu"></div>
     <main class="market-content">
         <button class="market-colapsar no-print" @onclick="ToggleColapsar"
-                title="@(_menuColapsado ? "Mostrar menú" : "Ocultar menú")" aria-label="Menú">
-            <i class="fa-solid @(_menuColapsado ? "fa-bars" : "fa-angles-left")"></i>
+                title="@(Layout.MenuColapsado ? "Mostrar menú" : "Ocultar menú")" aria-label="Menú">
+            <i class="fa-solid @(Layout.MenuColapsado ? "fa-bars" : "fa-angles-left")"></i>
         </button>
         <div class="market-topbar">
             <button class="market-burger" @onclick="ToggleMenu" title="Menú" aria-label="Menú">
@@ -28,13 +29,14 @@
     // Drawer mobile: en celular el menú es un panel que entra desde el costado.
     // En desktop el sidebar está siempre visible (este estado no aplica).
     private bool _menuAbierto;
-    // Colapsar el sidebar en desktop/tablet (gana pantalla). Se recuerda por equipo.
-    private bool _menuColapsado;
+    // Colapsar el sidebar en desktop/tablet (gana pantalla). Estado compartido en LayoutState
+    // (para que "Pantalla ancha" en Remito nuevo también lo colapse). Se recuerda por equipo.
     private const string KeyColapsado = "marketweb.menuColapsado";
 
     protected override void OnInitialized()
     {
         Nav.LocationChanged += OnLocationChanged;
+        Layout.OnChange += OnLayoutChange;
         RegistrarUso();   // página inicial
     }
 
@@ -44,16 +46,19 @@
         try
         {
             var v = await JS.InvokeAsync<string>("localStorage.getItem", KeyColapsado);
-            if (v == "1") { _menuColapsado = true; StateHasChanged(); }
+            if (v == "1") Layout.SetMenuColapsado(true);
         }
         catch { }
     }
 
-    private async Task ToggleColapsar()
+    // Cuando cambia el estado del menú (manual o desde una página), re-render + persistir.
+    private async void OnLayoutChange()
     {
-        _menuColapsado = !_menuColapsado;
-        try { await JS.InvokeVoidAsync("localStorage.setItem", KeyColapsado, _menuColapsado ? "1" : "0"); } catch { }
+        await InvokeAsync(StateHasChanged);
+        try { await JS.InvokeVoidAsync("localStorage.setItem", KeyColapsado, Layout.MenuColapsado ? "1" : "0"); } catch { }
     }
+
+    private void ToggleColapsar() => Layout.Toggle();
 
     private void ToggleMenu() => _menuAbierto = !_menuAbierto;
     private void CerrarMenu() => _menuAbierto = false;
@@ -72,5 +77,9 @@
         if (acceso is not null) _ = Uso.RegistrarAsync(acceso.Ruta);
     }
 
-    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Layout.OnChange -= OnLayoutChange;
+    }
 }

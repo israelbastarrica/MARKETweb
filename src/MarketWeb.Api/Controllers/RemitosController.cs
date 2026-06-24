@@ -39,6 +39,14 @@ public sealed class RemitosController : ControllerBase
         return Ok(res);
     }
 
+    [HttpGet("bolsa/{nro}")]
+    public async Task<IActionResult> BuscarBolsa(string nro, CancellationToken ct)
+    {
+        var res = await _lookup.BuscarBolsaAsync(nro, ct);
+        if (res is null) return NotFound();
+        return Ok(res);
+    }
+
     [HttpPost]
     public async Task<ActionResult<DragonRemitoResultDto>> Crear([FromBody] DragonRemitoRequest req, CancellationToken ct)
         => Ok(await _dragon.CrearRemitoAsync(req, ct));

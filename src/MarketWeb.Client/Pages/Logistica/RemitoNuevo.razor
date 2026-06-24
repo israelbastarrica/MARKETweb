@@ -1,7 +1,10 @@
 @page "/logistica/remito-nuevo"
+@using System.Text.RegularExpressions
+@implements IDisposable
 @inject DragonApi Api
 @inject IJSRuntime JS
 @inject UiService Ui
+@inject LayoutState Layout
 
 <PageTitle>Remito nuevo</PageTitle>
 
@@ -30,20 +33,49 @@
         </div>
     </div>
 
-    @* ---- Carga de renglones ---- *@
+    @* ---- Escanear bolsa del depósito (carga toda la bolsa de un saque) ---- *@
     <div class="market-card p-3 mb-3">
-        <div class="row g-2 align-items-end">
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button class="btn btn-dark btn-lg" @onclick="AbrirScanner">
+                <i class="fa-solid fa-camera me-2"></i>Escanear bolsa
+            </button>
+            <span class="text-muted">o</span>
+            <div class="input-group input-group-lg rn-bolsa-manual">
+                <span class="input-group-text">N° bolsa</span>
+                <input class="form-control" @bind="_nroBolsaManual" @onkeyup="OnKeyBolsa" placeholder="tipealo a mano" />
+                <button class="btn btn-outline-secondary" @onclick="BuscarBolsaManual"><i class="fa-solid fa-magnifying-glass"></i></button>
+            </div>
+            <button class="btn btn-outline-dark btn-lg ms-auto" @onclick="ToggleAncho" title="Pantalla completa horizontal (tablet)">
+                <i class="fa-solid @(_ancho ? "fa-compress" : "fa-expand") me-1"></i>@(_ancho ? "Salir" : "Pantalla ancha")
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(_scanError))
+        {
+            <div class="alert alert-warning mt-2 mb-0 py-2 small">@_scanError</div>
+        }
+    </div>
 
-            @* ARTCOD con autocomplete *@
-            <div class="col-6 col-md-3 position-relative">
+    @* ---- Carga de renglones ---- *@
+    <div class="market-card rn-carga p-3 mb-3">
+        @* Código (angosto, ~10 chars) con autocomplete + descripción justo debajo *@
+        <div class="row g-2">
+            <div class="col-12 position-relative">
                 <label class="form-label small text-muted mb-1">Código (ARTCOD)</label>
-                <input class="form-control form-control-lg @(_artNoEncontrado ? "is-warning" : null)"
-                       value="@_artcod"
-                       @oninput="OnArtCodInput"
-                       @onblur="OnArtCodBlur"
-                       @ref="_inpArt"
-                       autocomplete="off"
-                       placeholder="Ej: IH097.427" />
+                <div class="d-flex align-items-center gap-2">
+                    <input class="form-control form-control-lg rn-cod @(_artNoEncontrado ? "is-warning" : null)"
+                           value="@_artcod"
+                           @oninput="OnArtCodInput"
+                           @onblur="OnArtCodBlur"
+                           @ref="_inpArt"
+                           autocomplete="off"
+                           placeholder="Ej: IH097.427" />
+                    @if (!string.IsNullOrEmpty(_artcod) || !string.IsNullOrEmpty(_color))
+                    {
+                        <button class="btn btn-outline-secondary btn-lg" @onclick="LimpiarCarga" title="Limpiar y arrancar de cero">
+                            <i class="fa-solid fa-eraser me-1"></i>Limpiar
+                        </button>
+                    }
+                </div>
                 @if (_sugerencias.Count > 0)
                 {
                     <ul class="rn-sugerencias">
@@ -56,65 +88,81 @@
                         }
                     </ul>
                 }
-            </div>
-
-            @* Descripción del artículo (si se encontró) *@
-            <div class="col-6 col-md-3 d-flex align-items-end pb-1">
-                @if (_buscandoArt)
-                {
-                    <span class="text-muted small"><i class="fa-solid fa-spinner fa-spin me-1"></i></span>
-                }
-                else if (!string.IsNullOrEmpty(_artDes))
-                {
-                    <span class="text-success small fw-semibold">@_artDes</span>
-                }
-                else if (_artNoEncontrado)
-                {
-                    <span class="text-warning small"><i class="fa-solid fa-triangle-exclamation me-1"></i>No encontrado — podés agregarlo igual</span>
-                }
-            </div>
-
-            @* Color: dropdown si hay combos, texto libre si no *@
-            <div class="col-6 col-md-2">
-                <label class="form-label small text-muted mb-1">Color</label>
-                @if (_colores.Count > 0)
-                {
-                    <select class="form-select form-select-lg" @bind="_color">
-                        <option value="">— Color —</option>
-                        @foreach (var c in _colores) { <option value="@c">@c</option> }
-                    </select>
-                }
-                else
-                {
-                    <input class="form-control form-control-lg" @bind="_color" placeholder="Color" />
-                }
-            </div>
-
-            @* Talle: dropdown si hay combos, texto libre si no *@
-            <div class="col-4 col-md-2">
-                <label class="form-label small text-muted mb-1">Talle</label>
-                @if (_talles.Count > 0)
-                {
-                    <select class="form-select form-select-lg" @bind="_talle">
-                        <option value="">— Talle —</option>
-                        @foreach (var t in _talles) { <option value="@t">@t</option> }
-                    </select>
-                }
-                else
-                {
-                    <input class="form-control form-control-lg" @bind="_talle" placeholder="Talle" />
-                }
-            </div>
-
-            <div class="col-4 col-md-1">
-                <label class="form-label small text-muted mb-1">Cantidad</label>
-                <input type="number" min="1" class="form-control form-control-lg" @bind="_cant" @onkeyup="OnKeyCant" />
-            </div>
-
-            <div class="col-4 col-md-1 d-grid">
-                <button class="btn btn-primary btn-lg" @onclick="Agregar"><i class="fa-solid fa-plus me-1"></i>Agregar</button>
+                <div class="rn-desc">
+                    @if (_buscandoArt)
+                    {
+                        <span class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>Buscando…</span>
+                    }
+                    else if (!string.IsNullOrEmpty(_artDes))
+                    {
+                        <span class="text-success fw-semibold"><i class="fa-solid fa-check me-1"></i>@_artDes</span>
+                    }
+                    else if (_artNoEncontrado)
+                    {
+                        <span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>No existe en el catálogo (ART). Revisá el código.</span>
+                    }
+                    else
+                    {
+                        <span>&nbsp;</span>
+                    }
+                </div>
             </div>
         </div>
+
+        @* Una vez validado el artículo: elegir color → grilla de talles. *@
+        @if (!string.IsNullOrEmpty(_artDes))
+        {
+            @if (_variantes.Count > 0)
+            {
+                @if (_colores.Count > 0)
+                {
+                    <div class="row g-2 align-items-end mt-1">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small text-muted mb-1">Color</label>
+                            <select class="form-select form-select-lg" value="@_color" @onchange="OnColorChange">
+                                <option value="">— Elegí un color —</option>
+                                @foreach (var c in _colores) { <option value="@c">@c</option> }
+                            </select>
+                        </div>
+                    </div>
+                }
+
+                @if (_tallesDeColor.Count > 0)
+                {
+                    <div class="rn-grilla mt-3">
+                        @foreach (var t in _tallesDeColor)
+                        {
+                            <div class="rn-talle">
+                                <div class="rn-talle-lbl">@(string.IsNullOrEmpty(t) ? "—" : t)</div>
+                                <input type="number" min="0" inputmode="numeric"
+                                       class="form-control form-control-lg text-center"
+                                       value="@_cantPorTalle[t]"
+                                       @onchange="(e) => SetCant(t, e)" />
+                            </div>
+                        }
+                    </div>
+                    <div class="d-grid d-md-flex justify-content-md-end mt-3">
+                        <button class="btn btn-primary btn-lg" @onclick="AgregarColor">
+                            <i class="fa-solid fa-plus me-1"></i>
+                            Agregar@(string.IsNullOrEmpty(_color) ? "" : $" {_color}") (@TotalGrilla u.)
+                        </button>
+                    </div>
+                }
+            }
+            else
+            {
+                @* Artículo sin variantes en COMB: una sola línea con cantidad. *@
+                <div class="row g-2 align-items-end mt-1">
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Cantidad</label>
+                        <input type="number" min="1" class="form-control form-control-lg" @bind="_cantSimple" />
+                    </div>
+                    <div class="col-6 col-md-3 d-grid">
+                        <button class="btn btn-primary btn-lg" @onclick="AgregarSimple"><i class="fa-solid fa-plus me-1"></i>Agregar</button>
+                    </div>
+                </div>
+            }
+        }
     </div>
 
     @if (_items.Count > 0)
@@ -154,12 +202,68 @@
     }
     else
     {
-        <div class="market-empty"><i class="fa-solid fa-boxes-stacked"></i><p>Agregá renglones (código, color, talle, cantidad) y después dale <strong>Dar de alta</strong>.</p></div>
+        <div class="market-empty"><i class="fa-solid fa-boxes-stacked"></i><p>Escaneá una <strong>bolsa</strong>, o buscá un artículo y cargá cantidades por <strong>talle</strong>. Después dale <strong>Dar de alta</strong>.</p></div>
+    }
+
+    @if (_diag is not null)
+    {
+        <div class="market-card p-3 mb-3 rn-diag">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong class="text-danger"><i class="fa-solid fa-bug me-1"></i>Dragon rechazó el remito (HTTP @_diag.HttpStatus)</strong>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _diag = null">Cerrar</button>
+            </div>
+            <label class="form-label small text-muted mb-1">Respuesta de Dragon</label>
+            <textarea class="form-control mb-2 rn-mono" rows="6" readonly>@_diag.Respuesta</textarea>
+            <label class="form-label small text-muted mb-1">JSON que enviamos</label>
+            <textarea class="form-control rn-mono" rows="8" readonly>@_diag.JsonEnviado</textarea>
+        </div>
     }
 </div>
 
+@if (_escaneando)
+{
+    <div class="rn-scan-overlay">
+        <div class="rn-scan-box">
+            <div class="rn-scan-hint"><i class="fa-solid fa-barcode me-2"></i>Apuntá al código de barras de la bolsa…</div>
+            <video id="rn-video" class="rn-scan-video" muted autoplay playsinline></video>
+            <button class="btn btn-light btn-lg mt-3" @onclick="CerrarScanner"><i class="fa-solid fa-xmark me-2"></i>Cancelar</button>
+        </div>
+    </div>
+}
+
 <style>
     .rn-table td, .rn-table th { font-size: 1.05rem; }
+
+    /* La card de carga NO debe recortar el desplegable de sugerencias
+       (el .market-card global tiene overflow:hidden por el redondeo). */
+    .rn-carga { overflow: visible; }
+
+    /* El código son ~10 caracteres: campo angosto, no a todo el ancho. Siempre mayúsculas. */
+    .rn-cod { max-width: 240px; text-transform: uppercase; }
+
+    .rn-desc {
+        min-height: 1.5rem;
+        margin-top: .4rem;
+        font-size: .95rem;
+        line-height: 1.3;
+    }
+
+    /* Grilla de talles: un casillero por talle con su cantidad. */
+    .rn-grilla {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .6rem;
+    }
+
+    .rn-talle { width: 88px; }
+
+    .rn-talle-lbl {
+        font-size: .9rem;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: .25rem;
+        color: var(--mk-text-strong);
+    }
 
     .rn-sugerencias {
         position: absolute;
@@ -195,26 +299,56 @@
     .form-control.is-warning {
         border-color: #f59e0b;
     }
+
+    .rn-bolsa-manual { max-width: 520px; flex: 1 1 380px; }
+
+    .rn-diag { border: 1px solid var(--mk-danger, #dc3545); }
+    .rn-mono { font-family: ui-monospace, Consolas, monospace; font-size: .8rem; white-space: pre; }
+
+    /* Overlay de escaneo: pantalla completa con el video de la cámara. */
+    .rn-scan-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1080;
+        background: rgba(0, 0, 0, .9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .rn-scan-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        max-width: 92vw;
+    }
+
+    .rn-scan-hint { color: #fff; font-size: 1.05rem; margin-bottom: .6rem; }
+
+    .rn-scan-video {
+        width: min(720px, 94vw);
+        max-height: 70vh;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+        display: block;
+        object-fit: cover;
+    }
 </style>
 
 @code {
+    private string _local = "LURO";
+    private string _licencia = "";
+    private string _etiquetaPc = "esta tablet";
+
     // Impresoras = licencias destino (van a InformacionAdicional; el agente rutea por ahí cuando ve SALTAFW del server).
     private static readonly (string Licencia, string Nombre)[] Impresoras =
     {
         ("809131", "Impresora 1"),
         ("809129", "Impresora 2"),
     };
-    private string _local = "LURO";
-    private string _licencia = "";
-    private string _etiquetaPc = "esta tablet";
 
-    private static string NombreImpresora(string lic)
-    {
-        var m = Impresoras.FirstOrDefault(i => i.Licencia == lic);
-        return string.IsNullOrEmpty(m.Nombre) ? $"Impresora {lic}" : $"{m.Nombre} ({lic})";
-    }
-
-    // --- Renglones ---
+    // --- Renglones del remito ---
     private sealed class RenglonItem
     {
         public string Articulo { get; set; } = "";
@@ -225,21 +359,26 @@
     }
     private readonly List<RenglonItem> _items = new();
 
-    // --- Formulario alta ---
-    private string _artcod = "", _color = "", _talle = "";
-    private int _cant = 1;
+    // --- Estado de carga ---
+    private string _artcod = "";
     private bool _enviando, _dragonOff;
     private ElementReference _inpArt;
 
-    // --- Autocomplete ---
+    // --- Autocomplete (última repo) ---
     private List<UltimaRepoItemDto> _repoItems = new();
     private List<UltimaRepoItemDto> _sugerencias = new();
 
-    // --- Validación artículo ---
+    // --- Artículo validado + variantes ---
     private string _artDes = "";
-    private List<string> _colores = new();
-    private List<string> _talles = new();
     private bool _buscandoArt, _artNoEncontrado;
+    private List<ComboVarianteDto> _variantes = new();   // todas las variantes color+talle (COMB)
+    private List<string> _colores = new();               // colores distintos
+    private string _color = "";                          // color elegido
+    private List<string> _tallesDeColor = new();         // talles del color elegido
+    private Dictionary<string, int> _cantPorTalle = new();// talle -> cantidad cargada
+    private int _cantSimple = 1;                         // para artículos sin variantes
+
+    private int TotalGrilla => _cantPorTalle.Values.Sum();
 
     protected override async Task OnInitializedAsync()
     {
@@ -249,13 +388,22 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        var pc = "";
-        try { pc = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre) ?? ""; } catch { }
-        pc = pc.Trim();
-        if (!string.IsNullOrEmpty(pc)) _etiquetaPc = pc;
-        _licencia = LicenciasTablet.Licencia(pc) ?? "";
-        StateHasChanged();
+        if (firstRender)
+        {
+            var pc = "";
+            try { pc = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre) ?? ""; } catch { }
+            pc = pc.Trim();
+            if (!string.IsNullOrEmpty(pc)) _etiquetaPc = pc;
+            _licencia = LicenciasTablet.Licencia(pc) ?? "";
+            StateHasChanged();
+        }
+
+        // El <video> recién existe tras renderizar el overlay: arrancamos acá la cámara.
+        if (_scanPendiente && _escaneando)
+        {
+            _scanPendiente = false;
+            await IniciarScanner();
+        }
     }
 
     private async Task OnLocalChange(ChangeEventArgs e)
@@ -265,21 +413,113 @@
         _sugerencias.Clear();
     }
 
-    // --- Autocomplete ---
+    // ---------------- Escanear bolsa ----------------
+
+    private bool _escaneando, _scanPendiente;
+    private string _scanError = "", _nroBolsaManual = "";
+    private IJSObjectReference? _scanModule;
+    private DotNetObjectReference<RemitoNuevo>? _selfRef;
+
+    private void AbrirScanner()
+    {
+        _scanError = "";
+        _escaneando = true;
+        _scanPendiente = true;   // OnAfterRenderAsync arranca la cámara cuando el <video> ya existe
+    }
+
+    private async Task IniciarScanner()
+    {
+        try
+        {
+            _scanModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/rnscan.js");
+            _selfRef ??= DotNetObjectReference.Create(this);
+            await _scanModule.InvokeAsync<bool>("start", "rn-video", _selfRef);
+        }
+        catch (Exception ex)
+        {
+            _escaneando = false;
+            _scanError = "No se pudo abrir la cámara: " + ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CerrarScanner()
+    {
+        _escaneando = false;
+        if (_scanModule is not null) { try { await _scanModule.InvokeVoidAsync("stop"); } catch { } }
+    }
+
+    [JSInvokable]
+    public async Task OnScanResult(string codigo)
+    {
+        _escaneando = false;
+        await ProcesarBolsa(codigo);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task OnScanError(string motivo)
+    {
+        _escaneando = false;
+        _scanError = motivo switch
+        {
+            "no-soportado" => "Esta tablet no permite leer con la cámara. Tipeá el N° de bolsa a mano.",
+            "permiso" => "Falta permiso de cámara. Habilitalo en el navegador, o tipeá el N° de bolsa.",
+            _ => $"No se pudo usar la cámara ({motivo}). Tipeá el N° de bolsa a mano."
+        };
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task OnKeyBolsa(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarBolsaManual();
+    }
+
+    private async Task BuscarBolsaManual()
+    {
+        var nro = (_nroBolsaManual ?? "").Trim();
+        if (string.IsNullOrEmpty(nro)) return;
+        await ProcesarBolsa(nro);
+        _nroBolsaManual = "";
+    }
+
+    // Trae el detalle de la bolsa y suma todos sus renglones al remito.
+    private async Task ProcesarBolsa(string nroBolsa)
+    {
+        _scanError = "";
+        var bolsa = await Api.BuscarBolsaAsync(nroBolsa);
+        if (bolsa is null) { Ui.Error($"No se encontró la bolsa {nroBolsa}."); return; }
+        if (bolsa.Renglones.Count == 0) { Ui.Error($"La bolsa {nroBolsa} no tiene renglones."); return; }
+
+        var u = 0;
+        foreach (var r in bolsa.Renglones)
+        {
+            MergeItem(r.ArtCod, r.ArtDes, r.Color, r.Talle, r.Cantidad);
+            u += r.Cantidad;
+        }
+        var etiqueta = bolsa.Eliminada ? $"{nroBolsa} (archivada)" : nroBolsa;
+        Ui.Exito($"Bolsa {etiqueta}: +{bolsa.Renglones.Count} renglón(es), {u} u.");
+    }
+
+    public void Dispose()
+    {
+        _selfRef?.Dispose();
+        if (_scanModule is not null) { _ = _scanModule.DisposeAsync(); }
+        if (_pantallaModule is not null) { _ = _pantallaModule.DisposeAsync(); }
+    }
+
+    // ---------------- Autocomplete ----------------
+
     private void OnArtCodInput(ChangeEventArgs e)
     {
-        _artcod = e.Value?.ToString() ?? "";
+        _artcod = (e.Value?.ToString() ?? "").ToUpperInvariant();
         _artDes = "";
         _artNoEncontrado = false;
-        _colores.Clear();
-        _talles.Clear();
+        ResetVariantes();
 
         var q = _artcod.Trim();
-        if (q.Length < 2)
-        {
-            _sugerencias.Clear();
-            return;
-        }
+        if (q.Length < 2) { _sugerencias.Clear(); return; }
         _sugerencias = _repoItems
             .Where(i => i.ArtCod.Contains(q, StringComparison.OrdinalIgnoreCase)
                      || i.ArtDes.Contains(q, StringComparison.OrdinalIgnoreCase))
@@ -290,10 +530,8 @@
     private async Task SeleccionarArticulo(UltimaRepoItemDto item)
     {
         _artcod = item.ArtCod;
-        _artDes = item.ArtDes;
         _sugerencias.Clear();
-        _artNoEncontrado = false;
-        await CargarVariantesAsync(item.ArtCod);
+        await ValidarArticuloAsync(item.ArtCod);
     }
 
     private async Task OnArtCodBlur()
@@ -301,7 +539,7 @@
         _sugerencias.Clear();
         var cod = (_artcod ?? "").Trim();
         if (cod.Length < 3) return;
-        if (!string.IsNullOrEmpty(_artDes)) return; // ya validado por selección
+        if (!string.IsNullOrEmpty(_artDes)) return; // ya validado
         await ValidarArticuloAsync(cod);
     }
 
@@ -310,6 +548,7 @@
         _buscandoArt = true;
         _artDes = "";
         _artNoEncontrado = false;
+        ResetVariantes();
         StateHasChanged();
 
         var lookup = await Api.BuscarArticuloAsync(cod.ToUpperInvariant());
@@ -317,57 +556,173 @@
         if (lookup is not null)
         {
             _artDes = lookup.Des;
-            _colores = lookup.Colores;
-            _talles = lookup.Talles;
+            SetVariantes(lookup.Variantes);
         }
         else
         {
             _artNoEncontrado = true;
-            _colores.Clear();
-            _talles.Clear();
         }
     }
 
-    private async Task CargarVariantesAsync(string cod)
+    // ---------------- Variantes / grilla ----------------
+
+    private void SetVariantes(List<ComboVarianteDto> variantes)
     {
-        var lookup = await Api.BuscarArticuloAsync(cod.ToUpperInvariant());
-        if (lookup is not null)
-        {
-            _colores = lookup.Colores;
-            _talles = lookup.Talles;
-        }
-        else
-        {
-            _colores.Clear();
-            _talles.Clear();
-        }
+        _variantes = variantes ?? new();
+        _colores = _variantes.Select(v => v.Color)
+                             .Where(c => !string.IsNullOrWhiteSpace(c))
+                             .Distinct()
+                             .ToList();
+        _color = "";
+        _tallesDeColor = new();
+        _cantPorTalle = new();
+
+        // Artículo con talles pero sin color con nombre: mostramos la grilla directo (color vacío).
+        if (_colores.Count == 0 && _variantes.Count > 0)
+            CargarTallesDe("");
     }
 
-    // --- Tecla Enter en cantidad ---
-    private async Task OnKeyCant(KeyboardEventArgs e)
+    private void ResetVariantes()
     {
-        if (e.Key == "Enter") await Agregar();
+        _variantes = new();
+        _colores = new();
+        _color = "";
+        _tallesDeColor = new();
+        _cantPorTalle = new();
     }
 
-    private async Task Agregar()
+    private void OnColorChange(ChangeEventArgs e)
+    {
+        _color = e.Value?.ToString() ?? "";
+        if (string.IsNullOrEmpty(_color)) { _tallesDeColor = new(); _cantPorTalle = new(); return; }
+        CargarTallesDe(_color);
+    }
+
+    private void CargarTallesDe(string color)
+    {
+        _tallesDeColor = _variantes
+            .Where(v => v.Color == color)
+            .Select(v => v.Talle)
+            .Distinct()
+            .OrderBy(EscalaIndex)                              // primero la escala de letras (S<M<L<XL...)
+            .ThenBy(ClaveNatural, StringComparer.Ordinal)      // después orden natural (8<10<38<40, T2<T10)
+            .ToList();
+        _cantPorTalle = _tallesDeColor.ToDictionary(t => t, _ => 0);
+    }
+
+    // --- Orden de talles (propio, sin depender de Dragon) ---
+
+    // Escala de letras conocida: si el talle es uno de estos, manda este orden.
+    private static readonly string[] EscalaLetras =
+    {
+        "XXXS", "XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL", "5XL", "6XL", "7XL"
+    };
+
+    // Talles de letra → su posición en la escala. Lo que no es escala va al final (MaxValue),
+    // y ahí ordena la clave natural (numéricos por valor, alfanuméricos parejos).
+    private static int EscalaIndex(string talle)
+    {
+        var i = Array.IndexOf(EscalaLetras, (talle ?? "").Trim().ToUpperInvariant());
+        return i >= 0 ? i : int.MaxValue;
+    }
+
+    // Clave de orden natural: rellena cada bloque de dígitos a 10 para que el orden
+    // de texto sea numérico de verdad ("8" < "10" < "38" < "40", "T2" < "T10").
+    private static string ClaveNatural(string talle) =>
+        Regex.Replace((talle ?? "").Trim().ToUpperInvariant(), @"\d+", m => m.Value.PadLeft(10, '0'));
+
+    private void SetCant(string talle, ChangeEventArgs e)
+    {
+        int.TryParse(e.Value?.ToString(), out var q);
+        if (q < 0) q = 0;
+        _cantPorTalle[talle] = q;
+    }
+
+    // ---------------- Agregar ----------------
+
+    private void AgregarColor()
+    {
+        var conCant = _tallesDeColor.Where(t => _cantPorTalle.TryGetValue(t, out var q) && q > 0).ToList();
+        if (conCant.Count == 0) { Ui.Error("Cargá cantidad en al menos un talle."); return; }
+
+        foreach (var t in conCant)
+            MergeItem(_artcod, _artDes, _color, t, _cantPorTalle[t]);
+
+        var color = string.IsNullOrEmpty(_color) ? "(sin color)" : _color;
+        var u = conCant.Sum(t => _cantPorTalle[t]);
+        // Reset para el próximo color, manteniendo el artículo.
+        _color = "";
+        _tallesDeColor = new();
+        _cantPorTalle = new();
+        Ui.Toast($"Agregado {color}: {conCant.Count} talle(s), {u} u.");
+    }
+
+    private async Task AgregarSimple()
     {
         var cod = (_artcod ?? "").Trim().ToUpperInvariant();
-        if (string.IsNullOrEmpty(cod)) { Ui.Error("Poné el código del artículo."); return; }
-        if (_cant <= 0) { Ui.Error("La cantidad tiene que ser mayor a 0."); return; }
-        _items.Add(new RenglonItem
-        {
-            Articulo = cod,
-            Descripcion = _artDes,
-            Color = (_color ?? "").Trim(),
-            Talle = (_talle ?? "").Trim(),
-            Cantidad = _cant
-        });
-        _artcod = ""; _artDes = ""; _color = ""; _talle = ""; _cant = 1;
-        _colores.Clear(); _talles.Clear(); _artNoEncontrado = false;
+        if (string.IsNullOrEmpty(cod) || string.IsNullOrEmpty(_artDes)) { Ui.Error("Validá primero el artículo."); return; }
+        if (_cantSimple <= 0) { Ui.Error("La cantidad tiene que ser mayor a 0."); return; }
+
+        MergeItem(cod, _artDes, "", "", _cantSimple);
+        _cantSimple = 1;
+        LimpiarArticulo();
         try { await _inpArt.FocusAsync(); } catch { }
     }
 
+    // Suma si ya existe (mismo artículo+color+talle), si no agrega renglón nuevo.
+    private void MergeItem(string art, string des, string color, string talle, int cant)
+    {
+        var ex = _items.FirstOrDefault(i => i.Articulo == art && i.Color == color && i.Talle == talle);
+        if (ex is not null) ex.Cantidad += cant;
+        else _items.Add(new RenglonItem { Articulo = art, Descripcion = des, Color = color, Talle = talle, Cantidad = cant });
+    }
+
+    private void LimpiarArticulo()
+    {
+        _artcod = "";
+        _artDes = "";
+        _artNoEncontrado = false;
+        _sugerencias.Clear();
+        ResetVariantes();
+    }
+
+    // Botón "Limpiar": descarta la carga en curso (artículo + color + grilla) y vuelve a foco.
+    private async Task LimpiarCarga()
+    {
+        LimpiarArticulo();
+        _scanError = "";
+        try { await _inpArt.FocusAsync(); } catch { }
+    }
+
+    // ---------------- Pantalla ancha (tablets) ----------------
+
+    private bool _ancho;
+    private bool _menuPrevio;
+    private IJSObjectReference? _pantallaModule;
+
+    private async Task ToggleAncho()
+    {
+        try
+        {
+            _pantallaModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/pantalla.js");
+            if (_ancho)
+            {
+                _ancho = await _pantallaModule.InvokeAsync<bool>("salir");
+                Layout.SetMenuColapsado(_menuPrevio);          // restaurar el menú como estaba
+            }
+            else
+            {
+                _menuPrevio = Layout.MenuColapsado;             // recordar para restaurar al salir
+                _ancho = await _pantallaModule.InvokeAsync<bool>("entrar");
+                if (_ancho) Layout.SetMenuColapsado(true);      // colapsar el menú = máximo ancho
+            }
+        }
+        catch { /* sin soporte: queda como estaba */ }
+    }
+
     private void Quitar(RenglonItem it) => _items.Remove(it);
+
+    private DragonRemitoResultDto? _diag;
 
     private async Task DarDeAlta()
     {
@@ -377,12 +732,14 @@
             $"Dar de alta el remito a {_local} con {_items.Count} renglón(es), para imprimir en {nombreImp}?", "Dar de alta remito"))
             return;
 
+        _diag = null;
         _enviando = true;
         try
         {
             var res = await Api.CrearRemitoAsync(new DragonRemitoRequest
             {
                 Local = _local,
+                Motivo = "02",   // 02 = REPOSICION
                 InformacionAdicional = _licencia,
                 Items = _items.Select(i => new DragonRemitoItemDto
                 {
@@ -396,10 +753,12 @@
             {
                 Ui.Exito($"Remito creado en Dragon (N° {res.Numero?.ToString() ?? "?"}). Va a imprimir en {nombreImp}.");
                 _items.Clear();
+                LimpiarArticulo();
             }
             else
             {
-                Ui.Error("No se pudo crear el remito: " + (res.Error ?? res.Respuesta ?? "error desconocido"));
+                _diag = res;   // mostramos JSON enviado + respuesta de Dragon para diagnosticar
+                Ui.Error("Dragon rechazó el remito. Mirá el detalle abajo.");
             }
         }
         catch (Exception ex) { Ui.Error("Error: " + ex.Message); }

@@ -42,13 +42,18 @@ public sealed class DragonfishService : IDragonfishService
             Letra = "R",
             PuntoDeVenta = 1,
             Cliente = (req.Local ?? "").Trim().ToUpperInvariant(),
-            Motivo = "13",
+            Motivo = string.IsNullOrWhiteSpace(req.Motivo) ? "13" : req.Motivo.Trim(),
             MonedaComprobante = "PESOS",
             ListaDePrecios = "LISTA1",
             MercaderiaConsignacion = false,
             Vendedor = "",
             ForPago = "",
-            InformacionAdicional = (req.InformacionAdicional ?? "").Trim(),
+            // Dragon espera InformacionAdicional como OBJETO (no string). Metemos la licencia/terminal
+            // en Observaciones para que el agente de impresión rutee la impresora por ahí.
+            InformacionAdicional = new
+            {
+                Observaciones = (req.InformacionAdicional ?? "").Trim()
+            },
             FacturaDetalle = req.Items.Select(i => new
             {
                 Articulo = (i.Articulo ?? "").Trim(),
