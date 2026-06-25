@@ -56,4 +56,12 @@ public sealed class TareasController : ControllerBase
         var arrancada = _runner.Lanzar(id, "MANUAL");
         return Ok(new { arrancada });
     }
+
+    // Reenvía solo el PDF + mail de la última corrida (sin re-correr el SP). Es rápido → se espera el resultado.
+    [HttpPost("{id:int}/reenviar")]
+    public async Task<IActionResult> Reenviar(int id, CancellationToken ct)
+    {
+        var (ok, resultado) = await _service.ReenviarReposicionAsync(id, ct);
+        return Ok(new { ok, resultado });
+    }
 }

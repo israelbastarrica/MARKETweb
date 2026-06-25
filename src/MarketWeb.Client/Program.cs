@@ -47,6 +47,7 @@ builder.Services.AddScoped<ReporteArticulosApi>();
 builder.Services.AddScoped<TareasApi>();
 builder.Services.AddScoped<DragonApi>();
 builder.Services.AddScoped<MapaApi>();
+builder.Services.AddScoped<InformesApi>();
 builder.Services.AddSingleton<PageStateService>();
 builder.Services.AddSingleton<UiService>();
 builder.Services.AddSingleton<LayoutState>();

@@ -1,0 +1,37 @@
+.smtp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    margin-left: auto;
+    padding: .2rem .6rem;
+    border: 1px solid var(--bs-border-color, #ccc);
+    border-radius: 999px;
+    background: var(--bs-body-bg, #fff);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: var(--bs-secondary-color, #666);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.smtp-chip:disabled { opacity: .6; cursor: progress; }
+
+.smtp-chip .dot {
+    width: .55rem;
+    height: .55rem;
+    border-radius: 50%;
+    background: #9aa0a6; /* sin datos */
+    flex: 0 0 auto;
+}
+
+.smtp-chip.ok  { border-color: #1e7e34; color: #1e7e34; }
+.smtp-chip.ok  .dot { background: #28a745; box-shadow: 0 0 0 2px rgba(40,167,69,.18); }
+
+.smtp-chip.mal { border-color: #b02a37; color: #b02a37; background: rgba(220,53,69,.08); }
+.smtp-chip.mal .dot { background: #dc3545; box-shadow: 0 0 0 2px rgba(220,53,69,.20); animation: smtp-pulse 1.2s ease-in-out infinite; }
+
+@keyframes smtp-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .35; }
+}

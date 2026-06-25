@@ -33,5 +33,15 @@ public sealed class TareasApi
         return r?.Arrancada ?? false;
     }
 
+    /// <summary>Reenvía solo el PDF + mail de la última corrida (sin re-correr el SP). Espera el resultado.</summary>
+    public async Task<(bool Ok, string Resultado)> ReenviarAsync(int id)
+    {
+        var resp = await _http.PostAsync($"api/tareas/{id}/reenviar", null);
+        if (!resp.IsSuccessStatusCode) return (false, $"HTTP {(int)resp.StatusCode}");
+        var r = await resp.Content.ReadFromJsonAsync<ReenvResp>();
+        return (r?.Ok ?? false, r?.Resultado ?? "");
+    }
+
     private sealed class EjecResp { public bool Arrancada { get; set; } }
+    private sealed class ReenvResp { public bool Ok { get; set; } public string Resultado { get; set; } = ""; }
 }

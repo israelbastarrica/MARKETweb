@@ -105,8 +105,8 @@
         ["LURO"] = new[] { "Locales" },
         ["PERALTA"] = new[] { "Locales" },
         ["LOGISTICA"] = new[] { "Configuración", "Logística" },
-        ["DISEÑO"] = new[] { "Diseño", "Producción" },
-        ["DISENO"] = new[] { "Diseño", "Producción" },
+        ["DISEÑO"] = new[] { "Diseño", "Producción", "Informes" },
+        ["DISENO"] = new[] { "Diseño", "Producción", "Informes" },
         ["ADMINISTRACION"] = new[] { "Administración", "Producción" },
     };
 
@@ -210,6 +210,7 @@
         }),
         new("Informes", "fa-solid fa-chart-line", new[]
         {
+            new Item("Ventas", "fa-solid fa-chart-column", "/informes/ventas", Implementado: true),
             new Item("Ventas Tableau", "fa-solid fa-cash-register", "/wip/informes/ventas-tableau"),
             new Item("Consultor Comercial", "fa-solid fa-comment-dollar", "/wip/informes/consultor-comercial"),
         }),

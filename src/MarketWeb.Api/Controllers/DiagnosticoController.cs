@@ -46,4 +46,13 @@ public sealed class DiagnosticoController : ControllerBase
             dragonfishConfigurado = Has(_cfg["Dragonfish:User"]) && Has(_cfg["Dragonfish:Password"])
         });
     }
+
+    // Estado liviano del SMTP para el chip de la barra (ADMIN). Sirve para ver, después de un
+    // reinicio del servicio, si las variables del SMTP cargaron (si no, reiniciar hasta que levante).
+    [HttpGet("smtp")]
+    public IActionResult Smtp()
+    {
+        var host = _cfg["Smtp:Host"] ?? "";
+        return Ok(new { configurado = !string.IsNullOrWhiteSpace(host), host });
+    }
 }

@@ -1,0 +1,69 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Net.Http.Json
+@inject HttpClient Http
+@implements IDisposable
+
+@* Chip de estado del SMTP, visible SOLO a ADMIN. Tras un reinicio del servicio permite ver al toque
+   si las variables del SMTP cargaron; si está en rojo, reiniciar el servicio hasta que levante. *@
+@if (_esAdmin)
+{
+    <button class="smtp-chip @(_estado == true ? "ok" : _estado == false ? "mal" : "nd") no-print"
+            @onclick="Revisar" title="@Tip" disabled="@_cargando">
+        <span class="dot"></span>
+        <span class="txt">SMTP@(_estado == false ? " ✕" : "")</span>
+    </button>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool _esAdmin;
+    private bool? _estado;   // null = sin datos · true = OK · false = caído
+    private string _host = "";
+    private bool _cargando;
+    private System.Threading.Timer? _timer;
+
+    private string Tip => _estado switch
+    {
+        true  => $"SMTP OK ({_host}) — clic para revisar",
+        false => "SMTP NO cargado — reiniciá el servicio hasta que levante (clic para revisar)",
+        _     => "SMTP: sin datos (clic para revisar)"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var s = await AuthState;
+            _esAdmin = string.Equals(s.User.FindFirst("perfil")?.Value, "ADMIN", StringComparison.OrdinalIgnoreCase);
+        }
+        if (_esAdmin)
+        {
+            await Revisar();
+            // Re-chequea solo cada 30s (útil mientras se reinicia el servicio para ver cuándo levanta).
+            _timer = new System.Threading.Timer(_ => _ = InvokeAsync(Revisar), null, 30_000, 30_000);
+        }
+    }
+
+    private async Task Revisar()
+    {
+        if (_cargando) return;
+        _cargando = true; StateHasChanged();
+        try
+        {
+            var r = await Http.GetFromJsonAsync<SmtpDto>("api/diagnostico/smtp");
+            _estado = r?.Configurado;
+            _host = r?.Host ?? "";
+        }
+        catch { _estado = null; }
+        finally { _cargando = false; StateHasChanged(); }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+
+    private sealed class SmtpDto
+    {
+        public bool Configurado { get; set; }
+        public string Host { get; set; } = "";
+    }
+}

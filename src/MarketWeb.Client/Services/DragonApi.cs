@@ -77,5 +77,23 @@ public sealed class DragonApi
         catch { return null; }
     }
 
+    // Motivos de remito (excluye Insumos/13).
+    public async Task<List<MotivoDto>> MotivosAsync()
+    {
+        try { return await _http.GetFromJsonAsync<List<MotivoDto>>("api/remitos/motivos") ?? new(); }
+        catch { return new(); }
+    }
+
+    // Levanta el detalle de un remito existente de un local (LURO/PERALTA) por Punto-Número.
+    public async Task<List<BolsaRenglonDto>> BuscarRemitoLocalAsync(string local, int punto, int numero)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<BolsaRenglonDto>>(
+                $"api/remitos/remito-local?local={Uri.EscapeDataString(local)}&punto={punto}&numero={numero}") ?? new();
+        }
+        catch { return new(); }
+    }
+
     private sealed class EstadoResp { public bool Configurado { get; set; } }
 }

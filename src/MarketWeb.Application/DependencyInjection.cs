@@ -13,6 +13,7 @@ using MarketWeb.Application.Packs;
 using MarketWeb.Application.Palets;
 using MarketWeb.Application.Reemplazos;
 using MarketWeb.Application.RemitoImpresion;
+using MarketWeb.Application.Informes;
 using MarketWeb.Application.Remitos;
 using MarketWeb.Application.Reposicion;
 using MarketWeb.Application.Tareas;
@@ -57,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<IUsoService, UsoService>();
         services.AddScoped<IReemplazosService, ReemplazosService>();
         services.AddScoped<IRemitosLookupService, RemitosLookupService>();
+        services.AddScoped<IInformesService, InformesService>();
         services.AddScoped<IReposicionService, ReposicionService>();
         services.AddScoped<IReposicionPdf, ReposicionPdf>();
         services.AddScoped<IEventosService, EventosService>();

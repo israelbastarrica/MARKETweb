@@ -18,6 +18,13 @@
                 @foreach (var l in _locales) { <option value="@l.Id">@l.Descripcion</option> }
             </select>
         </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Mueble local</label>
+            <select class="form-select" style="min-width: 170px" @bind="_filtroMueble">
+                <option value="">TODOS</option>
+                @foreach (var m in MueblesEnUso) { <option value="@m">@m</option> }
+            </select>
+        </div>
         <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" id="chkTodos" @bind="_verTodos" @bind:after="Cargar" />
             <label class="form-check-label small" for="chkTodos">Ver todos (incluye procesados)</label>
@@ -54,7 +61,7 @@
     {
         <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
     }
-    else if (_items.Count == 0)
+    else if (ItemsFiltrados.Count == 0)
     {
         <div class="market-empty"><i class="fa-solid fa-retweet"></i><p>No hay reemplazos para el filtro.</p></div>
     }
@@ -78,7 +85,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var r in _items)
+                    @foreach (var r in ItemsFiltrados)
                     {
                         <tr class="@(r.Procesado ? "fila-verde" : null)" @ondblclick="() => AbrirModif(r)">
                             <td class="small">@(r.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
@@ -104,7 +111,9 @@
                 </tbody>
             </table>
         </div>
-        <p class="text-muted small">@_items.Count reemplazo(s).</p>
+        <p class="text-muted small">
+            @ItemsFiltrados.Count reemplazo(s)@(string.IsNullOrEmpty(_filtroMueble) ? "" : $" de {_items.Count}").
+        </p>
     }
 </div>
 
@@ -261,8 +270,18 @@
 @code {
     private List<LocalReemplazoDto> _locales = new();
     private int _filtroLocal;
+    private string _filtroMueble = "";
     private bool _verTodos;
     private List<ReemplazoDto> _items = new();
+
+    // Muebles (del local) presentes en lo cargado, para el combo de filtro.
+    private List<string> MueblesEnUso => _items.Where(r => !string.IsNullOrWhiteSpace(r.MobiliarioLocal))
+        .Select(r => r.MobiliarioLocal!.Trim()).Distinct().OrderBy(m => m).ToList();
+
+    // Lo que se muestra: items filtrados por mueble (client-side sobre lo ya cargado).
+    private List<ReemplazoDto> ItemsFiltrados => string.IsNullOrEmpty(_filtroMueble)
+        ? _items
+        : _items.Where(r => string.Equals(r.MobiliarioLocal?.Trim(), _filtroMueble, StringComparison.OrdinalIgnoreCase)).ToList();
     private bool _cargando = true;
     private bool _procesando;
     private string? _error;
@@ -304,13 +323,13 @@
     private string LocalNombre(int id) => _locales.FirstOrDefault(l => l.Id == id)?.Descripcion ?? "";
 
     private const string StateKey = "reemplazos";
-    private sealed class Snap { public List<LocalReemplazoDto> Locales = new(); public int FiltroLocal; public bool VerTodos; public List<ReemplazoDto> Items = new(); }
+    private sealed class Snap { public List<LocalReemplazoDto> Locales = new(); public int FiltroLocal; public string FiltroMueble = ""; public bool VerTodos; public List<ReemplazoDto> Items = new(); }
 
     protected override async Task OnInitializedAsync()
     {
         if (State.TryGet<Snap>(StateKey, out var s, out _))
         {
-            _locales = s.Locales; _filtroLocal = s.FiltroLocal; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
+            _locales = s.Locales; _filtroLocal = s.FiltroLocal; _filtroMueble = s.FiltroMueble; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
             return;
         }
         try { _locales = await Api.LocalesAsync(); } catch { _locales = new(); }
@@ -318,7 +337,7 @@
     }
 
     public void Dispose()
-        => State.Save(StateKey, new Snap { Locales = _locales, FiltroLocal = _filtroLocal, VerTodos = _verTodos, Items = _items }, 0);
+        => State.Save(StateKey, new Snap { Locales = _locales, FiltroLocal = _filtroLocal, FiltroMueble = _filtroMueble, VerTodos = _verTodos, Items = _items }, 0);
 
     private async Task Cargar()
     {
@@ -326,6 +345,9 @@
         try { _items = await Api.ListarAsync(_filtroLocal, _verTodos); }
         catch (Exception ex) { _items = new(); _error = "No se pudieron cargar los reemplazos."; Console.Error.WriteLine(ex); }
         finally { _cargando = false; }
+        // Si el mueble filtrado ya no existe en lo cargado (cambió el local), limpiamos el filtro.
+        if (!string.IsNullOrEmpty(_filtroMueble) && !MueblesEnUso.Contains(_filtroMueble, StringComparer.OrdinalIgnoreCase))
+            _filtroMueble = "";
     }
 
     private void AbrirAlta()

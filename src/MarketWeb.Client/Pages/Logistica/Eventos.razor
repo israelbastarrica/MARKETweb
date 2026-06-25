@@ -64,7 +64,25 @@
                         <tr class="@(ev.Estado != "PENDIENTE" ? "ev-cerrado" : "")" @ondblclick="() => AbrirDetalle(ev.Id)">
                             <td class="small">@ev.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
                             <td>@ev.Local</td>
-                            <td>@if (!string.IsNullOrEmpty(ev.ArtCod)) { <ArticuloLink Codigo="@ev.ArtCod" /> }</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(ev.ArtCod))
+                                {
+                                    @if (ev.Local == "LURO" || ev.Local == "PERALTA")
+                                    {
+                                        <span class="art-cod-link">
+                                            <span class="badge-perfil">@ev.ArtCod</span>
+                                            <a class="art-cod-ir" href="@($"/logistica/consulta-reposicion?local={ev.Local}&art={Uri.EscapeDataString(ev.ArtCod)}")"
+                                               title="Ver consulta de reposición (remitos, venta, packs)">
+                                                <i class="fa-solid fa-up-right-from-square"></i>
+                                            </a>
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <ArticuloLink Codigo="@ev.ArtCod" Local="@ev.Local" />
+                                    }
+                                }
+                            </td>
                             <td>@ev.Descripcion</td>
                             <td class="small">@ev.RemitoDisplay</td>
                             <td class="text-center fw-bold @TipoClase(ev.TipoDiferencia)">@ev.TipoDiferencia</td>

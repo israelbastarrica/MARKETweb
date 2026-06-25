@@ -32,29 +32,35 @@ public sealed class DragonfishService : IDragonfishService
         !string.IsNullOrWhiteSpace(Base) && !string.IsNullOrWhiteSpace(User) &&
         !string.IsNullOrWhiteSpace(Password) && !string.IsNullOrWhiteSpace(Clave) && !string.IsNullOrWhiteSpace(IdCliente);
 
-    public async Task<DragonRemitoResultDto> CrearRemitoAsync(DragonRemitoRequest req, CancellationToken ct = default)
+    public Task<DragonRemitoResultDto> CrearRemitoAsync(DragonRemitoRequest req, CancellationToken ct = default)
+        => CrearRemitoConExtrasAsync(req, null, ct);
+
+    /// <summary>
+    /// Igual que CrearRemitoAsync, pero permite inyectar campos extra de primer nivel en el body (diagnóstico:
+    /// probar nombres de campos de "observaciones" para ver cuál persiste Dragon en COMPROBANTEV). extras=null = alta normal.
+    /// </summary>
+    public async Task<DragonRemitoResultDto> CrearRemitoConExtrasAsync(DragonRemitoRequest req, IDictionary<string, object?>? extras, CancellationToken ct = default)
     {
         if (!Configurado)
             return new DragonRemitoResultDto { Ok = false, Error = "La API Dragonfish no está configurada (faltan credenciales en el servidor)." };
 
-        var body = new
+        var body = new Dictionary<string, object?>
         {
-            Letra = "R",
-            PuntoDeVenta = 1,
-            Cliente = (req.Local ?? "").Trim().ToUpperInvariant(),
-            Motivo = string.IsNullOrWhiteSpace(req.Motivo) ? "13" : req.Motivo.Trim(),
-            MonedaComprobante = "PESOS",
-            ListaDePrecios = "LISTA1",
-            MercaderiaConsignacion = false,
-            Vendedor = "",
-            ForPago = "",
-            // Dragon espera InformacionAdicional como OBJETO (no string). Metemos la licencia/terminal
-            // en Observaciones para que el agente de impresión rutee la impresora por ahí.
-            InformacionAdicional = new
-            {
-                Observaciones = (req.InformacionAdicional ?? "").Trim()
-            },
-            FacturaDetalle = req.Items.Select(i => new
+            ["Letra"] = "R",
+            ["PuntoDeVenta"] = 1,
+            ["Cliente"] = (req.Local ?? "").Trim().ToUpperInvariant(),
+            ["Motivo"] = string.IsNullOrWhiteSpace(req.Motivo) ? "13" : req.Motivo.Trim(),
+            ["MonedaComprobante"] = "PESOS",
+            ["ListaDePrecios"] = "LISTA1",
+            ["MercaderiaConsignacion"] = false,
+            ["Vendedor"] = "",
+            ["ForPago"] = "",
+            // InformacionAdicional/ZADSFW NO persiste por la API (probado: 0/70). El campo que SÍ existe en
+            // el Swagger y persiste en COMPROBANTEV.FOBS es "Obs": ahí mandamos la licencia/terminal del tablet
+            // para que el agente rutee la impresora leyendo FOBS. (ZADSFW queda por las dudas, no molesta.)
+            ["InformacionAdicional"] = new { ZADSFW = (req.InformacionAdicional ?? "").Trim() },
+            ["Obs"] = (req.InformacionAdicional ?? "").Trim(),
+            ["FacturaDetalle"] = req.Items.Select(i => new
             {
                 Articulo = (i.Articulo ?? "").Trim(),
                 Color = (i.Color ?? "").Trim(),
@@ -63,6 +69,10 @@ public sealed class DragonfishService : IDragonfishService
                 Precio = 0
             }).ToList()
         };
+
+        // Campos candidatos para el test (los desconocidos por el contrato WCF se ignoran sin error).
+        if (extras is not null)
+            foreach (var kv in extras) body[kv.Key] = kv.Value;
 
         var json = JsonSerializer.Serialize(body, new JsonSerializerOptions { WriteIndented = true });
         var result = new DragonRemitoResultDto { JsonEnviado = json };

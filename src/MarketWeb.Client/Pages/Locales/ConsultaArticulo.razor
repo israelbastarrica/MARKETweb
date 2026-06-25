@@ -142,6 +142,8 @@
     [Parameter, SupplyParameterFromQuery(Name = "codigo")] public string? CodigoQuery { get; set; }
     // ref=1 → se llegó desde otra pantalla, mostramos "← Volver".
     [Parameter, SupplyParameterFromQuery(Name = "ref")] public string? Ref { get; set; }
+    // local → abre la consulta ya posicionada en esa ubicación (ej. desde Eventos).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQuery { get; set; }
     private bool _mostrarVolver;
 
     private List<UbicacionDto> _ubicaciones = new();
@@ -184,6 +186,23 @@
         _ubicacion = propio?.Descripcion
                      ?? _ubicaciones.FirstOrDefault(u => u.Descripcion.StartsWith("DEP", StringComparison.OrdinalIgnoreCase))?.Descripcion
                      ?? _ubicaciones.FirstOrDefault()?.Descripcion ?? "";
+
+        // Si vino ?local= (ej. desde Eventos), preseleccionamos esa ubicación. Si el filtro por
+        // perfil la dejó afuera del combo (LOGISTICA), la agregamos para que se pueda usar igual.
+        if (!string.IsNullOrWhiteSpace(LocalQuery))
+        {
+            var pedido = LocalQuery.Trim();
+            var match = _ubicaciones.FirstOrDefault(u => string.Equals(u.Descripcion, pedido, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                _ubicaciones = _ubicaciones.Append(new UbicacionDto { Descripcion = pedido }).ToList();
+                _ubicacion = pedido;
+            }
+            else
+            {
+                _ubicacion = match.Descripcion;
+            }
+        }
     }
 
     // Si llega ?codigo= en la URL (incluida la navegación desde otra pantalla), busca solo.
