@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MarketWeb.Api.Controllers;
 
-/// <summary>Telas (Producción): catálogo de telas + catálogos de depósitos/textiles/colores.</summary>
+/// <summary>Telas (Producción): catálogo de telas + catálogos propios (depósitos/textiles).
+/// Los colores se listan desde Dragonfish.</summary>
 [Authorize(Policy = "Aprobado")]
 [ApiController]
 [Route("api/[controller]")]
@@ -23,8 +24,8 @@ public sealed class TelasController : ControllerBase
     // ---- Telas ----
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<TelaDto>>> Listar(
-        [FromQuery] int? idDeposito, [FromQuery] string? material, [FromQuery] int? idTextil, [FromQuery] int? idColor, CancellationToken ct)
-        => Ok(await _service.ListarAsync(idDeposito, material, idTextil, idColor, ct));
+        [FromQuery] int? idDeposito, [FromQuery] string? material, [FromQuery] int? idTextil, CancellationToken ct)
+        => Ok(await _service.ListarAsync(idDeposito, material, idTextil, ct));
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<TelaDto>> Obtener(int id, CancellationToken ct)
@@ -54,7 +55,12 @@ public sealed class TelasController : ControllerBase
         return NoContent();
     }
 
-    // ---- Catálogos (tipo = depositos | textiles | colores) ----
+    // ---- Colores (Dragonfish) ----
+    [HttpGet("colores")]
+    public async Task<ActionResult<IReadOnlyList<ColorDragonDto>>> Colores(CancellationToken ct)
+        => Ok(await _service.ListarColoresAsync(ct));
+
+    // ---- Catálogos propios (tipo = depositos | textiles) ----
     [HttpGet("catalogos/{tipo}")]
     public async Task<ActionResult<IReadOnlyList<CatalogoItemDto>>> ListarCatalogo(string tipo, CancellationToken ct)
     {

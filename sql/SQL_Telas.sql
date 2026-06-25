@@ -1,12 +1,13 @@
 -- ============================================================
--- Telas (Produccion): catalogo de telas + depositos/textiles/colores
+-- Telas (Produccion): catalogo de telas + depositos/textiles.
 -- Generado desde 'Planilla Info Textil.xlsx' (hoja 'Hoja 1').
--- Idempotente: se puede correr mas de una vez sin duplicar.
--- Stock y compras (Fase 2) NO se crean aca.
+-- Los COLORES NO se crean aca: salen de Dragonfish (DRAGONFISH_CENTRAL.Zoologic.DPCOLOR).
+-- En Telas se guarda el codigo de color de Dragon (ColorCod = DPCOLOR.CODCOL). Sin hex.
+-- Idempotente. Stock y compras (Fase 2) NO se crean aca.
 -- ============================================================
 SET NOCOUNT ON;
 
--- ---------- Catalogos ----------
+-- ---------- Catalogos propios ----------
 IF OBJECT_ID('dbo.TelasDepositos','U') IS NULL
 CREATE TABLE dbo.TelasDepositos (
     Id        INT IDENTITY(1,1) PRIMARY KEY,
@@ -21,14 +22,6 @@ CREATE TABLE dbo.TelasTextiles (
     Eliminado BIT NOT NULL CONSTRAINT DF_TelasTextiles_Elim DEFAULT(0),
     Auditoria NVARCHAR(200) NULL
 );
-IF OBJECT_ID('dbo.TelasColores','U') IS NULL
-CREATE TABLE dbo.TelasColores (
-    Id        INT IDENTITY(1,1) PRIMARY KEY,
-    Nombre    NVARCHAR(100) NOT NULL,
-    Codigo    NVARCHAR(20)  NULL,   -- hex opcional (#RRGGBB), para el chip de color
-    Eliminado BIT NOT NULL CONSTRAINT DF_TelasColores_Elim DEFAULT(0),
-    Auditoria NVARCHAR(200) NULL
-);
 
 -- ---------- Telas (ficha) ----------
 IF OBJECT_ID('dbo.Telas','U') IS NULL
@@ -40,15 +33,14 @@ CREATE TABLE dbo.Telas (
     AnchoCm     DECIMAL(9,2) NULL,
     Composicion NVARCHAR(300) NULL,
     RindeMKg    DECIMAL(9,4) NULL,
-    IdColor     INT NULL,
+    ColorCod    NVARCHAR(20) NULL,   -- codigo de color de Dragonfish (DPCOLOR.CODCOL); el nombre se resuelve por join
     -- Gramos/m2 calculado: 1000 / (Rinde * Ancho_metros). Igual que la planilla.
     GramosM2 AS (CASE WHEN ISNULL(RindeMKg,0) > 0 AND ISNULL(AnchoCm,0) > 0
                       THEN CAST(1000.0/(RindeMKg*(AnchoCm/100.0)) AS DECIMAL(9,2)) END),
     Eliminado   BIT NOT NULL CONSTRAINT DF_Telas_Elim DEFAULT(0),
     Auditoria   NVARCHAR(200) NULL,
     CONSTRAINT FK_Telas_Deposito FOREIGN KEY (IdDeposito) REFERENCES dbo.TelasDepositos(Id),
-    CONSTRAINT FK_Telas_Textil   FOREIGN KEY (IdTextil)   REFERENCES dbo.TelasTextiles(Id),
-    CONSTRAINT FK_Telas_Color    FOREIGN KEY (IdColor)    REFERENCES dbo.TelasColores(Id)
+    CONSTRAINT FK_Telas_Textil   FOREIGN KEY (IdTextil)   REFERENCES dbo.TelasTextiles(Id)
 );
 
 -- ---------- Seed depositos ----------
@@ -67,7 +59,7 @@ IF NOT EXISTS (SELECT 1 FROM dbo.TelasTextiles WHERE Nombre = N'Ramon') INSERT I
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasTextiles WHERE Nombre = N'Ramon (Contenedor Nuestro)') INSERT INTO dbo.TelasTextiles (Nombre, Auditoria) VALUES (N'Ramon (Contenedor Nuestro)', N'Seed inicial | Excel');
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasTextiles WHERE Nombre = N'Uriel') INSERT INTO dbo.TelasTextiles (Nombre, Auditoria) VALUES (N'Uriel', N'Seed inicial | Excel');
 
--- ---------- Import de las 37 telas (Hoja 1) ----------
+-- ---------- Import de las 37 telas (Hoja 1). Color queda NULL (se asigna luego desde Dragon). ----------
 IF NOT EXISTS (SELECT 1 FROM dbo.Telas T JOIN dbo.TelasDepositos D ON T.IdDeposito=D.Id WHERE D.Nombre=N'Vilma/Jorge' AND T.Material=N'Remeria soft brush' AND ISNULL(T.IdTextil,-1)=ISNULL((SELECT Id FROM dbo.TelasTextiles WHERE Nombre = N'Uriel'),-1)) INSERT INTO dbo.Telas (IdDeposito, Material, IdTextil, AnchoCm, Composicion, RindeMKg, Auditoria) VALUES ((SELECT Id FROM dbo.TelasDepositos WHERE Nombre=N'Vilma/Jorge'), N'Remeria soft brush', (SELECT Id FROM dbo.TelasTextiles WHERE Nombre = N'Uriel'), 160.0, N'96% poliester/ 4% elastano', 4.16, N'Import inicial | Excel');
 IF NOT EXISTS (SELECT 1 FROM dbo.Telas T JOIN dbo.TelasDepositos D ON T.IdDeposito=D.Id WHERE D.Nombre=N'Vilma/Jorge' AND T.Material=N'Modal soft Liso' AND ISNULL(T.IdTextil,-1)=ISNULL((SELECT Id FROM dbo.TelasTextiles WHERE Nombre = N'Ramon (Contenedor Nuestro)'),-1)) INSERT INTO dbo.Telas (IdDeposito, Material, IdTextil, AnchoCm, Composicion, RindeMKg, Auditoria) VALUES ((SELECT Id FROM dbo.TelasDepositos WHERE Nombre=N'Vilma/Jorge'), N'Modal soft Liso', (SELECT Id FROM dbo.TelasTextiles WHERE Nombre = N'Ramon (Contenedor Nuestro)'), 160.0, N'96% poliester/ 4% elastano', 3.45, N'Import inicial | Excel');
 IF NOT EXISTS (SELECT 1 FROM dbo.Telas T JOIN dbo.TelasDepositos D ON T.IdDeposito=D.Id WHERE D.Nombre=N'Vilma/Jorge' AND T.Material=N'Ribb Soft Ada' AND ISNULL(T.IdTextil,-1)=ISNULL((SELECT Id FROM dbo.TelasTextiles WHERE Nombre = N'Uriel'),-1)) INSERT INTO dbo.Telas (IdDeposito, Material, IdTextil, AnchoCm, Composicion, RindeMKg, Auditoria) VALUES ((SELECT Id FROM dbo.TelasDepositos WHERE Nombre=N'Vilma/Jorge'), N'Ribb Soft Ada', (SELECT Id FROM dbo.TelasTextiles WHERE Nombre = N'Uriel'), 160.0, N'96% poliester/ 4% elastano', 2.42, N'Import inicial | Excel');

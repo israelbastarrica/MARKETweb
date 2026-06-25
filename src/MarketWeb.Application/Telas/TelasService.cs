@@ -6,9 +6,10 @@ using MarketWeb.Shared.Telas;
 namespace MarketWeb.Application.Telas;
 
 /// <summary>
-/// Telas + catálogos (depósitos/textiles/colores). Consultas parametrizadas, baja lógica.
-/// Gramos/m² lo calcula la base (columna computada). El nombre de tabla de catálogo sale de
-/// un whitelist (Mapa), nunca del input directo.
+/// Telas + catálogos propios (depósitos/textiles). Consultas parametrizadas, baja lógica.
+/// El color se guarda como código de Dragonfish (Telas.ColorCod) y el nombre se resuelve por join
+/// a DRAGONFISH_CENTRAL.Zoologic.DPCOLOR. Gramos/m² lo calcula la base (columna computada).
+/// El nombre de tabla de catálogo sale de un whitelist (Mapa), nunca del input directo.
 /// </summary>
 public sealed class TelasService : ITelasService
 {
@@ -19,26 +20,25 @@ public sealed class TelasService : ITelasService
         SELECT  T.Id, T.IdDeposito, D.Nombre AS Deposito, T.Material,
                 T.IdTextil, X.Nombre AS Textil,
                 T.AnchoCm, T.Composicion, T.RindeMKg,
-                T.IdColor, C.Nombre AS Color, C.Codigo AS ColorCodigo,
+                T.ColorCod, COL.DESCRIP AS Color,
                 T.GramosM2
         FROM    Telas T
         INNER JOIN TelasDepositos D ON D.Id = T.IdDeposito
         LEFT  JOIN TelasTextiles  X ON X.Id = T.IdTextil
-        LEFT  JOIN TelasColores   C ON C.Id = T.IdColor
+        LEFT  JOIN DRAGONFISH_CENTRAL.Zoologic.DPCOLOR COL ON COL.CODCOL = T.ColorCod
         """;
 
-    public async Task<IReadOnlyList<TelaDto>> ListarAsync(int? idDeposito, string? material, int? idTextil, int? idColor, CancellationToken ct = default)
+    public async Task<IReadOnlyList<TelaDto>> ListarAsync(int? idDeposito, string? material, int? idTextil, CancellationToken ct = default)
     {
         var sql = SelectTela + " WHERE T.Eliminado = 0";
         var mat = string.IsNullOrWhiteSpace(material) ? null : material.Trim();
         if (idDeposito is > 0) sql += " AND T.IdDeposito = @idDeposito";
         if (idTextil is > 0) sql += " AND T.IdTextil = @idTextil";
-        if (idColor is > 0) sql += " AND T.IdColor = @idColor";
         if (mat is not null) sql += " AND T.Material LIKE '%' + @mat + '%'";
         sql += " ORDER BY D.Nombre, T.Material;";
 
         using var cn = _db.Create();
-        var rows = await cn.QueryAsync<TelaDto>(new CommandDefinition(sql, new { idDeposito, idTextil, idColor, mat }, cancellationToken: ct));
+        var rows = await cn.QueryAsync<TelaDto>(new CommandDefinition(sql, new { idDeposito, idTextil, mat }, commandTimeout: 60, cancellationToken: ct));
         return rows.ToList();
     }
 
@@ -46,7 +46,7 @@ public sealed class TelasService : ITelasService
     {
         var sql = SelectTela + " WHERE T.Id = @id AND T.Eliminado = 0;";
         using var cn = _db.Create();
-        return await cn.QuerySingleOrDefaultAsync<TelaDto>(new CommandDefinition(sql, new { id }, cancellationToken: ct));
+        return await cn.QuerySingleOrDefaultAsync<TelaDto>(new CommandDefinition(sql, new { id }, commandTimeout: 60, cancellationToken: ct));
     }
 
     public async Task<int> CrearAsync(TelaSaveRequest req, string usuario, CancellationToken ct = default)
@@ -54,9 +54,9 @@ public sealed class TelasService : ITelasService
         var p = TelaParams(req);
         p.Add("aud", Auditoria("Alta de tela", usuario));
         const string sql = """
-            INSERT INTO Telas (IdDeposito, Material, IdTextil, AnchoCm, Composicion, RindeMKg, IdColor, Eliminado, Auditoria)
+            INSERT INTO Telas (IdDeposito, Material, IdTextil, AnchoCm, Composicion, RindeMKg, ColorCod, Eliminado, Auditoria)
             OUTPUT INSERTED.Id
-            VALUES (@IdDeposito, @Material, @IdTextil, @AnchoCm, @Composicion, @RindeMKg, @IdColor, 0, @aud);
+            VALUES (@IdDeposito, @Material, @IdTextil, @AnchoCm, @Composicion, @RindeMKg, @ColorCod, 0, @aud);
             """;
         using var cn = _db.Create();
         return await cn.ExecuteScalarAsync<int>(new CommandDefinition(sql, p, cancellationToken: ct));
@@ -69,7 +69,7 @@ public sealed class TelasService : ITelasService
         p.Add("aud", Auditoria("Modificación de tela", usuario));
         const string sql = """
             UPDATE Telas SET IdDeposito=@IdDeposito, Material=@Material, IdTextil=@IdTextil,
-                   AnchoCm=@AnchoCm, Composicion=@Composicion, RindeMKg=@RindeMKg, IdColor=@IdColor, Auditoria=@aud
+                   AnchoCm=@AnchoCm, Composicion=@Composicion, RindeMKg=@RindeMKg, ColorCod=@ColorCod, Auditoria=@aud
             WHERE Id=@id AND Eliminado=0;
             """;
         using var cn = _db.Create();
@@ -97,26 +97,38 @@ public sealed class TelasService : ITelasService
         p.Add("AnchoCm", req.AnchoCm);
         p.Add("Composicion", string.IsNullOrWhiteSpace(req.Composicion) ? null : req.Composicion.Trim());
         p.Add("RindeMKg", req.RindeMKg);
-        p.Add("IdColor", req.IdColor is > 0 ? req.IdColor : null);
+        p.Add("ColorCod", string.IsNullOrWhiteSpace(req.ColorCod) ? null : req.ColorCod.Trim());
         return p;
     }
 
-    // ===================== Catálogos =====================
-
-    // Whitelist tipo -> (tabla, tieneCodigo). Evita inyección en el nombre de tabla.
-    private static (string Tabla, bool Codigo) Mapa(string tipo) => tipo switch
+    // ===================== Colores (Dragonfish) =====================
+    public async Task<IReadOnlyList<ColorDragonDto>> ListarColoresAsync(CancellationToken ct = default)
     {
-        CatalogoTela.Depositos => ("TelasDepositos", false),
-        CatalogoTela.Textiles => ("TelasTextiles", false),
-        CatalogoTela.Colores => ("TelasColores", true),
+        const string sql = """
+            SELECT LTRIM(RTRIM(CODCOL)) AS Cod, LTRIM(RTRIM(DESCRIP)) AS Nombre
+            FROM   DRAGONFISH_CENTRAL.Zoologic.DPCOLOR
+            WHERE  ISNULL(DESCRIP, '') <> ''
+            ORDER BY DESCRIP;
+            """;
+        using var cn = _db.Create();
+        var rows = await cn.QueryAsync<ColorDragonDto>(new CommandDefinition(sql, commandTimeout: 60, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    // ===================== Catálogos propios =====================
+
+    // Whitelist tipo -> tabla. Evita inyección en el nombre de tabla. Colores NO (vienen de Dragon).
+    private static string Tabla(string tipo) => tipo switch
+    {
+        CatalogoTela.Depositos => "TelasDepositos",
+        CatalogoTela.Textiles => "TelasTextiles",
         _ => throw new BusinessException("Catálogo inválido.")
     };
 
     public async Task<IReadOnlyList<CatalogoItemDto>> ListarCatalogoAsync(string tipo, CancellationToken ct = default)
     {
-        var (tabla, codigo) = Mapa(tipo);
-        var colCodigo = codigo ? "Codigo" : "CAST(NULL AS NVARCHAR(20)) AS Codigo";
-        var sql = $"SELECT Id, Nombre, {colCodigo} FROM {tabla} WHERE Eliminado = 0 ORDER BY Nombre;";
+        var tabla = Tabla(tipo);
+        var sql = $"SELECT Id, Nombre FROM {tabla} WHERE Eliminado = 0 ORDER BY Nombre;";
         using var cn = _db.Create();
         var rows = await cn.QueryAsync<CatalogoItemDto>(new CommandDefinition(sql, cancellationToken: ct));
         return rows.ToList();
@@ -124,40 +136,32 @@ public sealed class TelasService : ITelasService
 
     public async Task<int> CrearCatalogoAsync(string tipo, CatalogoSaveRequest req, string usuario, CancellationToken ct = default)
     {
-        var (tabla, codigo) = Mapa(tipo);
+        var tabla = Tabla(tipo);
         var nombre = (req.Nombre ?? "").Trim();
         if (nombre.Length == 0) throw new BusinessException("Debe ingresar el nombre.");
         using var cn = _db.Create();
         await ValidarDuplicadoAsync(cn, tabla, nombre, null, ct);
 
-        var cod = string.IsNullOrWhiteSpace(req.Codigo) ? null : req.Codigo.Trim();
-        var aud = Auditoria("Alta de catálogo", usuario);
-        var sql = codigo
-            ? $"INSERT INTO {tabla} (Nombre, Codigo, Eliminado, Auditoria) OUTPUT INSERTED.Id VALUES (@nombre, @cod, 0, @aud);"
-            : $"INSERT INTO {tabla} (Nombre, Eliminado, Auditoria) OUTPUT INSERTED.Id VALUES (@nombre, 0, @aud);";
-        return await cn.ExecuteScalarAsync<int>(new CommandDefinition(sql, new { nombre, cod, aud }, cancellationToken: ct));
+        var sql = $"INSERT INTO {tabla} (Nombre, Eliminado, Auditoria) OUTPUT INSERTED.Id VALUES (@nombre, 0, @aud);";
+        return await cn.ExecuteScalarAsync<int>(new CommandDefinition(sql, new { nombre, aud = Auditoria("Alta de catálogo", usuario) }, cancellationToken: ct));
     }
 
     public async Task ModificarCatalogoAsync(string tipo, int id, CatalogoSaveRequest req, string usuario, CancellationToken ct = default)
     {
-        var (tabla, codigo) = Mapa(tipo);
+        var tabla = Tabla(tipo);
         var nombre = (req.Nombre ?? "").Trim();
         if (nombre.Length == 0) throw new BusinessException("Debe ingresar el nombre.");
         using var cn = _db.Create();
         await ValidarDuplicadoAsync(cn, tabla, nombre, id, ct);
 
-        var cod = string.IsNullOrWhiteSpace(req.Codigo) ? null : req.Codigo.Trim();
-        var aud = Auditoria("Modificación de catálogo", usuario);
-        var sql = codigo
-            ? $"UPDATE {tabla} SET Nombre=@nombre, Codigo=@cod, Auditoria=@aud WHERE Id=@id AND Eliminado=0;"
-            : $"UPDATE {tabla} SET Nombre=@nombre, Auditoria=@aud WHERE Id=@id AND Eliminado=0;";
-        var n = await cn.ExecuteAsync(new CommandDefinition(sql, new { nombre, cod, aud, id }, cancellationToken: ct));
+        var sql = $"UPDATE {tabla} SET Nombre=@nombre, Auditoria=@aud WHERE Id=@id AND Eliminado=0;";
+        var n = await cn.ExecuteAsync(new CommandDefinition(sql, new { nombre, aud = Auditoria("Modificación de catálogo", usuario), id }, cancellationToken: ct));
         if (n == 0) throw new BusinessException("No se encontró el ítem a modificar.");
     }
 
     public async Task EliminarCatalogoAsync(string tipo, int id, string usuario, CancellationToken ct = default)
     {
-        var (tabla, _) = Mapa(tipo);
+        var tabla = Tabla(tipo);
         var sql = $"UPDATE {tabla} SET Eliminado=1, Auditoria=@aud WHERE Id=@id;";
         using var cn = _db.Create();
         await cn.ExecuteAsync(new CommandDefinition(sql, new { id, aud = Auditoria("Baja de catálogo", usuario) }, cancellationToken: ct));

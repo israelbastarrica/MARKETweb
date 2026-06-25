@@ -10,12 +10,11 @@ public sealed class TelasApi
     public TelasApi(HttpClient http) => _http = http;
 
     // ---- Telas ----
-    public async Task<List<TelaDto>> ListarAsync(int? idDeposito, string? material, int? idTextil, int? idColor)
+    public async Task<List<TelaDto>> ListarAsync(int? idDeposito, string? material, int? idTextil)
     {
         var qs = new List<string>();
         if (idDeposito is > 0) qs.Add($"idDeposito={idDeposito}");
         if (idTextil is > 0) qs.Add($"idTextil={idTextil}");
-        if (idColor is > 0) qs.Add($"idColor={idColor}");
         if (!string.IsNullOrWhiteSpace(material)) qs.Add($"material={Uri.EscapeDataString(material)}");
         var url = "api/telas" + (qs.Count > 0 ? "?" + string.Join("&", qs) : "");
         return await _http.GetFromJsonAsync<List<TelaDto>>(url) ?? new();
@@ -30,7 +29,11 @@ public sealed class TelasApi
     public async Task EliminarAsync(int id)
         => await _http.DeleteAsync($"api/telas/{id}");
 
-    // ---- Catálogos ----
+    // ---- Colores (Dragonfish) ----
+    public async Task<List<ColorDragonDto>> ListarColoresAsync()
+        => await _http.GetFromJsonAsync<List<ColorDragonDto>>("api/telas/colores") ?? new();
+
+    // ---- Catálogos propios ----
     public async Task<List<CatalogoItemDto>> ListarCatalogoAsync(string tipo)
         => await _http.GetFromJsonAsync<List<CatalogoItemDto>>($"api/telas/catalogos/{tipo}") ?? new();
 
