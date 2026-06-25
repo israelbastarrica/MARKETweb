@@ -17,6 +17,7 @@ using MarketWeb.Application.Informes;
 using MarketWeb.Application.Remitos;
 using MarketWeb.Application.Reposicion;
 using MarketWeb.Application.Tareas;
+using MarketWeb.Application.Telas;
 using MarketWeb.Application.TiposLocal;
 using MarketWeb.Application.Uso;
 using MarketWeb.Application.UsuariosPc;
@@ -50,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IRemitoImpresionService, RemitoImpresionService>();
         services.AddScoped<IPaletsService, PaletsService>();
         services.AddScoped<IPacksService, PacksService>();
+        services.AddScoped<ITelasService, TelasService>();
         services.AddSingleton<EstancadosCache>();
         services.AddSingleton<BackgroundCache<List<MarketWeb.Shared.LogisticaDashboard.ArticuloUbicacionesDto>>>();
         services.AddSingleton(new BackgroundCache<MarketWeb.Application.LogisticaDashboard.ReposFast> { Ttl = TimeSpan.FromSeconds(60) });

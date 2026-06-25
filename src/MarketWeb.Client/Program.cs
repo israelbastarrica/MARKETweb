@@ -32,6 +32,7 @@ builder.Services.AddScoped<ArticulosApi>();
 builder.Services.AddScoped<MapeoApi>();
 builder.Services.AddScoped<ConfigImagenesApi>();
 builder.Services.AddScoped<PacksApi>();
+builder.Services.AddScoped<TelasApi>();
 builder.Services.AddScoped<DespachosApi>();
 builder.Services.AddScoped<RemitoImpresionApi>();
 builder.Services.AddScoped<PaletsApi>();

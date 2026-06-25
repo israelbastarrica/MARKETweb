@@ -19,6 +19,13 @@ public sealed class RemitoColaDto
     public int Reimpresiones { get; set; }
     public int? Saltafw { get; set; }     // impresora asignada (filtro "por PC" en logística)
 
+    // Anulación: existe un pedido de rechazo en RemitoRecepcion (Accion='RECHAZAR') para
+    // este remito hacia su LocalDestino. Los anulados salen de la cola principal y se ven
+    // en la lista "Remitos Anulados".
+    public bool Anulado { get; set; }
+    public string? EstadoRechazo { get; set; }   // PENDIENTE_API | RECHAZADO_OK | ... (RemitoRecepcion.Estado)
+    public DateTime? FechaAnulado { get; set; }   // RemitoRecepcion.FechaRecepcion del pedido de rechazo
+
     public string NroRemito => $"{Punto:D4}-{NroComp:D8}";
 }
 
