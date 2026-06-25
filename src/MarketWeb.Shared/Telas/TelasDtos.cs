@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace MarketWeb.Shared.Telas;
 
-/// <summary>Una fila del catálogo de telas (con nombres resueltos y Gramos/m² calculado por la base).</summary>
+/// <summary>Una fila del catálogo de telas. El color sale de Dragonfish (DPCOLOR): se guarda el
+/// código (ColorCod) y el nombre (Color) se resuelve por join. Gramos/m² lo calcula la base.</summary>
 public sealed class TelaDto
 {
     public int Id { get; set; }
@@ -14,9 +15,8 @@ public sealed class TelaDto
     public decimal? AnchoCm { get; set; }
     public string? Composicion { get; set; }
     public decimal? RindeMKg { get; set; }
-    public int? IdColor { get; set; }
-    public string? Color { get; set; }
-    public string? ColorCodigo { get; set; }
+    public string? ColorCod { get; set; }   // DPCOLOR.CODCOL
+    public string? Color { get; set; }       // DPCOLOR.DESCRIP (resuelto)
     public decimal? GramosM2 { get; set; }   // calculado en la base: 1000/(Rinde*Ancho_m)
 }
 
@@ -38,23 +38,30 @@ public sealed class TelaSaveRequest
     public string? Composicion { get; set; }
 
     public decimal? RindeMKg { get; set; }
-    public int? IdColor { get; set; }
+
+    [MaxLength(20)]
+    public string? ColorCod { get; set; }   // código de color de Dragonfish
 }
 
-/// <summary>Tipos de catálogo editable de Telas.</summary>
+/// <summary>Un color de Dragonfish (DRAGONFISH_CENTRAL.Zoologic.DPCOLOR) para el combo.</summary>
+public sealed class ColorDragonDto
+{
+    public string Cod { get; set; } = "";
+    public string Nombre { get; set; } = "";
+}
+
+/// <summary>Tipos de catálogo editable propio de Telas (los colores NO: vienen de Dragonfish).</summary>
 public static class CatalogoTela
 {
     public const string Depositos = "depositos";
     public const string Textiles = "textiles";
-    public const string Colores = "colores";
 }
 
-/// <summary>Un ítem de un catálogo (depósito / textil / color). Codigo solo aplica a colores (hex).</summary>
+/// <summary>Un ítem de un catálogo propio (depósito / textil).</summary>
 public sealed class CatalogoItemDto
 {
     public int Id { get; set; }
     public string Nombre { get; set; } = "";
-    public string? Codigo { get; set; }
 }
 
 /// <summary>Alta/modificación de un ítem de catálogo.</summary>
@@ -63,7 +70,4 @@ public sealed class CatalogoSaveRequest
     [Required(ErrorMessage = "Debe ingresar el nombre.")]
     [MaxLength(100)]
     public string Nombre { get; set; } = "";
-
-    [MaxLength(20)]
-    public string? Codigo { get; set; }   // hex #RRGGBB (solo colores)
 }

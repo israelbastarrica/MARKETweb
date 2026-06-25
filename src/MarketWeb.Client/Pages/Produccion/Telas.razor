@@ -102,13 +102,7 @@
                             <td>@t.Composicion</td>
                             <td class="text-end">@Num(t.RindeMKg)</td>
                             <td class="text-end">@Num(t.GramosM2)</td>
-                            <td>
-                                @if (!string.IsNullOrWhiteSpace(t.Color))
-                                {
-                                    <span class="tela-chip" style="background:@(t.ColorCodigo ?? "#ccc")"></span>
-                                    @t.Color
-                                }
-                            </td>
+                            <td>@t.Color</td>
                             <td class="text-center text-nowrap">
                                 <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModificacion(t)">
                                     <i class="fa-solid fa-pen"></i>
@@ -187,12 +181,12 @@
                                            placeholder="96% poliester / 4% elastano" />
                             </div>
                             <div class="col-12 col-md-4">
-                                <label class="form-label">Color</label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdColor">
+                                <label class="form-label">Color (Dragonfish)</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.ColorCod">
                                     <option value="">— (ninguno) —</option>
-                                    @foreach (var c in _colores)
+                                    @foreach (var c in _coloresDragon)
                                     {
-                                        <option value="@c.Id">@c.Nombre</option>
+                                        <option value="@c.Cod">@c.Nombre</option>
                                     }
                                 </InputSelect>
                             </div>
@@ -212,7 +206,7 @@
     <div class="modal-backdrop fade show"></div>
 }
 
-@* ===== Modal catálogos ===== *@
+@* ===== Modal catálogos (depósitos / textiles) ===== *@
 @if (_modalCat)
 {
     <div class="modal fade show d-block" tabindex="-1" role="dialog">
@@ -228,23 +222,16 @@
                                 @onclick='() => CambiarTipo(CatalogoTela.Depositos)'>Depósitos</button>
                         <button class="btn @(_catTipo == CatalogoTela.Textiles ? "btn-primary" : "btn-outline-primary")"
                                 @onclick='() => CambiarTipo(CatalogoTela.Textiles)'>Textiles</button>
-                        <button class="btn @(_catTipo == CatalogoTela.Colores ? "btn-primary" : "btn-outline-primary")"
-                                @onclick='() => CambiarTipo(CatalogoTela.Colores)'>Colores</button>
                     </div>
+                    <p class="text-muted small">Los colores no se editan acá: salen de Dragonfish.</p>
 
                     @if (_catError is not null)
                     {
                         <div class="alert alert-danger py-2">@_catError</div>
                     }
 
-                    @* Alta / edición *@
                     <div class="d-flex gap-2 mb-3">
                         <input class="form-control" placeholder="Nombre..." @bind="_catEdit.Nombre" />
-                        @if (_catTipo == CatalogoTela.Colores)
-                        {
-                            <input type="color" class="form-control form-control-color" style="max-width:60px"
-                                   value="@(_catEdit.Codigo ?? "#000000")" @onchange="e => _catEdit.Codigo = e.Value?.ToString()" />
-                        }
                         <button class="btn btn-primary text-nowrap" @onclick="GuardarCat">
                             @(_catEditId is null ? "Agregar" : "Guardar")
                         </button>
@@ -264,10 +251,6 @@
                             @foreach (var it in _catItems)
                             {
                                 <li class="list-group-item d-flex align-items-center">
-                                    @if (_catTipo == CatalogoTela.Colores && !string.IsNullOrWhiteSpace(it.Codigo))
-                                    {
-                                        <span class="tela-chip" style="background:@it.Codigo"></span>
-                                    }
                                     <span class="flex-grow-1">@it.Nombre</span>
                                     <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => EditarCat(it)">
                                         <i class="fa-solid fa-pen"></i>
@@ -293,7 +276,7 @@
     private readonly List<TelaDto> _items = new();
     private List<CatalogoItemDto> _depositos = new();
     private List<CatalogoItemDto> _textiles = new();
-    private List<CatalogoItemDto> _colores = new();
+    private List<ColorDragonDto> _coloresDragon = new();
 
     private int _fDeposito;
     private int _fTextil;
@@ -349,7 +332,7 @@
         {
             _depositos = await Api.ListarCatalogoAsync(CatalogoTela.Depositos);
             _textiles = await Api.ListarCatalogoAsync(CatalogoTela.Textiles);
-            _colores = await Api.ListarCatalogoAsync(CatalogoTela.Colores);
+            _coloresDragon = await Api.ListarColoresAsync();
         }
         catch { /* el cartel de error de Cargar cubre la pantalla */ }
     }
@@ -360,7 +343,7 @@
         _error = null;
         try
         {
-            var datos = await Api.ListarAsync(_fDeposito, _fMaterial, _fTextil, null);
+            var datos = await Api.ListarAsync(_fDeposito, _fMaterial, _fTextil);
             _items.Clear();
             _items.AddRange(datos);
         }
@@ -414,7 +397,7 @@
             AnchoCm = t.AnchoCm,
             Composicion = t.Composicion,
             RindeMKg = t.RindeMKg,
-            IdColor = t.IdColor,
+            ColorCod = t.ColorCod,
         };
         _errorModal = null;
         _modal = true;
@@ -462,7 +445,7 @@
     private void EditarCat(CatalogoItemDto it)
     {
         _catEditId = it.Id;
-        _catEdit = new CatalogoSaveRequest { Nombre = it.Nombre, Codigo = it.Codigo };
+        _catEdit = new CatalogoSaveRequest { Nombre = it.Nombre };
     }
 
     private void CancelarEdicionCat()
@@ -497,7 +480,6 @@
     private async Task CerrarCatalogos()
     {
         _modalCat = false;
-        // Pudo cambiar depósitos/textiles/colores → refrescar combos y grilla.
         await CargarCombos();
         await Cargar();
     }
