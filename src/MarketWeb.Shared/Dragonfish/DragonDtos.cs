@@ -36,6 +36,13 @@ public sealed class ArticuloLookupDto
     public List<ComboVarianteDto> Variantes { get; set; } = new();
 }
 
+/// <summary>Motivo de remito (Dragon ZooLogic.MOTIVO): código + descripción.</summary>
+public sealed class MotivoDto
+{
+    public string Cod { get; set; } = "";
+    public string Des { get; set; } = "";
+}
+
 /// <summary>Una variante color+talle de un artículo (fila de COMB).</summary>
 public sealed class ComboVarianteDto
 {

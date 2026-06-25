@@ -23,40 +23,98 @@
 
     <div class="market-card p-3 mb-3">
         <div class="row g-3 align-items-end">
-            <div class="col-12 col-md-4">
+            <div class="col-6 col-md-3">
                 <label class="form-label">Local destino</label>
                 <select class="form-select form-select-lg" value="@_local" @onchange="OnLocalChange">
                     <option value="LURO">LURO</option>
                     <option value="PERALTA">PERALTA</option>
                 </select>
             </div>
-        </div>
-    </div>
-
-    @* ---- Escanear bolsa del depósito (carga toda la bolsa de un saque) ---- *@
-    <div class="market-card p-3 mb-3">
-        <div class="d-flex gap-2 flex-wrap align-items-center">
-            <button class="btn btn-dark btn-lg" @onclick="AbrirScanner">
-                <i class="fa-solid fa-camera me-2"></i>Escanear bolsa
-            </button>
-            <span class="text-muted">o</span>
-            <div class="input-group input-group-lg rn-bolsa-manual">
-                <span class="input-group-text">N° bolsa</span>
-                <input class="form-control" @bind="_nroBolsaManual" @onkeyup="OnKeyBolsa" placeholder="tipealo a mano" />
-                <button class="btn btn-outline-secondary" @onclick="BuscarBolsaManual"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <div class="col-6 col-md-5">
+                <label class="form-label">Motivo</label>
+                <select class="form-select form-select-lg" @bind="_motivo">
+                    @foreach (var m in _motivos)
+                    {
+                        <option value="@m.Cod">@m.Cod - @m.Des</option>
+                    }
+                </select>
             </div>
-            <button class="btn btn-outline-dark btn-lg ms-auto" @onclick="ToggleAncho" title="Pantalla completa horizontal (tablet)">
-                <i class="fa-solid @(_ancho ? "fa-compress" : "fa-expand") me-1"></i>@(_ancho ? "Salir" : "Pantalla ancha")
+            <div class="col-12 col-md-4 d-flex align-items-center">
+                <button class="btn btn-outline-dark btn-lg ms-md-auto" @onclick="ToggleAncho" title="Pantalla completa horizontal (tablet)">
+                    <i class="fa-solid @(_ancho ? "fa-compress" : "fa-expand") me-1"></i>@(_ancho ? "Salir" : "Pantalla ancha")
+                </button>
+            </div>
+        </div>
+
+        @* Modo de carga: manual / escanear / por N° de remito de local *@
+        <div class="d-flex gap-2 flex-wrap mt-3">
+            <button class="btn btn-lg @(_modo == "manual" ? "btn-primary" : "btn-outline-primary")" @onclick='() => SetModo("manual")'>
+                <i class="fa-solid fa-pen me-1"></i>Manual
+            </button>
+            <button class="btn btn-lg @(_modo == "escanear" ? "btn-primary" : "btn-outline-primary")" @onclick='() => SetModo("escanear")'>
+                <i class="fa-solid fa-camera me-1"></i>Escanear bolsa
+            </button>
+            <button class="btn btn-lg @(_modo == "remito" ? "btn-primary" : "btn-outline-primary")" @onclick='() => SetModo("remito")'>
+                <i class="fa-solid fa-file-import me-1"></i>Por N° de remito
             </button>
         </div>
-        @if (!string.IsNullOrEmpty(_scanError))
-        {
-            <div class="alert alert-warning mt-2 mb-0 py-2 small">@_scanError</div>
-        }
     </div>
 
-    @* ---- Carga de renglones ---- *@
-    <div class="market-card rn-carga p-3 mb-3">
+    @* ---- MODO ESCANEAR: bolsa del depósito (código de barras/QR) ---- *@
+    @if (_modo == "escanear")
+    {
+        <div class="market-card p-3 mb-3">
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button class="btn btn-dark btn-lg" @onclick="AbrirScanner">
+                    <i class="fa-solid fa-camera me-2"></i>Escanear bolsa
+                </button>
+                <span class="text-muted">o</span>
+                <div class="input-group input-group-lg rn-bolsa-manual">
+                    <span class="input-group-text">N° bolsa</span>
+                    <input class="form-control" @bind="_nroBolsaManual" @onkeyup="OnKeyBolsa" placeholder="tipealo a mano" />
+                    <button class="btn btn-outline-secondary" @onclick="BuscarBolsaManual"><i class="fa-solid fa-magnifying-glass"></i></button>
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(_scanError))
+            {
+                <div class="alert alert-warning mt-2 mb-0 py-2 small">@_scanError</div>
+            }
+        </div>
+    }
+
+    @* ---- MODO REMITO: levantar el detalle de un remito existente del local ---- *@
+    @if (_modo == "remito")
+    {
+        <div class="market-card p-3 mb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-3">
+                    <label class="form-label small text-muted mb-1">Local del remito</label>
+                    <select class="form-select form-select-lg" @bind="_remLocal">
+                        <option value="LURO">LURO</option>
+                        <option value="PERALTA">PERALTA</option>
+                    </select>
+                </div>
+                <div class="col-3 col-md-2">
+                    <label class="form-label small text-muted mb-1">Punto</label>
+                    <input type="number" min="1" class="form-control form-control-lg" @bind="_remPunto" onfocus="this.select()" />
+                </div>
+                <div class="col-9 col-md-4">
+                    <label class="form-label small text-muted mb-1">Número</label>
+                    <input type="number" min="1" class="form-control form-control-lg" @bind="_remNumero" @onkeyup="OnKeyRemito" onfocus="this.select()" />
+                </div>
+                <div class="col-12 col-md-3 d-grid">
+                    <button class="btn btn-primary btn-lg" @onclick="LevantarRemito" disabled="@_buscandoRemito">
+                        @if (_buscandoRemito) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                        <i class="fa-solid fa-download me-1"></i>Levantar
+                    </button>
+                </div>
+            </div>
+            <div class="text-muted small mt-2">Trae los renglones de un remito que ya hizo el local (se lee en vivo de su Dragon).</div>
+        </div>
+    }
+
+    @* ---- MODO MANUAL: carga de renglones artículo por artículo ---- *@
+    <div class="market-card rn-carga p-3 mb-3" style="@(_modo == "manual" ? "" : "display:none")">
         @* Código (angosto, ~10 chars) con autocomplete + descripción justo debajo *@
         <div class="row g-2">
             <div class="col-12 position-relative">
@@ -137,7 +195,7 @@
                                 <input type="number" min="0" inputmode="numeric"
                                        class="form-control form-control-lg text-center"
                                        value="@_cantPorTalle[t]"
-                                       @onchange="(e) => SetCant(t, e)" />
+                                       @onchange="(e) => SetCant(t, e)" onfocus="this.select()" />
                             </div>
                         }
                     </div>
@@ -155,7 +213,7 @@
                 <div class="row g-2 align-items-end mt-1">
                     <div class="col-6 col-md-2">
                         <label class="form-label small text-muted mb-1">Cantidad</label>
-                        <input type="number" min="1" class="form-control form-control-lg" @bind="_cantSimple" />
+                        <input type="number" min="1" class="form-control form-control-lg" @bind="_cantSimple" onfocus="this.select()" />
                     </div>
                     <div class="col-6 col-md-3 d-grid">
                         <button class="btn btn-primary btn-lg" @onclick="AgregarSimple"><i class="fa-solid fa-plus me-1"></i>Agregar</button>
@@ -193,7 +251,10 @@
             </table>
         </div>
 
-        <div class="d-grid d-md-flex justify-content-md-end">
+        <div class="d-grid d-md-flex justify-content-md-end gap-2">
+            <button class="btn btn-outline-danger btn-lg" @onclick="VaciarTodo" disabled="@_enviando">
+                <i class="fa-solid fa-trash-can me-1"></i> Vaciar remito
+            </button>
             <button class="btn btn-success btn-lg" @onclick="DarDeAlta" disabled="@(_enviando || _dragonOff || string.IsNullOrEmpty(_licencia))">
                 @if (_enviando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
                 <i class="fa-solid fa-paper-plane me-1"></i> Dar de alta el remito (@_items.Count renglón(es))
@@ -341,6 +402,19 @@
     private string _licencia = "";
     private string _etiquetaPc = "esta tablet";
 
+    // Motivo del remito (combo); arranca en 02 REPOSICION. El elegido se manda en el alta.
+    private string _motivo = "02";
+    private List<MotivoDto> _motivos = new();
+
+    // Modo de carga: "" (sin elegir) / "manual" / "escanear" / "remito".
+    private string _modo = "";
+    private void SetModo(string m) { _modo = m; _scanError = ""; if (m == "remito") _remLocal = _local; }
+
+    // Modo "remito": levantar el detalle de un remito existente del local.
+    private string _remLocal = "LURO";
+    private int _remPunto = 1, _remNumero;
+    private bool _buscandoRemito;
+
     // Impresoras = licencias destino (van a InformacionAdicional; el agente rutea por ahí cuando ve SALTAFW del server).
     private static readonly (string Licencia, string Nombre)[] Impresoras =
     {
@@ -384,6 +458,11 @@
     {
         _dragonOff = !await Api.ConfiguradoRemitoAsync();
         _repoItems = await Api.UltimaRepoAsync(_local);
+
+        _motivos = await Api.MotivosAsync();
+        // Garantizamos que el default 02 siempre esté disponible aunque falle la lectura.
+        if (!_motivos.Any(m => m.Cod == "02"))
+            _motivos.Insert(0, new MotivoDto { Cod = "02", Des = "REPOSICION" });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -500,6 +579,37 @@
         }
         var etiqueta = bolsa.Eliminada ? $"{nroBolsa} (archivada)" : nroBolsa;
         Ui.Exito($"Bolsa {etiqueta}: +{bolsa.Renglones.Count} renglón(es), {u} u.");
+    }
+
+    // ---------------- Modo remito: levantar detalle de un remito existente del local ----------------
+
+    private async Task OnKeyRemito(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await LevantarRemito();
+    }
+
+    private async Task LevantarRemito()
+    {
+        if (_remPunto <= 0 || _remNumero <= 0) { Ui.Error("Poné punto y número del remito."); return; }
+        _buscandoRemito = true;
+        try
+        {
+            var renglones = await Api.BuscarRemitoLocalAsync(_remLocal, _remPunto, _remNumero);
+            if (renglones.Count == 0)
+            {
+                Ui.Error($"No se encontró el remito {_remPunto}-{_remNumero} en {_remLocal} (o no tiene renglones).");
+                return;
+            }
+            var u = 0;
+            foreach (var r in renglones)
+            {
+                MergeItem(r.ArtCod, r.ArtDes, r.Color, r.Talle, r.Cantidad);
+                u += r.Cantidad;
+            }
+            Ui.Exito($"Remito {_remPunto}-{_remNumero} de {_remLocal}: +{renglones.Count} renglón(es), {u} u.");
+        }
+        catch (Exception ex) { Ui.Error("Error al levantar el remito: " + ex.Message); }
+        finally { _buscandoRemito = false; }
     }
 
     public void Dispose()
@@ -722,6 +832,18 @@
 
     private void Quitar(RenglonItem it) => _items.Remove(it);
 
+    // Vacía TODA la tabla de renglones cargados (con confirmación, descarta todo).
+    private async Task VaciarTodo()
+    {
+        if (_items.Count == 0) return;
+        if (!await Ui.ConfirmAsync($"¿Vaciar el remito? Se quitan los {_items.Count} renglón(es) cargados.",
+                "Vaciar remito", "Vaciar", "Cancelar", true))
+            return;
+        _items.Clear();
+        LimpiarArticulo();
+        _diag = null;
+    }
+
     private DragonRemitoResultDto? _diag;
 
     private async Task DarDeAlta()
@@ -739,7 +861,7 @@
             var res = await Api.CrearRemitoAsync(new DragonRemitoRequest
             {
                 Local = _local,
-                Motivo = "02",   // 02 = REPOSICION
+                Motivo = string.IsNullOrWhiteSpace(_motivo) ? "02" : _motivo,
                 InformacionAdicional = _licencia,
                 Items = _items.Select(i => new DragonRemitoItemDto
                 {

@@ -40,7 +40,18 @@ public sealed class RemitoImpresionController : ControllerBase
         [FromQuery] string? estado, [FromQuery] bool soloErrores, [FromQuery] int? saltafw, CancellationToken ct)
     {
         var origen = await ResolverOrigenAsync(local, ct);
-        return Ok(await _service.ListarAsync(desde, hasta, origen, estado, soloErrores, saltafw, ct));
+        return Ok(await _service.ListarAsync(desde, hasta, origen, estado, soloErrores, saltafw, soloAnulados: false, ct));
+    }
+
+    // Remitos anulados (con pedido de rechazo en RemitoRecepcion). Misma resolución de origen/filtros
+    // que la cola; no aplica el filtro de estado de impresión.
+    [HttpGet("anulados")]
+    public async Task<ActionResult<IReadOnlyList<RemitoColaDto>>> Anulados(
+        [FromQuery] DateTime desde, [FromQuery] DateTime hasta, [FromQuery] string? local,
+        [FromQuery] int? saltafw, CancellationToken ct)
+    {
+        var origen = await ResolverOrigenAsync(local, ct);
+        return Ok(await _service.ListarAsync(desde, hasta, origen, null, false, saltafw, soloAnulados: true, ct));
     }
 
     [HttpPost("{id:int}/reimprimir")]

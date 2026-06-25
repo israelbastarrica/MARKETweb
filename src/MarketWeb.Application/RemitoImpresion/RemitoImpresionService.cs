@@ -33,23 +33,39 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
     }
 
     public async Task<IReadOnlyList<RemitoColaDto>> ListarAsync(
-        DateTime desde, DateTime hasta, string? localOrigen, string? estado, bool soloErrores, int? saltafw, CancellationToken ct = default)
+        DateTime desde, DateTime hasta, string? localOrigen, string? estado, bool soloErrores, int? saltafw,
+        bool soloAnulados = false, CancellationToken ct = default)
     {
         // Solo errores ignora el filtro de estado.
         var estadoFiltro = soloErrores ? null : (string.IsNullOrWhiteSpace(estado) || estado == "TODOS" ? null : estado);
 
+        // Anulado = existe pedido de rechazo (Accion='RECHAZAR') en RemitoRecepcion para este
+        // remito hacia su LocalDestino. soloAnulados=1 trae solo esos; =0 los excluye de la cola.
         const string sql = """
             SELECT TOP 2000
-                   ID AS Id, RTRIM(RemitoCODIGO) AS RemitoCodigo, LocalOrigen, LocalDestino,
-                   FPTOVEN AS Punto, FNUMCOMP AS NroComp, FechaEmision, Estado, Intentos,
-                   ErrorMsg, FechaDetectado, FechaImpreso, IPImpresora AS IpImpresora, Reimpresiones, SALTAFW AS Saltafw
-            FROM   ImpresorRemito_Cola
-            WHERE  ID > 776
-              AND  FechaDetectado >= @desde AND FechaDetectado < @hastaExcl
-              AND  (@local IS NULL OR UPPER(RTRIM(LocalOrigen)) = UPPER(@local))
-              AND  (@soloErrores = 0 OR Estado = 'ERROR')
-              AND  (@estado IS NULL OR Estado = @estado)
-              AND  (@saltafw IS NULL OR SALTAFW = @saltafw)
+                   c.ID AS Id, RTRIM(c.RemitoCODIGO) AS RemitoCodigo, c.LocalOrigen, c.LocalDestino,
+                   c.FPTOVEN AS Punto, c.FNUMCOMP AS NroComp, c.FechaEmision, c.Estado, c.Intentos,
+                   c.ErrorMsg, c.FechaDetectado, c.FechaImpreso, c.IPImpresora AS IpImpresora, c.Reimpresiones, c.SALTAFW AS Saltafw,
+                   Anulado       = CASE WHEN rr.RemitoCODIGO IS NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END,
+                   EstadoRechazo = rr.Estado,
+                   FechaAnulado  = rr.FechaRecepcion
+            FROM   ImpresorRemito_Cola c
+            OUTER APPLY (
+                SELECT TOP 1 RR.RemitoCODIGO, RR.Estado, RR.FechaRecepcion
+                FROM   dbo.RemitoRecepcion RR WITH(NOLOCK)
+                WHERE  RTRIM(RR.RemitoCODIGO) = RTRIM(c.RemitoCODIGO)
+                  AND  RR.LocalRecepcion = RTRIM(c.LocalDestino)
+                  AND  RR.Accion = 'RECHAZAR'
+                ORDER BY RR.FechaRecepcion DESC
+            ) rr
+            WHERE  c.ID > 776
+              AND  c.FechaDetectado >= @desde AND c.FechaDetectado < @hastaExcl
+              AND  (@local IS NULL OR UPPER(RTRIM(c.LocalOrigen)) = UPPER(@local))
+              AND  (@soloErrores = 0 OR c.Estado = 'ERROR')
+              AND  (@estado IS NULL OR c.Estado = @estado)
+              AND  (@saltafw IS NULL OR c.SALTAFW = @saltafw)
+              AND  ( (@soloAnulados = 1 AND rr.RemitoCODIGO IS NOT NULL)
+                  OR (@soloAnulados = 0 AND rr.RemitoCODIGO IS NULL) )
             ORDER BY FechaDetectado DESC, ID DESC;
             """;
 
@@ -61,7 +77,8 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
             local = string.IsNullOrWhiteSpace(localOrigen) ? null : localOrigen.Trim(),
             estado = estadoFiltro,
             soloErrores = soloErrores ? 1 : 0,
-            saltafw
+            saltafw,
+            soloAnulados = soloAnulados ? 1 : 0
         }, cancellationToken: ct));
         return rows.ToList();
     }

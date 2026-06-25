@@ -63,6 +63,12 @@
         </div>
     </div>
 
+    <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-outline-danger btn-sm" @onclick="AbrirAnulados">
+            <i class="fa-solid fa-ban me-1"></i> REMITOS ANULADOS
+        </button>
+    </div>
+
     @if (_error is not null)
     {
         <div class="alert alert-danger d-flex align-items-center" role="alert">
@@ -167,6 +173,65 @@
     <div class="modal-backdrop fade show"></div>
 }
 
+@if (_modalAnulados)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-ban me-2 text-danger"></i>Remitos anulados</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalAnulados = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_cargandoAnulados)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+                    }
+                    else if (_anulados.Count == 0)
+                    {
+                        <div class="market-empty"><i class="fa-solid fa-ban"></i><p>No hay remitos anulados en el período.</p></div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="market-table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 150px">Rechazo</th>
+                                        <th>Nro Remito</th>
+                                        <th>Origen</th>
+                                        <th>Destino</th>
+                                        <th>Emisión</th>
+                                        <th>Anulado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var r in _anulados)
+                                    {
+                                        <tr class="fila-anulado">
+                                            <td><span class="badge @BadgeRechazoClase(r.EstadoRechazo)">@TextoRechazo(r.EstadoRechazo)</span></td>
+                                            <td class="fw-semibold">@r.NroRemito</td>
+                                            <td>@r.LocalOrigen</td>
+                                            <td>@r.LocalDestino</td>
+                                            <td class="small">@r.FechaEmision.ToString("dd/MM/yyyy HH:mm")</td>
+                                            <td class="small">@(r.FechaAnulado?.ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="text-muted small">@_anulados.Count remito(s) anulado(s).</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _modalAnulados = false">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 <style>
     tr.fila-imp { }
     tr.fila-pen { background: #eef4ff !important; }
@@ -175,9 +240,12 @@
     .badge-pen { background: #0d6efd; }
     .badge-err { background: #dc3545; }
 
+    tr.fila-anulado { background: #fdeaea !important; }
+
     /* Modo oscuro: tintes oscuros legibles (el pastel claro no se leía con texto claro). */
     html[data-theme="dark"] tr.fila-pen { background: rgba(56, 130, 246, .16) !important; }
     html[data-theme="dark"] tr.fila-err { background: rgba(214, 80, 70, .18) !important; }
+    html[data-theme="dark"] tr.fila-anulado { background: rgba(214, 80, 70, .18) !important; }
 </style>
 
 @code {
@@ -206,6 +274,9 @@
 
     private bool _modalAnular, _anulando;
     private RemitoColaDto? _anularRemito;
+
+    private bool _modalAnulados, _cargandoAnulados;
+    private List<RemitoColaDto> _anulados = new();
 
     private readonly HashSet<int> _seguimiento = new();
     private CancellationTokenSource? _pollCts;
@@ -277,9 +348,42 @@
         var ok = await Api.AnularAsync(_anularRemito.Id);
         _anulando = false;
         _modalAnular = false;
-        if (ok) Ui.Exito($"Remito {nro}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado.");
+        if (ok)
+        {
+            // Sale de la cola principal y pasa a la lista de anulados.
+            _remitos.RemoveAll(x => x.Id == _anularRemito?.Id);
+            Ui.Exito($"Remito {nro}: marcado para rechazo. El agente lo rechazará cuando el local lo tenga sincronizado.");
+        }
         else Ui.Error("No se pudo anular el remito.");
+        _anularRemito = null;
     }
+
+    private async Task AbrirAnulados()
+    {
+        _modalAnulados = true;
+        _cargandoAnulados = true;
+        _anulados = new();
+        // Mismo contexto que la cola: período, local e impresora de esta PC (salvo "ver todos").
+        int? saltafw = (_saltafwFijo is int s && !_verTodos) ? s : null;
+        try { _anulados = await Api.ListarAnuladosAsync(_desde, _hasta, _local, saltafw); }
+        catch (Exception ex) { Ui.Error("No se pudieron cargar los remitos anulados."); Console.Error.WriteLine(ex); }
+        finally { _cargandoAnulados = false; }
+    }
+
+    private static string TextoRechazo(string? estado) => estado switch
+    {
+        "RECHAZADO_OK" => "Rechazado",
+        "PENDIENTE_API" => "Pendiente",
+        null or "" => "Anulado",
+        _ => estado
+    };
+
+    private static string BadgeRechazoClase(string? estado) => estado switch
+    {
+        "RECHAZADO_OK" => "bg-danger",
+        "PENDIENTE_API" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
 
     private void ArrancarPolling()
     {

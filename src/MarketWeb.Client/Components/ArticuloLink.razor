@@ -21,7 +21,18 @@
 @code {
     [Parameter, EditorRequired] public string? Codigo { get; set; }
     [Parameter] public bool Badge { get; set; } = true;
+    // Opcional: ubicación/local con la que abrir la Consulta (ej. desde Eventos, el local del evento).
+    [Parameter] public string? Local { get; set; }
 
     // ref=1 marca que se llega desde otra pantalla → la Consulta muestra "← Volver".
-    private string Url => $"/consulta-articulo?codigo={Uri.EscapeDataString((Codigo ?? "").Trim())}&ref=1";
+    private string Url
+    {
+        get
+        {
+            var u = $"/consulta-articulo?codigo={Uri.EscapeDataString((Codigo ?? "").Trim())}&ref=1";
+            if (!string.IsNullOrWhiteSpace(Local))
+                u += $"&local={Uri.EscapeDataString(Local.Trim())}";
+            return u;
+        }
+    }
 }

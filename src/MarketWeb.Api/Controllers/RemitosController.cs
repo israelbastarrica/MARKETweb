@@ -47,7 +47,34 @@ public sealed class RemitosController : ControllerBase
         return Ok(res);
     }
 
+    [HttpGet("remito-local")]
+    public async Task<IActionResult> RemitoLocal([FromQuery] string local, [FromQuery] int punto, [FromQuery] int numero, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(local)) return BadRequest("local requerido");
+        return Ok(await _lookup.BuscarRemitoLocalAsync(local, punto, numero, ct));
+    }
+
+    [HttpGet("motivos")]
+    public async Task<IActionResult> Motivos(CancellationToken ct) => Ok(await _lookup.MotivosAsync(ct));
+
     [HttpPost]
     public async Task<ActionResult<DragonRemitoResultDto>> Crear([FromBody] DragonRemitoRequest req, CancellationToken ct)
-        => Ok(await _dragon.CrearRemitoAsync(req, ct));
+    {
+        var res = await _dragon.CrearRemitoAsync(req, ct);
+        if (res.Ok)
+        {
+            // Dragon NO persiste InformacionAdicional/ZADSFW: guardamos el mapeo tablet→remito en tabla
+            // propia para que el agente de impresión rutee la impresora por N° de remito. Best-effort:
+            // el remito ya existe en Dragon, no rompemos el alta si esto falla.
+            try
+            {
+                var pc = Request.Headers["X-Pc"].FirstOrDefault();
+                var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+                await _lookup.RegistrarRemitoTabletAsync(
+                    res.Numero, res.Codigo, req.Local ?? "", req.InformacionAdicional, pc, req.Motivo, usuario, ct);
+            }
+            catch { /* mapeo best-effort */ }
+        }
+        return Ok(res);
+    }
 }

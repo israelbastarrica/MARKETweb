@@ -215,6 +215,11 @@
 
     private const string StateKey = "consulta-reposicion";
 
+    // Permite abrir ya procesando un artículo en un local: /logistica/consulta-reposicion?local=LURO&art=XXX (ej. desde Eventos).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQuery { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQuery { get; set; }
+    private string? _ultimoQ;
+
     private sealed class Snap
     {
         public string Local = "LURO";
@@ -233,6 +238,18 @@
             _d = s.D;
             _busco = s.Busco;
         }
+    }
+
+    // Si llega ?local=&art= (ej. clic desde Eventos), posiciona y procesa solo.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ArtQuery)) return;
+        var key = $"{LocalQuery}|{ArtQuery}";
+        if (key == _ultimoQ) return;
+        _ultimoQ = key;
+        if (!string.IsNullOrWhiteSpace(LocalQuery)) _local = LocalQuery.Trim().ToUpperInvariant();
+        _artCod = ArtQuery.Trim();
+        await Buscar();
     }
 
     private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }

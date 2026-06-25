@@ -15,7 +15,8 @@ public interface IRemitoImpresionService
     Task<IReadOnlyList<ImpresoraColaDto>> ListarImpresorasAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<RemitoColaDto>> ListarAsync(
-        DateTime desde, DateTime hasta, string? localOrigen, string? estado, bool soloErrores, int? saltafw, CancellationToken ct = default);
+        DateTime desde, DateTime hasta, string? localOrigen, string? estado, bool soloErrores, int? saltafw,
+        bool soloAnulados = false, CancellationToken ct = default);
 
     /// <summary>Re-encola el remito. Si se pasa localOrigen, solo lo permite si el remito es de ese origen.</summary>
     Task<bool> ReimprimirAsync(int id, string? localOrigen, CancellationToken ct = default);

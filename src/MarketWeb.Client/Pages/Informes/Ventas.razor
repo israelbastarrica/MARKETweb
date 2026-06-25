@@ -1,0 +1,343 @@
+@page "/informes/ventas"
+@implements IDisposable
+@inject InformesApi Api
+@inject PageStateService State
+@inject IJSRuntime JS
+
+<PageTitle>Informe de Ventas</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Informes" Titulo="Ventas" Icono="fa-solid fa-chart-column" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Comprado (remitos de ingreso; si no hay, lo enviado a los locales) vs vendido en el rango, con costo a la fecha, margen y venta forzada (el precio de venta bajó respecto del lanzamiento).
+    </p>
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted mb-1">Proveedor</label>
+                <select class="form-select" @bind="_provCod">
+                    <option value="">— Todos —</option>
+                    @foreach (var p in _combos.Proveedores)
+                    {
+                        <option value="@p.Cod">@p.Cod — @p.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Temporada</label>
+                <select class="form-select" @bind="_temporada">
+                    <option value="TODOS">Todas</option>
+                    @foreach (var t in _combos.Temporadas) { <option value="@t">@t</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Año</label>
+                <select class="form-select" @bind="_anio">
+                    <option value="0">Todos</option>
+                    @foreach (var a in _combos.Anios) { <option value="@a">@a</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Venta desde</label>
+                <input type="date" class="form-control" @bind="_desde" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Venta hasta</label>
+                <input type="date" class="form-control" @bind="_hasta" />
+            </div>
+            <div class="col-12 col-md-1 d-grid">
+                <button class="btn btn-primary" @onclick="Procesar" disabled="@_cargando">
+                    @if (_cargando) { <i class="fa-solid fa-spinner fa-spin"></i> }
+                    else { <i class="fa-solid fa-magnifying-glass"></i> }
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_filas.Count > 0)
+    {
+        <div class="market-card p-3 mb-3">
+            <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
+                <div>
+                    <label class="form-label small text-muted mb-1">Agrupar por</label>
+                    <select class="form-select form-select-sm" value="@_dimension" @onchange="OnDimChange">
+                        <option value="Familia">Familia</option>
+                        <option value="Tipo">Tipo</option>
+                        <option value="Categoria">Categoría</option>
+                        <option value="Combo">Combo</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label small text-muted mb-1">Métrica</label>
+                    <select class="form-select form-select-sm" value="@_metrica" @onchange="OnMetricaChange">
+                        <option value="Unidades">Unidades vendidas</option>
+                        <option value="Facturado">Facturado $</option>
+                        <option value="Margen">Margen $</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label small text-muted mb-1">Gráfico</label>
+                    <select class="form-select form-select-sm" value="@_tipo" @onchange="OnTipoChange">
+                        <option value="line">Líneas</option>
+                        <option value="bar">Barras apiladas</option>
+                    </select>
+                </div>
+                <div class="text-muted small ms-auto">Eje tiempo: @_granuLabel</div>
+            </div>
+            <div style="position:relative;height:340px">
+                <canvas id="inf-chart"></canvas>
+            </div>
+        </div>
+    }
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Procesando...</p>
+    }
+    else if (_filas.Count == 0)
+    {
+        @if (_busco)
+        {
+            <div class="market-empty"><i class="fa-solid fa-chart-column"></i><p>Sin datos para el filtro.</p></div>
+        }
+        else
+        {
+            <div class="market-empty"><i class="fa-solid fa-chart-column"></i><p>Elegí proveedor / temporada / año + rango de venta y dale <strong>Procesar</strong>.</p></div>
+        }
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
+            <div>
+                <label class="form-label small text-muted mb-1">Ordenar por</label>
+                <select class="form-select form-select-sm" @bind="_orden">
+                    <option value="Codigo">Código</option>
+                    <option value="Cantidad">Cantidad</option>
+                    <option value="Precio">Precio</option>
+                </select>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="chkDesc" @bind="_desc" />
+                <label class="form-check-label small" for="chkDesc">Descendente</label>
+            </div>
+            <a class="btn btn-outline-success ms-auto" href="@ExcelUrl()" target="_blank" rel="noopener">
+                <i class="fa-solid fa-file-excel me-1"></i> Exportar a Excel
+            </a>
+        </div>
+
+        <div class="market-card table-responsive mb-3">
+            <table class="market-table align-middle inf-tabla">
+                <thead>
+                    <tr>
+                        <th>Código</th><th>Descripción</th><th>Temp.</th><th class="text-center">Año</th>
+                        <th class="text-end">Comprado</th><th class="text-center">Origen</th>
+                        <th class="text-end">P. inicial</th><th class="text-end">P. venta</th><th class="text-center">Forzada</th>
+                        <th class="text-end">Vendido</th><th class="text-end">P. vta prom</th>
+                        <th class="text-end">Facturado</th><th class="text-end">Costo</th>
+                        <th class="text-end">Margen $</th><th class="text-end">Margen %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in FilasOrdenadas())
+                    {
+                        <tr>
+                            <td><ArticuloLink Codigo="@r.ArtCod" /></td>
+                            <td class="small">@r.ArtDes</td>
+                            <td class="small">@r.Temporada</td>
+                            <td class="text-center small">@r.Anio</td>
+                            <td class="text-end">@r.Comprado.ToString("N0")</td>
+                            <td class="text-center small">@r.FuenteStock</td>
+                            <td class="text-end">@(r.PrecioInicial > 0 ? r.PrecioInicial.ToString("N0") : "")</td>
+                            <td class="text-end">@(r.PrecioVenta > 0 ? r.PrecioVenta.ToString("N0") : "")</td>
+                            <td class="text-center">@if (r.Forzada) { <span class="badge text-bg-danger">Forzada</span> }</td>
+                            <td class="text-end fw-semibold">@r.Vendido.ToString("N0")</td>
+                            <td class="text-end">@(r.PrecioVentaProm is null ? "" : r.PrecioVentaProm.Value.ToString("N0"))</td>
+                            <td class="text-end">@r.Facturado.ToString("N0")</td>
+                            <td class="text-end">@r.Costo.ToString("N0")</td>
+                            <td class="text-end @(r.MargenPesos < 0 ? "text-danger" : "")">@r.MargenPesos.ToString("N0")</td>
+                            <td class="text-end @(r.MargenPct < 0 ? "text-danger" : "")">@(r.MargenPct is null ? "" : r.MargenPct.Value.ToString("N1") + "%")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="fw-semibold">
+                        <td colspan="4" class="text-end">Totales (@_filas.Count art.)</td>
+                        <td class="text-end">@_filas.Sum(f => f.Comprado).ToString("N0")</td>
+                        <td colspan="4" class="text-center small">@_filas.Count(f => f.Forzada) forzada(s)</td>
+                        <td class="text-end">@_filas.Sum(f => f.Vendido).ToString("N0")</td>
+                        <td></td>
+                        <td class="text-end">@_filas.Sum(f => f.Facturado).ToString("N0")</td>
+                        <td class="text-end">@_filas.Sum(f => f.Costo).ToString("N0")</td>
+                        <td class="text-end">@_filas.Sum(f => f.MargenPesos).ToString("N0")</td>
+                        <td class="text-end">@MargenTotalPct()</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .inf-tabla td, .inf-tabla th { font-size: .9rem; white-space: nowrap; }
+</style>
+
+@code {
+    private InformeVentaCombosDto _combos = new();
+    private string _provCod = "";
+    private string _temporada = "TODOS";
+    private int _anio;
+    private DateTime _desde = DateTime.Today.AddMonths(-6);
+    private DateTime _hasta = DateTime.Today;
+
+    private List<InformeVentaFila> _filas = new();
+    private bool _cargando, _busco;
+    private string _orden = "Codigo";
+    private bool _desc;
+
+    private IEnumerable<InformeVentaFila> FilasOrdenadas()
+    {
+        Func<InformeVentaFila, object> key = _orden switch
+        {
+            "Cantidad" => f => f.Vendido,
+            "Precio" => f => f.PrecioVenta,
+            _ => f => f.ArtCod
+        };
+        return _desc ? _filas.OrderByDescending(key) : _filas.OrderBy(key);
+    }
+
+    // --- Gráfico (serie temporal por dimensión) ---
+    private List<InformeSerieFila> _serie = new();
+    private string _dimension = "Familia", _metrica = "Unidades", _tipo = "line";
+    private string _granuLabel = "";
+    private bool _renderPendiente;
+    private IJSObjectReference? _chartModule;
+    private static readonly string[] Paleta =
+    { "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac" };
+
+    private const string StateKey = "informe-ventas";
+    private sealed class Snap
+    {
+        public string ProvCod = "", Temporada = "TODOS";
+        public int Anio;
+        public DateTime Desde, Hasta;
+        public List<InformeVentaFila> Filas = new();
+        public bool Busco;
+        public List<InformeSerieFila> Serie = new();
+        public string Dimension = "Familia", Metrica = "Unidades", Tipo = "line", GranuLabel = "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _combos = await Api.CombosVentasAsync();
+        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        {
+            _provCod = s.ProvCod; _temporada = s.Temporada; _anio = s.Anio;
+            _desde = s.Desde; _hasta = s.Hasta; _filas = s.Filas; _busco = s.Busco;
+            _serie = s.Serie; _dimension = s.Dimension; _metrica = s.Metrica; _tipo = s.Tipo; _granuLabel = s.GranuLabel;
+            if (_serie.Count > 0) _renderPendiente = true;   // redibuja el gráfico al volver
+        }
+    }
+
+    public void Dispose()
+    {
+        State.Save(StateKey, new Snap
+        {
+            ProvCod = _provCod, Temporada = _temporada, Anio = _anio, Desde = _desde, Hasta = _hasta,
+            Filas = _filas, Busco = _busco, Serie = _serie, Dimension = _dimension, Metrica = _metrica, Tipo = _tipo, GranuLabel = _granuLabel
+        }, 0);
+        if (_chartModule is not null) { _ = _chartModule.InvokeVoidAsync("destroy"); _ = _chartModule.DisposeAsync(); }
+    }
+
+    private InformeVentaFiltro Filtro() => new()
+    {
+        ProveedorCod = _provCod,
+        Temporada = _temporada,
+        Anio = _anio,
+        Desde = _desde,
+        Hasta = _hasta
+    };
+
+    private async Task Procesar()
+    {
+        _cargando = true; _busco = true;
+        try
+        {
+            _filas = await Api.VentasAsync(Filtro());
+            if (_filas.Count > 0) await CargarSerie();
+        }
+        catch { _filas = new(); }
+        finally { _cargando = false; }
+    }
+
+    private async Task CargarSerie()
+    {
+        _serie = await Api.VentasSerieAsync(Filtro(), _dimension);
+        var dias = (int)(_hasta.Date - _desde.Date).TotalDays;
+        _granuLabel = dias <= 16 ? "por día" : dias <= 100 ? "por semana" : "por mes";
+        _renderPendiente = true;
+    }
+
+    private async Task OnDimChange(ChangeEventArgs e) { _dimension = e.Value?.ToString() ?? "Familia"; await CargarSerie(); }
+    private void OnMetricaChange(ChangeEventArgs e) { _metrica = e.Value?.ToString() ?? "Unidades"; _renderPendiente = true; }
+    private void OnTipoChange(ChangeEventArgs e) { _tipo = e.Value?.ToString() ?? "bar"; _renderPendiente = true; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_renderPendiente && _serie.Count > 0)
+        {
+            _renderPendiente = false;
+            await RenderChart();
+        }
+    }
+
+    private decimal Valor(InformeSerieFila s) => _metrica switch
+    {
+        "Facturado" => s.Facturado,
+        "Margen" => s.Margen,
+        _ => s.Unidades
+    };
+
+    private async Task RenderChart()
+    {
+        try
+        {
+            _chartModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/infchart.js");
+
+            var periodos = _serie.Select(s => s.Periodo).Distinct().OrderBy(d => d).ToList();
+            var dias = (int)(_hasta.Date - _desde.Date).TotalDays;
+            Func<DateTime, string> fmt = dias <= 100 ? (d => d.ToString("dd/MM")) : (d => d.ToString("MM/yy"));
+            var labels = periodos.Select(fmt).ToArray();
+
+            var grupos = _serie.Select(s => s.Grupo).Distinct().OrderBy(g => g).ToList();
+            var datasets = new List<object>();
+            var ci = 0;
+            foreach (var g in grupos)
+            {
+                var porPeriodo = _serie.Where(s => s.Grupo == g).GroupBy(s => s.Periodo).ToDictionary(x => x.Key, x => x.Sum(Valor));
+                var data = periodos.Select(per => porPeriodo.TryGetValue(per, out var v) ? v : 0m).ToArray();
+                var color = Paleta[ci % Paleta.Length]; ci++;
+                datasets.Add(new { label = g, data, backgroundColor = color, borderColor = color, fill = false, tension = 0.2 });
+            }
+
+            var titulo = $"{_metrica} {_granuLabel} por {_dimension}";
+            await _chartModule.InvokeVoidAsync("render", "inf-chart", _tipo, labels, datasets, titulo);
+        }
+        catch { /* sin gráfico: la tabla sigue */ }
+    }
+
+    private string ExcelUrl()
+    {
+        var prov = Uri.EscapeDataString(_provCod ?? "");
+        var temp = Uri.EscapeDataString(_temporada == "TODOS" ? "" : (_temporada ?? ""));
+        return $"api/informes/ventas/excel?prov={prov}&temp={temp}&anio={_anio}&desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}";
+    }
+
+    private string MargenTotalPct()
+    {
+        var fact = _filas.Sum(f => f.Facturado);
+        if (fact <= 0) return "";
+        var marg = fact - _filas.Sum(f => f.Costo);
+        return (marg / fact * 100).ToString("N1") + "%";
+    }
+}

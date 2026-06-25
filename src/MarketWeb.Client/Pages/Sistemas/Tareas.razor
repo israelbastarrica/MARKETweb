@@ -69,6 +69,10 @@
                             </td>
                             <td class="text-center text-nowrap">
                                 <button class="btn btn-sm btn-outline-success me-1" title="Ejecutar ahora" @onclick="() => Ejecutar(t)"><i class="fa-solid fa-play"></i></button>
+                                @if (t.Tipo == TipoTarea.Reposicion)
+                                {
+                                    <button class="btn btn-sm btn-outline-info me-1" title="Reenviar PDF + mail de la última corrida (sin re-correr el cálculo)" @onclick="() => Reenviar(t)"><i class="fa-solid fa-paper-plane"></i></button>
+                                }
                                 <button class="btn btn-sm btn-outline-secondary me-1" title="Historial" @onclick="() => AbrirHistorial(t)"><i class="fa-solid fa-clock-rotate-left"></i></button>
                                 <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModif(t)"><i class="fa-solid fa-pen"></i></button>
                                 <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(t)"><i class="fa-solid fa-trash"></i></button>
@@ -340,6 +344,16 @@
         _flash = arrancada
             ? "Tarea iniciada. Tarda ~2 minutos; revisá el historial para ver el resultado."
             : "La tarea ya se está ejecutando.";
+    }
+
+    private async Task Reenviar(TareaProgramadaDto t)
+    {
+        if (!await Ui.ConfirmAsync(
+            "¿Reenviar el PDF + mail de la última corrida de reposición? NO vuelve a correr el cálculo — solo arma el PDF de lo ya calculado y manda el mail.",
+            "Reenviar PDF + mail")) return;
+        var (ok, msg) = await Api.ReenviarAsync(t.Id);
+        if (ok) Ui.Exito(msg); else Ui.Error(msg);
+        await Cargar();
     }
 
     private async Task AbrirHistorial(TareaProgramadaDto t)

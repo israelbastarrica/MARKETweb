@@ -4,6 +4,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject PageStateService State
+@inject UiService Ui
 
 <PageTitle>Mapeo (Logística)</PageTitle>
 
@@ -116,6 +117,7 @@
                         <th>Descripción</th>
                         <th>Precio</th>
                         @if (_calcStock) { <th class="text-end">Stock</th> }
+                        <th class="text-center" style="width:64px">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -137,6 +139,14 @@
                             <td class="@(r.RegId is null ? "text-muted fst-italic" : null)">@r.DescripcionFinal</td>
                             <td class="small text-muted">@r.PrecioFinal</td>
                             @if (_calcStock) { <td class="text-end">@Fmt.Miles(r.Stock)</td> }
+                            <td class="text-center">
+                                @if (r.RegId is not null)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar registro" @onclick="() => Eliminar(r)">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -242,6 +252,23 @@
     private async Task OnKey(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await Procesar();
+    }
+
+    // Baja lógica del registro (MapeoRegistro.Eliminado=1) directo desde el listado, como en el .Net.
+    private async Task Eliminar(MapeoReporteDto r)
+    {
+        if (r.RegId is null) return;
+        var ok = await Ui.ConfirmAsync(
+            $"¿Eliminar el registro de {r.ArtCod} en {r.Ubicacion} ({r.Modulo} / {r.Mobiliario})?",
+            "Eliminar registro", "Eliminar", "Cancelar", peligro: true);
+        if (!ok) return;
+        try
+        {
+            await Api.EliminarArticuloAsync(r.RegId.Value);
+            _resultado.Remove(r);
+            Ui.Exito("Registro eliminado.");
+        }
+        catch (Exception ex) { _error = "No se pudo eliminar el registro."; Console.Error.WriteLine(ex); }
     }
 
     private async ValueTask OnNavegandoAfuera(Microsoft.AspNetCore.Components.Routing.LocationChangingContext ctx)

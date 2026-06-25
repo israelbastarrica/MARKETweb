@@ -20,4 +20,7 @@ public interface ITareasService
 
     /// <summary>Ejecuta una tarea (dispatch por tipo). origen: AUTO (scheduler) / MANUAL (botón). Registra log + estado.</summary>
     Task EjecutarAsync(int id, string origen, CancellationToken ct = default);
+
+    /// <summary>Reenvía solo el PDF + mail de la última corrida guardada (sin correr el SP). Para tareas de Reposición.</summary>
+    Task<(bool Ok, string Resultado)> ReenviarReposicionAsync(int id, CancellationToken ct = default);
 }

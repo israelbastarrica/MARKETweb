@@ -256,6 +256,32 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
               SET UltimaEjecucion = GETDATE(), UltimoOk = @ok, UltimoResultado = @resultado
               WHERE Id = @id",
             new { ok, resultado = Recortar(resultado, 500), id }, cancellationToken: ct));
+
+        // Aviso por mail si falló (el Backup ya manda su propio aviso, no duplicamos).
+        if (!ok && (string)tarea.Tipo != TipoTarea.Backup)
+            await EnviarAlertaFallaAsync((string)tarea.Nombre, (string)tarea.Tipo, resultado, ct);
+    }
+
+    // Manda un mail de alerta cuando una tarea falla. Destinatario: config Tareas:MailErrores
+    // (env Tareas__MailErrores); si no está, cae al remitente del SMTP. Best-effort (si el SMTP
+    // es justo lo que falla, no se puede avisar — queda en el log igual).
+    private async Task EnviarAlertaFallaAsync(string nombre, string tipo, string error, CancellationToken ct)
+    {
+        try
+        {
+            if (!_smtp.Configurado) return;
+            var dest = _cfg["Tareas:MailErrores"];
+            if (string.IsNullOrWhiteSpace(dest)) dest = _cfg["Smtp:From"];
+            if (string.IsNullOrWhiteSpace(dest)) return;
+
+            var body =
+                $"<p>La tarea programada <b>{System.Net.WebUtility.HtmlEncode(nombre)}</b> ({tipo}) <b>falló</b>.</p>" +
+                $"<p>Fecha: {DateTime.Now:dd/MM/yyyy HH:mm}</p>" +
+                $"<p>Detalle:</p><pre>{System.Net.WebUtility.HtmlEncode(error ?? "")}</pre>" +
+                "<p>— MARKET Web (programador de tareas)</p>";
+            await _smtp.EnviarAsync(dest.Replace(',', ';'), $"⚠ Tarea MARKET falló: {nombre}", body, ct);
+        }
+        catch { /* best-effort: el fallo ya quedó en el log */ }
     }
 
     private async Task<(bool Ok, string Resultado)> EjecutarReposicionAsync(string? parametrosJson, CancellationToken ct)
@@ -290,6 +316,69 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
         return enviado
             ? (true, $"{datos.TotalArticulos} artículos · {datos.TotalPacks} packs · PDF enviado.")
             : (false, $"{datos.TotalArticulos} artículos · {datos.TotalPacks} packs · falló el envío del mail.");
+    }
+
+    // Reenvía SOLO el PDF + mail de la ÚLTIMA corrida guardada, SIN correr el SP de nuevo
+    // (cuando la repo calculó bien pero el mail falló, ej. SMTP no estaba listo en ese arranque).
+    public async Task<(bool Ok, string Resultado)> ReenviarReposicionAsync(int id, CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+
+        var tarea = await cn.QuerySingleOrDefaultAsync(new CommandDefinition(
+            "SELECT Id, Tipo, Parametros FROM MARKET.dbo.TareasProgramadas WHERE Id = @id AND Eliminado = 0",
+            new { id }, cancellationToken: ct));
+        if (tarea is null) return (false, "Tarea no encontrada.");
+        if ((string)tarea.Tipo != TipoTarea.Reposicion) return (false, "El reenvío es solo para tareas de Reposición.");
+
+        var logId = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
+            @"INSERT INTO MARKET.dbo.TareasProgramadasLog (IdTarea, Inicio, Ok, Origen)
+              VALUES (@id, GETDATE(), 0, 'REENVIO');
+              SELECT CAST(SCOPE_IDENTITY() AS INT);",
+            new { id }, cancellationToken: ct));
+
+        bool ok; string resultado;
+        try { (ok, resultado) = await ReconstruirYEnviarAsync((string?)tarea.Parametros, ct); }
+        catch (Exception ex) { ok = false; resultado = "Error: " + ex.Message; }
+
+        await cn.ExecuteAsync(new CommandDefinition(
+            "UPDATE MARKET.dbo.TareasProgramadasLog SET Fin = GETDATE(), Ok = @ok, Resultado = @resultado WHERE Id = @logId",
+            new { ok, resultado, logId }, cancellationToken: ct));
+        await cn.ExecuteAsync(new CommandDefinition(
+            "UPDATE MARKET.dbo.TareasProgramadas SET UltimaEjecucion = GETDATE(), UltimoOk = @ok, UltimoResultado = @resultado WHERE Id = @id",
+            new { ok, resultado = Recortar(resultado, 500), id }, cancellationToken: ct));
+
+        return (ok, resultado);
+    }
+
+    // Reconstruye la última corrida real (no agente) desde el snapshot y manda PDF + mail. NO corre el SP.
+    private async Task<(bool Ok, string Resultado)> ReconstruirYEnviarAsync(string? parametrosJson, CancellationToken ct)
+    {
+        var p = ParseParametros(parametrosJson);
+        var dest = (p.Destinatarios ?? "").Replace(',', ';');
+        if (string.IsNullOrWhiteSpace(dest)) return (false, "La tarea no tiene destinatarios.");
+        if (!_smtp.Configurado) return (false, "El SMTP no está configurado en el servidor.");
+
+        var corridas = await _repo.ListarCorridasAsync(ct);
+        var ultima = corridas.FirstOrDefault(c => !string.Equals(c.MachineName, "CLAUDE-AGENT", StringComparison.OrdinalIgnoreCase))
+                     ?? corridas.FirstOrDefault();
+        if (ultima is null) return (false, "No hay ninguna corrida de reposición guardada para reenviar.");
+
+        var datos = await _repo.ReconstruirCorridaAsync(ultima.Id, ct);
+        if (datos is null || datos.TotalArticulos == 0)
+            return (false, $"La corrida #{ultima.Id} no tiene datos para reenviar.");
+
+        var pdf = await _pdf.GenerarAsync(datos, null, ct);
+        var asunto = "Reposición " + ultima.FechaHoraCorrida.ToString("dd/MM/yyyy");
+        var body =
+            "<p>Se reenvía el listado de packs a reponer de la corrida del " + ultima.FechaHoraCorrida.ToString("dd/MM/yyyy HH:mm") + ".</p>" +
+            "<p>Reenviado el " + DateTime.Now.ToString("dd/MM/yyyy HH:mm") + " desde MARKET Web.</p>";
+        var nombre = $"Reposicion_{ultima.FechaHoraCorrida:yyyyMMdd_HHmmss}.pdf";
+
+        var enviado = await _smtp.EnviarAsync(dest, asunto, body, pdf, nombre, ct);
+        return enviado
+            ? (true, $"Corrida #{ultima.Id} ({datos.TotalArticulos} art · {datos.TotalPacks} packs) · PDF reenviado por mail.")
+            : (false, "Falló el envío del mail.");
     }
 
     // === BACKUP: BACKUP DATABASE MARKET → comprimir el .bak a .rar (WinRAR) → retención + aviso si falla ===
