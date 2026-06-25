@@ -8,7 +8,7 @@
 <PageTitle>Consulta Reposición</PageTitle>
 
 <div class="market-page cr">
-    <PageHeader Modulo="Logística" Titulo="Consulta Artículo" Icono="fa-solid fa-magnifying-glass-chart" />
+    <PageHeader Modulo="Logística" Titulo="Consulta Artículo" Icono="fa-solid fa-magnifying-glass-chart" CompartirQuery="@CompartirQuery" />
 
     <fieldset class="cr-box">
         <legend>Datos</legend>
@@ -56,13 +56,12 @@
                                 <td class="text-center small">@(u.FechaHora?.ToString("dd/MM/yy HH:mm"))</td>
                             </tr>
                         }
+                        @* Solo el indicador POSITIVO: si está en un palet, se muestra. Si no está en palet
+                           no agregamos nada (el renglón rojo "NO ESTÁ EN DEPÓSITO" confundía: mezclaba la
+                           ausencia en palets con la ausencia en depósito, que son cosas distintas). *@
                         @if (_d.EnPalet)
                         {
                             <tr class="cr-palet"><td colspan="7">EN PALET (depósito)</td></tr>
-                        }
-                        else if (!_d.Ubicaciones.Any(u => u.EsDeposito))
-                        {
-                            <tr class="cr-nodep"><td colspan="7">⚠ NO ESTÁ EN DEPÓSITO</td></tr>
                         }
                     </tbody>
                 </table>
@@ -253,6 +252,11 @@
     }
 
     private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
+
+    // Estado de la pantalla para el botón Compartir del header (local + artículo).
+    private string? CompartirQuery => string.IsNullOrWhiteSpace(_artCod)
+        ? null
+        : $"local={Uri.EscapeDataString(_local)}&art={Uri.EscapeDataString(_artCod.Trim())}";
 
     private async Task Buscar()
     {

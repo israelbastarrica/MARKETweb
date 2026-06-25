@@ -5,7 +5,7 @@
 <PageTitle>Packs</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Producción" Titulo="Packs" Icono="fa-solid fa-boxes-stacked" />
+    <PageHeader Modulo="Producción" Titulo="Packs" Icono="fa-solid fa-boxes-stacked" CompartirQuery="@CompartirQuery" />
 
     @* Filtros (espejo de gpbDatos: N° Pedido + Cod Art + Ver desarmados) *@
     <div class="market-card p-3 mb-3 no-print">
@@ -171,7 +171,30 @@
 
     private DateTime _impreso = DateTime.Now;
 
-    protected override async Task OnInitializedAsync() => await Cargar();
+    // Deep-link / Compartir: filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "pedido")] public string? PedidoQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desarm")] public bool? DesarmQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_nroPedido)) p.Add($"pedido={Uri.EscapeDataString(_nroPedido)}");
+            if (!string.IsNullOrWhiteSpace(_codArt)) p.Add($"art={Uri.EscapeDataString(_codArt)}");
+            if (_verDesarmados) p.Add("desarm=1");
+            return string.Join("&", p);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PedidoQ != null) _nroPedido = PedidoQ;
+        if (ArtQ != null) _codArt = ArtQ;
+        if (DesarmQ.HasValue) _verDesarmados = DesarmQ.Value;
+        await Cargar();
+    }
 
     private Task Procesar() => Cargar();
 

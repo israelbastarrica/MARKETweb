@@ -9,7 +9,7 @@
 <PageTitle>Palets</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Palets" Icono="fa-solid fa-pallet" />
+    <PageHeader Modulo="Logística" Titulo="Palets" Icono="fa-solid fa-pallet" CompartirQuery="@CompartirQuery" />
 
     <div class="market-card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -216,6 +216,29 @@
     private sealed record EstadoPalets(string FNroPalet, string FCodArt, string FTipo, string FCategoria,
         bool FVerDesarmados, DateTime FDesde, List<PaletDto> Palets);
 
+    // Deep-link / Compartir: filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "palet")] public string? PaletQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "tipo")] public string? TipoQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "cat")] public string? CatQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desarm")] public bool? DesarmQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_fNroPalet)) p.Add($"palet={Uri.EscapeDataString(_fNroPalet)}");
+            if (!string.IsNullOrWhiteSpace(_fCodArt)) p.Add($"art={Uri.EscapeDataString(_fCodArt)}");
+            if (_fTipo != "TODOS") p.Add($"tipo={Uri.EscapeDataString(_fTipo)}");
+            if (_fCategoria != "TODOS") p.Add($"cat={Uri.EscapeDataString(_fCategoria)}");
+            if (_fVerDesarmados) p.Add("desarm=1");
+            p.Add($"desde={_fDesde:yyyy-MM-dd}");
+            return string.Join("&", p);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
@@ -227,13 +250,25 @@
         }
         catch { /* combos opcionales */ }
 
-        if (State.TryGet<EstadoPalets>(EstadoKey, out var st, out _scroll))
+        var hayQuery = PaletQ != null || ArtQ != null || TipoQ != null || CatQ != null || DesarmQ.HasValue || DesdeQ != null;
+
+        if (!hayQuery && State.TryGet<EstadoPalets>(EstadoKey, out var st, out _scroll))
         {
             _fNroPalet = st.FNroPalet; _fCodArt = st.FCodArt; _fTipo = st.FTipo; _fCategoria = st.FCategoria;
             _fVerDesarmados = st.FVerDesarmados; _fDesde = st.FDesde; _palets = st.Palets;
             _cargando = false;
             _restaurarScroll = true;
             return;
+        }
+
+        if (hayQuery)
+        {
+            if (PaletQ != null) _fNroPalet = PaletQ;
+            if (ArtQ != null) _fCodArt = ArtQ;
+            if (TipoQ != null) _fTipo = TipoQ;
+            if (CatQ != null) _fCategoria = CatQ;
+            if (DesarmQ.HasValue) _fVerDesarmados = DesarmQ.Value;
+            if (DateTime.TryParse(DesdeQ, out var d)) _fDesde = d;
         }
 
         await Buscar();

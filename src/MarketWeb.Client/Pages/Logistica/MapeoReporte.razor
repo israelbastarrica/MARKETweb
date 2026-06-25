@@ -9,7 +9,7 @@
 <PageTitle>Mapeo (Logística)</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Mapeo" Icono="fa-solid fa-map" />
+    <PageHeader Modulo="Logística" Titulo="Mapeo" Icono="fa-solid fa-map" CompartirQuery="@CompartirQuery" />
 
     <div class="market-card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -188,6 +188,40 @@
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    // Deep-link / Compartir: filtros en la URL. Si llega con filtros, auto-procesa.
+    [Parameter, SupplyParameterFromQuery(Name = "ubic")] public string? UbicQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sector")] public string? SectorQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "mob")] public string? MobQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "fila")] public int? FilaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "pos")] public int? PosQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desc")] public string? DescQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "tipo")] public string? TipoQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "cat")] public string? CatQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "anio")] public int? AnioQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "vacios")] public bool? VaciosQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "stock")] public bool? StockQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string> { $"ubic={Uri.EscapeDataString(_ubicSel)}" };
+            if (!string.IsNullOrWhiteSpace(_fSector)) p.Add($"sector={Uri.EscapeDataString(_fSector)}");
+            if (!string.IsNullOrWhiteSpace(_fMobiliario)) p.Add($"mob={Uri.EscapeDataString(_fMobiliario)}");
+            if (_fFila.HasValue) p.Add($"fila={_fFila}");
+            if (_fPosicion.HasValue) p.Add($"pos={_fPosicion}");
+            if (!string.IsNullOrWhiteSpace(_fCodArt)) p.Add($"art={Uri.EscapeDataString(_fCodArt)}");
+            if (!string.IsNullOrWhiteSpace(_fDesc)) p.Add($"desc={Uri.EscapeDataString(_fDesc)}");
+            if (_fTipo != "TODOS") p.Add($"tipo={Uri.EscapeDataString(_fTipo)}");
+            if (_fCategoria != "TODOS") p.Add($"cat={Uri.EscapeDataString(_fCategoria)}");
+            if (_fAnio != 0) p.Add($"anio={_fAnio}");
+            if (_soloVacios) p.Add("vacios=1");
+            if (_calcStock) p.Add("stock=1");
+            return string.Join("&", p);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
@@ -200,7 +234,10 @@
         }
         catch { /* combos opcionales */ }
 
-        if (State.TryGet<EstadoReporte>(EstadoKey, out var st, out _scroll))
+        var hayQuery = UbicQ != null || SectorQ != null || MobQ != null || FilaQ.HasValue || PosQ.HasValue
+            || ArtQ != null || DescQ != null || TipoQ != null || CatQ != null || AnioQ.HasValue || VaciosQ.HasValue || StockQ.HasValue;
+
+        if (!hayQuery && State.TryGet<EstadoReporte>(EstadoKey, out var st, out _scroll))
         {
             _ubicSel = st.UbicSel; _fSector = st.FSector; _fMobiliario = st.FMobiliario;
             _fFila = st.FFila; _fPosicion = st.FPosicion; _fCodArt = st.FCodArt; _fDesc = st.FDesc;
@@ -208,6 +245,24 @@
             _soloVacios = st.SoloVacios; _calcStock = st.CalcStock;
             _procesado = st.Procesado; _resultado = st.Resultado;
             _restaurarScroll = true;
+            return;
+        }
+
+        // Si llega por link con filtros, los aplica y procesa solo.
+        if (hayQuery)
+        {
+            if (UbicQ != null) _ubicSel = UbicQ;
+            if (SectorQ != null) _fSector = SectorQ;
+            if (MobQ != null) _fMobiliario = MobQ;
+            _fFila = FilaQ; _fPosicion = PosQ;
+            if (ArtQ != null) _fCodArt = ArtQ;
+            if (DescQ != null) _fDesc = DescQ;
+            if (TipoQ != null) _fTipo = TipoQ;
+            if (CatQ != null) _fCategoria = CatQ;
+            if (AnioQ.HasValue) _fAnio = AnioQ.Value;
+            if (VaciosQ.HasValue) _soloVacios = VaciosQ.Value;
+            if (StockQ.HasValue) _calcStock = StockQ.Value;
+            await Procesar();
             return;
         }
 

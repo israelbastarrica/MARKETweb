@@ -8,7 +8,7 @@
 <PageTitle>Remito Impresión</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Locales" Titulo="Remito Impresión" Icono="fa-solid fa-print" />
+    <PageHeader Modulo="Locales" Titulo="Remito Impresión" Icono="fa-solid fa-print" CompartirQuery="@CompartirQuery" />
 
     <div class="market-card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -283,6 +283,18 @@
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    // Deep-link / Compartir: filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "estado")] public string? EstadoQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "errores")] public bool? ErroresQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "todos")] public bool? TodosQ { get; set; }
+
+    private string CompartirQuery =>
+        $"desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}&estado={Uri.EscapeDataString(_estado)}&local={Uri.EscapeDataString(_local)}"
+        + (_soloErrores ? "&errores=1" : "") + (_verTodos ? "&todos=1" : "");
+
     protected override async Task OnInitializedAsync()
     {
         try { _locales = await Api.ListarLocalesAsync(); }
@@ -302,6 +314,14 @@
         // Impresora fija de ESTE equipo según su "Esta PC" (el nombre del chip de la barra).
         try { _miPc = await JS.InvokeAsync<string>("localStorage.getItem", DevicePcState.KeyNombre) ?? ""; } catch { _miPc = ""; }
         if (!string.IsNullOrWhiteSpace(_miPc) && _saltafwPorPc.TryGetValue(_miPc.Trim(), out var sf)) _saltafwFijo = sf;
+
+        // Filtros del link (el local lo respeta solo si el perfil no lo fija).
+        if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+        if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+        if (EstadoQ != null) _estado = EstadoQ;
+        if (!_localFijo && LocalQ != null) _local = LocalQ;
+        if (ErroresQ.HasValue) _soloErrores = ErroresQ.Value;
+        if (TodosQ.HasValue) _verTodos = TodosQ.Value;
 
         await Buscar();
     }

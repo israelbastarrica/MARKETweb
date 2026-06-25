@@ -8,7 +8,7 @@
 
 <div class="market-page">
     <div class="no-print">
-    <PageHeader Modulo="Insumos" Titulo="Pedidos" Icono="fa-solid fa-boxes-stacked" />
+    <PageHeader Modulo="Insumos" Titulo="Pedidos" Icono="fa-solid fa-boxes-stacked" CompartirQuery="@CompartirQuery" />
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
         <div>
@@ -171,6 +171,11 @@
     private int _idLocalPedir;       // local con el que se crea un pedido (2/3)
     private ArmadoInsumosDto? _armado;   // hoja de ruta para imprimir
 
+    // Deep-link / Compartir: filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "ubic")] public int? UbicQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "estado")] public string? EstadoQ { get; set; }
+    private string CompartirQuery => $"ubic={_ubicacionSel}&estado={Uri.EscapeDataString(_estado)}";
+
     protected override async Task OnInitializedAsync()
     {
         if (AuthState is not null)
@@ -190,6 +195,10 @@
         if (esLuro) { _ubicacionSel = 2; _ubicacionFija = true; _idLocalPedir = 2; }
         else if (esPeralta) { _ubicacionSel = 3; _ubicacionFija = true; _idLocalPedir = 3; }
         // ADMIN: arranca en TODOS; _idLocalPedir se setea si elige un local concreto.
+
+        // Filtros del link (la ubicación se respeta solo si el perfil no la fija).
+        if (!_ubicacionFija && UbicQ.HasValue) _ubicacionSel = UbicQ.Value;
+        if (EstadoQ != null) _estado = EstadoQ;
 
         await Cargar();
     }

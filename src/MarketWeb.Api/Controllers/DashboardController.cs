@@ -19,37 +19,43 @@ public sealed class DashboardController : ControllerBase
     private static readonly string[] LocalesValidos = { "LURO", "PERALTA" };
 
     // Devuelve (rol, local) según el perfil del usuario, o null si el perfil no
-    // tiene acceso al dashboard.
-    private (string rol, string? local)? Resolver()
+    // tiene acceso al dashboard. verComo: SOLO ADMIN puede pedir ver el dashboard como
+    // un local puntual (LURO/PERALTA); para cualquier otro perfil se ignora (seguridad).
+    private (string rol, string? local)? Resolver(string? verComo = null)
     {
         var perfil = (User.FindFirst("perfil")?.Value ?? "").Trim().ToUpperInvariant();
-        if (perfil == "ADMIN") return ("admin", null);
+        if (perfil == "ADMIN")
+        {
+            var vc = (verComo ?? "").Trim().ToUpperInvariant();
+            if (LocalesValidos.Contains(vc)) return ("cajero", vc);   // ADMIN viendo como ese local
+            return ("admin", null);
+        }
         if (LocalesValidos.Contains(perfil)) return ("cajero", perfil);
         return null;
     }
 
     [HttpGet("ventas")]
-    public async Task<IActionResult> Ventas([FromQuery] string? fecha, CancellationToken ct)
+    public async Task<IActionResult> Ventas([FromQuery] string? fecha, [FromQuery] string? verComo, CancellationToken ct)
     {
-        var acc = Resolver();
+        var acc = Resolver(verComo);
         if (acc is null) return Forbid();
         var f = string.IsNullOrWhiteSpace(fecha) ? DateTime.Today.ToString("yyyyMMdd") : fecha;
         return Ok(await _service.GetVentasAsync(f, acc.Value.rol, acc.Value.local, ct));
     }
 
     [HttpGet("resumen-mobile")]
-    public async Task<IActionResult> ResumenMobile([FromQuery] string? fecha, CancellationToken ct)
+    public async Task<IActionResult> ResumenMobile([FromQuery] string? fecha, [FromQuery] string? verComo, CancellationToken ct)
     {
-        var acc = Resolver();
+        var acc = Resolver(verComo);
         if (acc is null) return Forbid();
         var f = string.IsNullOrWhiteSpace(fecha) ? DateTime.Today.ToString("yyyyMMdd") : fecha;
         return Ok(await _service.GetResumenMobileAsync(f, acc.Value.rol, acc.Value.local, ct));
     }
 
     [HttpGet("fichadas")]
-    public async Task<IActionResult> Fichadas([FromQuery] string? fecha, CancellationToken ct)
+    public async Task<IActionResult> Fichadas([FromQuery] string? fecha, [FromQuery] string? verComo, CancellationToken ct)
     {
-        var acc = Resolver();
+        var acc = Resolver(verComo);
         if (acc is null) return Forbid();
         var f = string.IsNullOrWhiteSpace(fecha) ? DateTime.Today.ToString("yyyyMMdd") : fecha;
         return Ok(await _service.GetFichadasAsync(f, acc.Value.rol, acc.Value.local, ct));

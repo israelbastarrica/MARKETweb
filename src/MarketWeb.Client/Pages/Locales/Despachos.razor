@@ -9,7 +9,7 @@
 <PageTitle>Despachos</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Locales" Titulo="Despachos" Icono="fa-solid fa-qrcode" />
+    <PageHeader Modulo="Locales" Titulo="Despachos" Icono="fa-solid fa-qrcode" CompartirQuery="@CompartirQuery" />
 
     <div class="market-card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -290,6 +290,16 @@
     private sealed record EstadoDespachos(int IdLocalSel, bool LocalFijo, DateTime Desde, DateTime Hasta,
         string FEstado, List<DespachoDto> Todos, List<DespachoDto> Resultado);
 
+    // Deep-link / Compartir: filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public int? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "estado")] public string? EstadoQ { get; set; }
+
+    private string CompartirQuery =>
+        $"local={_idLocalSel}&desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}"
+        + (string.IsNullOrEmpty(_fEstado) ? "" : $"&estado={Uri.EscapeDataString(_fEstado)}");
+
     protected override async Task OnInitializedAsync()
     {
         _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
@@ -297,7 +307,9 @@
         try { _locales = await Api.ListarLocalesAsync(); }
         catch (Exception ex) { _error = "No se pudieron cargar los locales."; Console.Error.WriteLine(ex); }
 
-        if (State.TryGet<EstadoDespachos>(EstadoKey, out var st, out _scroll))
+        var hayQuery = LocalQ.HasValue || DesdeQ != null || HastaQ != null || EstadoQ != null;
+
+        if (!hayQuery && State.TryGet<EstadoDespachos>(EstadoKey, out var st, out _scroll))
         {
             _idLocalSel = st.IdLocalSel; _localFijo = st.LocalFijo; _desde = st.Desde; _hasta = st.Hasta;
             _fEstado = st.FEstado; _todos = st.Todos; _resultado = st.Resultado;
@@ -319,6 +331,15 @@
         {
             _idLocalSel = propio.Id;
             _localFijo = true;
+        }
+
+        // Filtros del link (el local se respeta solo si el perfil no lo fija).
+        if (hayQuery)
+        {
+            if (!_localFijo && LocalQ.HasValue) _idLocalSel = LocalQ.Value;
+            if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+            if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+            if (EstadoQ != null) _fEstado = EstadoQ;
         }
 
         await Buscar();

@@ -156,6 +156,91 @@ public sealed class RemitosLookupService : IRemitosLookupService
         return res;
     }
 
+    // El QR impreso en la bolsa del depósito es el CODIGO del comprobante (remito). Lo buscamos en las
+    // 3 bases: CENTRAL (local en el server, directo) y LURO/PERALTA (EN VIVO por OPENQUERY con fallback
+    // a la réplica local). Devuelve el detalle (artículo + color(código) + talle + cantidad).
+    public async Task<RemitoPorCodigoDto> BuscarRemitoPorCodigoAsync(string codigo, CancellationToken ct = default)
+    {
+        var res = new RemitoPorCodigoDto();
+        var cod = (codigo ?? "").Trim();
+        if (cod.Length == 0) return res;
+
+        using var cn = _db.Create();
+
+        // El detalle se trae SIN filtrar anulados (para poder avisar si está anulado). MAX(ANULADO) marca
+        // el estado del comprobante (un CODIGO = un comprobante, el flag es constante).
+        async Task<List<CodigoRow>> Directo(string db)
+        {
+            var sql =
+                "SELECT RTRIM(DET.FART) AS ArtCod, RTRIM(ISNULL(ART.ARTDES,'')) AS ArtDes, " +
+                "RTRIM(ISNULL(DET.CCOLOR,'')) AS Color, RTRIM(ISNULL(DET.TALLE,'')) AS Talle, " +
+                "CAST(SUM(DET.FCANT) AS INT) AS Cantidad, MAX(CAST(COMP.ANULADO AS INT)) AS Anulado " +
+                $"FROM {db}.ZooLogic.COMPROBANTEV COMP WITH(NOLOCK) " +
+                $"INNER JOIN {db}.ZooLogic.COMPROBANTEVDET DET WITH(NOLOCK) ON COMP.CODIGO=DET.CODIGO " +
+                $"LEFT JOIN {db}.ZooLogic.ART ART WITH(NOLOCK) ON DET.FART=ART.ARTCOD " +
+                "WHERE COMP.CODIGO=@cod " +
+                "GROUP BY DET.FART, ART.ARTDES, DET.CCOLOR, DET.TALLE HAVING SUM(DET.FCANT)<>0 " +
+                "ORDER BY DET.FART, DET.CCOLOR, DET.TALLE;";
+            try { return (await cn.QueryAsync<CodigoRow>(new CommandDefinition(sql, new { cod }, cancellationToken: ct))).ToList(); }
+            catch { return new(); }
+        }
+
+        // EN VIVO por OPENQUERY: el CODIGO va inline (sanitizado sin comillas) y las comillas se doblan.
+        async Task<List<CodigoRow>> Live(string db, string linked, string codSan)
+        {
+            var inner =
+                "SELECT RTRIM(DET.FART) AS ArtCod, RTRIM(ISNULL(ART.ARTDES,'''')) AS ArtDes, " +
+                "RTRIM(ISNULL(DET.CCOLOR,'''')) AS Color, RTRIM(ISNULL(DET.TALLE,'''')) AS Talle, " +
+                "CAST(SUM(DET.FCANT) AS INT) AS Cantidad, MAX(CAST(COMP.ANULADO AS INT)) AS Anulado " +
+                $"FROM {db}.ZooLogic.COMPROBANTEV COMP WITH(NOLOCK) " +
+                $"INNER JOIN {db}.ZooLogic.COMPROBANTEVDET DET WITH(NOLOCK) ON COMP.CODIGO=DET.CODIGO " +
+                $"LEFT JOIN {db}.ZooLogic.ART ART WITH(NOLOCK) ON DET.FART=ART.ARTCOD " +
+                $"WHERE COMP.CODIGO=''{codSan}'' " +
+                "GROUP BY DET.FART, ART.ARTDES, DET.CCOLOR, DET.TALLE HAVING SUM(DET.FCANT)<>0 " +
+                "ORDER BY DET.FART, DET.CCOLOR, DET.TALLE";
+            var sql = $"SELECT * FROM OPENQUERY([{linked}], '{inner}')";
+            try { return (await cn.QueryAsync<CodigoRow>(new CommandDefinition(sql, cancellationToken: ct))).ToList(); }
+            catch { return new(); }
+        }
+
+        void Aplicar(List<CodigoRow> rows, string origen)
+        {
+            res.Encontrado = true;
+            res.Origen = origen;
+            res.Anulado = rows.Count > 0 && rows[0].Anulado != 0;
+            if (!res.Anulado)
+                res.Renglones = rows.Select(r => new BolsaRenglonDto
+                {
+                    ArtCod = r.ArtCod, ArtDes = r.ArtDes, Color = r.Color, Talle = r.Talle, Cantidad = r.Cantidad
+                }).ToList();
+        }
+
+        // 1) CENTRAL (directo, exacto).
+        var rc = await Directo("DRAGONFISH_CENTRAL");
+        if (rc.Count > 0) { Aplicar(rc, "CENTRAL"); return res; }
+
+        // 2) LURO / PERALTA: EN VIVO, con fallback a la réplica local.
+        var codSan = new string(cod.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.').ToArray());
+        foreach (var (db, linked, origen) in new[]
+        {
+            ("DRAGONFISH_LURO", "marketluro.ddns.net", "LURO"),
+            ("DRAGONFISH_PERALTA", "marketperalta.ddns.net", "PERALTA")
+        })
+        {
+            if (codSan.Length > 0)
+            {
+                var live = await Live(db, linked, codSan);
+                if (live.Count > 0) { Aplicar(live, origen); return res; }
+            }
+            var rep = await Directo(db);
+            if (rep.Count > 0) { Aplicar(rep, origen); return res; }
+        }
+
+        return res;   // Encontrado = false
+    }
+
+    private sealed record CodigoRow(string ArtCod, string ArtDes, string Color, string Talle, int Cantidad, int Anulado);
+
     // Motivos de remito (ZooLogic.MOTIVO). Se excluye el 13 (Insumos), que va por su propio circuito.
     public async Task<IReadOnlyList<MotivoDto>> MotivosAsync(CancellationToken ct = default)
     {

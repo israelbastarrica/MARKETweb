@@ -77,6 +77,17 @@ public sealed class DragonApi
         catch { return null; }
     }
 
+    // El QR de la bolsa es el CODIGO del remito: lo busca en COMPROBANTEV de las 3 bases (avisa si está anulado).
+    public async Task<RemitoPorCodigoDto> BuscarRemitoPorCodigoAsync(string codigo)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<RemitoPorCodigoDto>(
+                $"api/remitos/remito-codigo?codigo={Uri.EscapeDataString(codigo)}") ?? new();
+        }
+        catch { return new(); }
+    }
+
     // Motivos de remito (excluye Insumos/13).
     public async Task<List<MotivoDto>> MotivosAsync()
     {

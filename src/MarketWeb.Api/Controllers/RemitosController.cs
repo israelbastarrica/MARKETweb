@@ -54,12 +54,26 @@ public sealed class RemitosController : ControllerBase
         return Ok(await _lookup.BuscarRemitoLocalAsync(local, punto, numero, ct));
     }
 
+    [HttpGet("remito-codigo")]
+    public async Task<IActionResult> RemitoPorCodigo([FromQuery] string codigo, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(codigo)) return BadRequest("codigo requerido");
+        return Ok(await _lookup.BuscarRemitoPorCodigoAsync(codigo, ct));
+    }
+
     [HttpGet("motivos")]
     public async Task<IActionResult> Motivos(CancellationToken ct) => Ok(await _lookup.MotivosAsync(ct));
 
     [HttpPost]
     public async Task<ActionResult<DragonRemitoResultDto>> Crear([FromBody] DragonRemitoRequest req, CancellationToken ct)
     {
+        // La impresora se DERIVA de la tablet que opera (header X-Pc), NO del valor que manda el cliente.
+        // Así FOBS/Obs siempre coincide con la tablet (TabletLog1→809131, TabletLog2→809129) y evitamos
+        // cualquier desfase del lado del navegador. Si no llega X-Pc (o no mapea), se respeta el del cliente.
+        var pc = Request.Headers["X-Pc"].FirstOrDefault();
+        var licPorTablet = LicenciaDeTablet(pc);
+        if (!string.IsNullOrEmpty(licPorTablet)) req.InformacionAdicional = licPorTablet;
+
         var res = await _dragon.CrearRemitoAsync(req, ct);
         if (res.Ok)
         {
@@ -68,7 +82,6 @@ public sealed class RemitosController : ControllerBase
             // el remito ya existe en Dragon, no rompemos el alta si esto falla.
             try
             {
-                var pc = Request.Headers["X-Pc"].FirstOrDefault();
                 var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
                 await _lookup.RegistrarRemitoTabletAsync(
                     res.Numero, res.Codigo, req.Local ?? "", req.InformacionAdicional, pc, req.Motivo, usuario, ct);
@@ -77,4 +90,13 @@ public sealed class RemitosController : ControllerBase
         }
         return Ok(res);
     }
+
+    // Mapa tablet → licencia/impresora (espejo server-side de LicenciasTablet del cliente).
+    // Única fuente de verdad: la PC física que opera (X-Pc), la misma que muestra el chip "Esta PC".
+    private static string? LicenciaDeTablet(string? pc) => (pc ?? "").Trim().ToUpperInvariant() switch
+    {
+        "TABLETLOG1" => "809131",
+        "TABLETLOG2" => "809129",
+        _ => null
+    };
 }

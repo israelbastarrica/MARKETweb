@@ -30,6 +30,8 @@ public sealed class DashboardService : IDashboardService
     private sealed record HoraRow(string HoraReloj, decimal TotalMonto, int CantidadTickets, decimal CantidadPrendas);
     private sealed record CajeroRow(string NombreCajero, int Tickets);
     private sealed record ArtRow(string Codigo, string Descripcion, decimal Cantidad, decimal Monto);
+    private sealed record ArtDetRow(string Codigo, string Descripcion, decimal Cantidad, decimal Monto,
+        string TipoCod, string FamiliaCod, string FamiliaDesc, string GrupoCod, string GrupoDesc);
     private sealed record DiaVentaRow(string Dia, decimal Venta);
     private sealed record TipoVentaRow(string Codigo, string Descripcion, decimal Venta);
     private sealed record RepoRow(string OpDay, string TipoCod, string TipoDesc, decimal Cant);
@@ -41,6 +43,7 @@ public sealed class DashboardService : IDashboardService
         public Dictionary<string, int> PorCajero = new();
         public Dictionary<string, ArtRow> Articulos = new();
         public Dictionary<string, ArtRow> TiposVenta = new();
+        public List<ArtDetRow> ArticulosDet = new();   // artículos del día con su rubro (para el detalle por tipo)
         public Dictionary<string, decimal> VentaPorDia = new();   // yyyymmdd -> unidades vendidas
         public Dictionary<string, TipoVentaRow> VentaPorTipo = new(); // COD -> venta por rubro
     }
@@ -86,6 +89,10 @@ public sealed class DashboardService : IDashboardService
         var qTV = $"SELECT Codigo = TIPO.COD, Descripcion = MAX(TIPO.DESCRIP), Cantidad = SUM(DET.FCANT * COMP.SIGNOMOV), Monto = SUM(DET.MNTPTOT * COMP.SIGNOMOV) FROM {b}.Zoologic.COMPROBANTEV COMP INNER JOIN {b}.Zoologic.COMPROBANTEVDET DET ON COMP.CODIGO = DET.CODIGO INNER JOIN {b}.Zoologic.ART ART ON DET.FART = ART.ARTCOD INNER JOIN {b}.Zoologic.TIPOART TIPO ON ART.TIPOARTI = TIPO.COD WHERE COMP.ANULADO=0 AND COMP.FFCH='{hoy}' AND LEFT(DET.FART, 1) <> 'Z' AND COMP.FLETRA <> 'R' GROUP BY TIPO.COD HAVING SUM(DET.MNTPTOT * COMP.SIGNOMOV) > 0";
         foreach (var r in await RunLocalAsync<ArtRow>(cn, local, qTV, ct))
             d.TiposVenta[(r.Codigo ?? "").Trim()] = r;
+
+        // Artículos del día con su jerarquía (Rubro=TIPOARTI, Familia, Grupo) para el drill-down del dashboard.
+        var qArtDet = $"SELECT Codigo = DET.FART, Descripcion = MAX(DET.FTXT), Cantidad = SUM(DET.FCANT * COMP.SIGNOMOV), Monto = SUM(DET.MNTPTOT * COMP.SIGNOMOV), TipoCod = ISNULL(MAX(RTRIM(ART.TIPOARTI)), '?'), FamiliaCod = ISNULL(MAX(RTRIM(ART.FAMILIA)), '?'), FamiliaDesc = ISNULL(MAX(RTRIM(FAM.DESCRIP)), ''), GrupoCod = ISNULL(MAX(RTRIM(ART.GRUPO)), '?'), GrupoDesc = ISNULL(MAX(RTRIM(GRU.DESCRIP)), '') FROM {b}.Zoologic.COMPROBANTEV COMP INNER JOIN {b}.Zoologic.COMPROBANTEVDET DET ON COMP.CODIGO = DET.CODIGO LEFT JOIN {b}.Zoologic.ART ART ON DET.FART = ART.ARTCOD LEFT JOIN {b}.Zoologic.FAMILIA FAM ON FAM.COD = ART.FAMILIA LEFT JOIN {b}.Zoologic.GRUPO GRU ON GRU.COD = ART.GRUPO WHERE COMP.ANULADO=0 AND COMP.FFCH='{hoy}' AND LEFT(DET.FART, 1) <> 'Z' AND COMP.FLETRA <> 'R' GROUP BY DET.FART HAVING SUM(DET.MNTPTOT * COMP.SIGNOMOV) > 0";
+        d.ArticulosDet = await RunLocalAsync<ArtDetRow>(cn, local, qArtDet, ct);
 
         // Venta por día (calendario, día de negocio del local) — solo venta, sin remitos.
         var qDia = $"SELECT Dia = CONVERT(VARCHAR(8), COMP.FFCH, 112), Venta = SUM(DET.FCANT * COMP.SIGNOMOV) FROM {b}.Zoologic.COMPROBANTEV COMP INNER JOIN {b}.Zoologic.COMPROBANTEVDET DET ON COMP.CODIGO = DET.CODIGO WHERE COMP.ANULADO=0 AND COMP.FFCH >= '{inicio}' AND COMP.FFCH <= '{hoy}' AND LEFT(DET.FART, 1) <> 'Z' AND COMP.FLETRA <> 'R' GROUP BY CONVERT(VARCHAR(8), COMP.FFCH, 112)";
@@ -212,6 +219,7 @@ public sealed class DashboardService : IDashboardService
                 ? v.Articulos.Values.OrderByDescending(a => a.Monto).Take(5)
                     .Select(a => new TopArticuloDto
                     {
+                        Codigo = (a.Codigo ?? "").Trim(),
                         Descripcion = string.IsNullOrWhiteSpace(a.Descripcion) ? a.Codigo : a.Descripcion.Trim(),
                         Cantidad = a.Cantidad,
                         Monto = a.Monto
@@ -282,6 +290,7 @@ public sealed class DashboardService : IDashboardService
             ["por_cajero"] = new Dictionary<string, object> { ["LURO"] = vL.PorCajero, ["PERALTA"] = vP.PorCajero },
             ["top_articulos"] = TopMerge(vL.Articulos, vP.Articulos),
             ["top_tipos_venta"] = TopMerge(vL.TiposVenta, vP.TiposVenta),
+            ["articulos_por_tipo"] = ArticulosPorTipo(vL.ArticulosDet, vP.ArticulosDet),
             ["ultimos_7_dias"] = new Dictionary<string, object> { ["LURO"] = dias7L, ["PERALTA"] = dias7P },
             ["totales_7_dias"] = new Dictionary<string, object> { ["LURO"] = tot7L, ["PERALTA"] = tot7P },
             ["top_tipos_balance"] = TopMergeBalance(vL.VentaPorTipo, vP.VentaPorTipo, rL, rP)
@@ -327,8 +336,46 @@ public sealed class DashboardService : IDashboardService
                 if (u.TryGetValue(k, out var e)) u[k] = (e.desc, e.cant + v.Cantidad, e.monto + v.Monto);
                 else u[k] = (string.IsNullOrWhiteSpace(v.Descripcion) ? "Sin desc." : v.Descripcion.Trim(), v.Cantidad, v.Monto);
             }
-        return u.Values.OrderByDescending(x => x.monto).Take(15)
-            .Select(x => (object)new Dictionary<string, object> { ["descripcion"] = x.desc, ["cantidad"] = x.cant, ["monto"] = x.monto }).ToList();
+        return u.OrderByDescending(x => x.Value.monto).Take(15)
+            .Select(x => (object)new Dictionary<string, object> { ["codigo"] = x.Key, ["descripcion"] = x.Value.desc, ["cantidad"] = x.Value.cant, ["monto"] = x.Value.monto }).ToList();
+    }
+
+    private sealed class ArtAgg
+    {
+        public string Desc = ""; public decimal Cant; public decimal Monto;
+        public string FamCod = "?"; public string FamDesc = ""; public string GruCod = "?"; public string GruDesc = "";
+    }
+
+    // Detalle de artículos por rubro (COD de TIPOART), con Familia y Grupo en cada artículo, para el
+    // drill-down Rubro → Familia → Grupo → Artículo (el agrupado por nivel lo hace el front).
+    private static Dictionary<string, object> ArticulosPorTipo(params List<ArtDetRow>[] fuentes)
+    {
+        var u = new Dictionary<string, Dictionary<string, ArtAgg>>();
+        foreach (var f in fuentes)
+            foreach (var r in f)
+            {
+                var tipo = string.IsNullOrWhiteSpace(r.TipoCod) ? "?" : r.TipoCod.Trim();
+                var cod = (r.Codigo ?? "").Trim();
+                if (!u.TryGetValue(tipo, out var arts)) { arts = new(); u[tipo] = arts; }
+                if (arts.TryGetValue(cod, out var e)) { e.Cant += r.Cantidad; e.Monto += r.Monto; }
+                else arts[cod] = new ArtAgg
+                {
+                    Desc = string.IsNullOrWhiteSpace(r.Descripcion) ? cod : r.Descripcion.Trim(),
+                    Cant = r.Cantidad, Monto = r.Monto,
+                    FamCod = (r.FamiliaCod ?? "?").Trim(), FamDesc = (r.FamiliaDesc ?? "").Trim(),
+                    GruCod = (r.GrupoCod ?? "?").Trim(), GruDesc = (r.GrupoDesc ?? "").Trim()
+                };
+            }
+
+        var outD = new Dictionary<string, object>();
+        foreach (var (tipo, arts) in u)
+            outD[tipo] = arts.OrderByDescending(kv => kv.Value.Monto)
+                .Select(kv => (object)new Dictionary<string, object>
+                {
+                    ["codigo"] = kv.Key, ["descripcion"] = kv.Value.Desc, ["cantidad"] = kv.Value.Cant, ["monto"] = kv.Value.Monto,
+                    ["famCod"] = kv.Value.FamCod, ["famDesc"] = kv.Value.FamDesc, ["gruCod"] = kv.Value.GruCod, ["gruDesc"] = kv.Value.GruDesc
+                }).ToList();
+        return outD;
     }
 
     // Balance por rubro: venta (de los locales) vs reposición (de central), unificado por COD de TIPOART.

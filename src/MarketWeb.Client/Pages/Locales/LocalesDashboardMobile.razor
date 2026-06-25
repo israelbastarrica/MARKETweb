@@ -86,12 +86,12 @@
                 <div class="vm-card">
                     <div class="vm-card-head">
                         <span class="vm-local">@l.Local</span>
-                        <span class="vm-monto">$ @Miles(l.Monto)</span>
+                        <span class="vm-monto">@Miles(l.Monto)</span>
                     </div>
                     <div class="vm-kpis">
                         <div><span class="n">@l.Tickets</span><span class="t">Tickets</span></div>
                         <div><span class="n">@Miles(l.Prendas)</span><span class="t">Prendas</span></div>
-                        <div><span class="n">$ @Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
+                        <div><span class="n">@Miles(TicketProm(l))</span><span class="t">Ticket prom.</span></div>
                     </div>
 
                     @if (l.TopArticulos.Count > 0)
@@ -101,7 +101,7 @@
                             @foreach (var a in l.TopArticulos)
                             {
                                 <div class="vm-row">
-                                    <span class="d">@a.Descripcion</span>
+                                    <span class="d"><b class="vm-cod">@a.Codigo</b> @a.Descripcion</span>
                                     <span class="q">@Miles(a.Cantidad)</span>
                                 </div>
                             }

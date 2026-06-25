@@ -6,7 +6,7 @@
 <PageTitle>Costos · Margen</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Administración" Titulo="Costos" Icono="fa-solid fa-money-bill" />
+    <PageHeader Modulo="Administración" Titulo="Costos" Icono="fa-solid fa-money-bill" CompartirQuery="@CompartirQuery" />
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
         <div>
@@ -130,10 +130,30 @@
     private static string Cant(decimal d) => d.ToString("#,##0", Ar);
     private static string Pct(decimal d) => d.ToString("#,##0.00", Ar) + " %";
 
+    // Deep-link / Compartir: filtros en la URL. Si llega con filtros, auto-procesa.
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "agr")] public string? AgrQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sub")] public bool? SubQ { get; set; }
+
+    private string CompartirQuery =>
+        $"desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}&local={Uri.EscapeDataString(_local)}&agr={Uri.EscapeDataString(_agrupamiento)}"
+        + (_agruparLocal ? "&sub=1" : "");
+
     protected override async Task OnInitializedAsync()
     {
         try { _ubicaciones = await Api.ListarUbicacionesAsync(); }
         catch { _ubicaciones = new(); }
+
+        var hayQuery = DesdeQ != null || HastaQ != null || LocalQ != null || AgrQ != null || SubQ.HasValue;
+        if (!hayQuery) return;
+        if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+        if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+        if (LocalQ != null) _local = LocalQ;
+        if (AgrQ != null) _agrupamiento = AgrQ;
+        if (SubQ.HasValue) _agruparLocal = SubQ.Value;
+        await Cargar();
     }
 
     private async Task Cargar()

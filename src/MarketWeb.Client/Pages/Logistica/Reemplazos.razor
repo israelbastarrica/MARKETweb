@@ -8,7 +8,7 @@
 <PageTitle>Reemplazos</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Reemplazos" Icono="fa-solid fa-retweet" />
+    <PageHeader Modulo="Logística" Titulo="Reemplazos" Icono="fa-solid fa-retweet" CompartirQuery="@CompartirQuery" />
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
         <div>
@@ -325,14 +325,33 @@
     private const string StateKey = "reemplazos";
     private sealed class Snap { public List<LocalReemplazoDto> Locales = new(); public int FiltroLocal; public string FiltroMueble = ""; public bool VerTodos; public List<ReemplazoDto> Items = new(); }
 
+    // Deep-link / Compartir: filtros en la URL (?local=&mueble=&todos=1).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public int? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "mueble")] public string? MuebleQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "todos")] public bool? TodosQ { get; set; }
+
+    private string CompartirQuery =>
+        $"local={_filtroLocal}"
+        + (string.IsNullOrEmpty(_filtroMueble) ? "" : $"&mueble={Uri.EscapeDataString(_filtroMueble)}")
+        + (_verTodos ? "&todos=1" : "");
+
     protected override async Task OnInitializedAsync()
     {
-        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        var hayQuery = LocalQ.HasValue || MuebleQ != null || TodosQ.HasValue;
+
+        // Si llega por link con filtros, mandan ellos (no el estado guardado).
+        if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
             _locales = s.Locales; _filtroLocal = s.FiltroLocal; _filtroMueble = s.FiltroMueble; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
             return;
         }
         try { _locales = await Api.LocalesAsync(); } catch { _locales = new(); }
+        if (hayQuery)
+        {
+            if (LocalQ.HasValue) _filtroLocal = LocalQ.Value;
+            if (MuebleQ != null) _filtroMueble = MuebleQ;
+            if (TodosQ.HasValue) _verTodos = TodosQ.Value;
+        }
         await Cargar();
     }
 

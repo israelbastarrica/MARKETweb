@@ -20,6 +20,12 @@
     {
         <div class="alert alert-warning"><i class="fa-solid fa-triangle-exclamation me-2"></i>Esta tablet no tiene impresora asignada — configurá "Esta PC".</div>
     }
+    else
+    {
+        <div class="text-muted small mb-2">
+            <i class="fa-solid fa-print me-1"></i>Esta PC: <b>@_etiquetaPc</b> · imprime en <b>@NombreImpresora</b> (@_licencia)
+        </div>
+    }
 
     <div class="market-card p-3 mb-3">
         <div class="row g-3 align-items-end">
@@ -422,6 +428,8 @@
         ("809129", "Impresora 2"),
     };
 
+    private string NombreImpresora => Impresoras.FirstOrDefault(i => i.Licencia == _licencia).Nombre ?? _licencia;
+
     // --- Renglones del remito ---
     private sealed class RenglonItem
     {
@@ -563,13 +571,36 @@
         _nroBolsaManual = "";
     }
 
-    // Trae el detalle de la bolsa y suma todos sus renglones al remito.
-    private async Task ProcesarBolsa(string nroBolsa)
+    // Suma los renglones de lo escaneado/tipeado al remito. El QR de la bolsa es el CODIGO del
+    // comprobante → primero buscamos en COMPROBANTEV (3 bases); si no, fallback al N° de bolsa (PacksBolsas).
+    private async Task ProcesarBolsa(string entrada)
     {
         _scanError = "";
-        var bolsa = await Api.BuscarBolsaAsync(nroBolsa);
-        if (bolsa is null) { Ui.Error($"No se encontró la bolsa {nroBolsa}."); return; }
-        if (bolsa.Renglones.Count == 0) { Ui.Error($"La bolsa {nroBolsa} no tiene renglones."); return; }
+        var cod = (entrada ?? "").Trim();
+        if (cod.Length == 0) return;
+
+        // 1) Por CODIGO del remito (QR de la bolsa) en las 3 bases.
+        var rem = await Api.BuscarRemitoPorCodigoAsync(cod);
+        if (rem.Encontrado && rem.Anulado)
+        {
+            // Remito anulado: no se carga; debe quedar en su local de origen.
+            var origen = string.IsNullOrEmpty(rem.Origen) ? "su local de origen" : rem.Origen;
+            _scanError = $"⚠ El remito {cod} está ANULADO. Ese remito tiene que estar en ORIGEN ({origen}) — no se carga.";
+            Ui.Error(_scanError);
+            return;
+        }
+        if (rem.Renglones.Count > 0)
+        {
+            var uu = 0;
+            foreach (var r in rem.Renglones) { MergeItem(r.ArtCod, r.ArtDes, r.Color, r.Talle, r.Cantidad); uu += r.Cantidad; }
+            Ui.Exito($"Remito {cod}: +{rem.Renglones.Count} renglón(es), {uu} u.");
+            return;
+        }
+
+        // 2) Fallback: N° de bolsa del depósito (PacksBolsas), por si se tipea a mano.
+        var bolsa = await Api.BuscarBolsaAsync(cod);
+        if (bolsa is null) { Ui.Error($"No se encontró el remito/bolsa {cod}."); return; }
+        if (bolsa.Renglones.Count == 0) { Ui.Error($"La bolsa {cod} no tiene renglones."); return; }
 
         var u = 0;
         foreach (var r in bolsa.Renglones)
@@ -577,7 +608,7 @@
             MergeItem(r.ArtCod, r.ArtDes, r.Color, r.Talle, r.Cantidad);
             u += r.Cantidad;
         }
-        var etiqueta = bolsa.Eliminada ? $"{nroBolsa} (archivada)" : nroBolsa;
+        var etiqueta = bolsa.Eliminada ? $"{cod} (archivada)" : cod;
         Ui.Exito($"Bolsa {etiqueta}: +{bolsa.Renglones.Count} renglón(es), {u} u.");
     }
 

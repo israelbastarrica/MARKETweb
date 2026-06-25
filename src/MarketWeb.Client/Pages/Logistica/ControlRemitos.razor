@@ -6,7 +6,7 @@
 <PageTitle>Control de Remitos</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Control de Remitos" Icono="fa-solid fa-truck-ramp-box" />
+    <PageHeader Modulo="Logística" Titulo="Control de Remitos" Icono="fa-solid fa-truck-ramp-box" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Estado de los remitos: generados, despachados, recibidos y aceptados en Dragon. Clic en una fila para ver el detalle.
     </p>
@@ -316,7 +316,17 @@
     // Inicio del modelo de control por QR (antes no había QR escaneable).
     private static DateTime MaxFecha(DateTime d) => d < new DateTime(2026, 5, 27) ? new DateTime(2026, 5, 27) : d;
 
-    protected override async Task OnInitializedAsync() => await CargarEstado();
+    // Deep-link / Compartir: rango de fechas en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    private string CompartirQuery => $"desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DateTime.TryParse(DesdeQ, out var d)) _desde = MaxFecha(d);
+        if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+        await CargarEstado();
+    }
 
     private static int IdLocal(string local) => local switch { "CENTRAL" => 1, "LURO" => 2, "PERALTA" => 3, _ => 0 };
     private static string Texto(int id) => id switch { 1 => "CENTRAL", 2 => "LURO", 3 => "PERALTA", _ => "TODOS" };

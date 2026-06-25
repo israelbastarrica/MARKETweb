@@ -9,7 +9,7 @@
 <PageTitle>Eventos reposición</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Eventos" Icono="fa-solid fa-triangle-exclamation" />
+    <PageHeader Modulo="Logística" Titulo="Eventos" Icono="fa-solid fa-triangle-exclamation" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Sobrantes y faltantes que cargan los locales en piso. Doble clic / botón para ver el detalle, foto y marcarlo como procesado.
     </p>
@@ -236,12 +236,30 @@
     private const string StateKey = "eventos";
     private sealed class Snap { public string Local = "TODOS"; public DateTime Desde; public DateTime Hasta; public bool VerTodos; public List<EventoDto> Items = new(); }
 
+    // Deep-link / Compartir: filtros en la URL (?local=&desde=&hasta=&todos=1).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "todos")] public bool? TodosQ { get; set; }
+
+    private string CompartirQuery =>
+        $"local={Uri.EscapeDataString(_local)}&desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}" + (_verTodos ? "&todos=1" : "");
+
     protected override async Task OnInitializedAsync()
     {
-        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        var hayQuery = LocalQ != null || DesdeQ != null || HastaQ != null || TodosQ.HasValue;
+
+        if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
             _local = s.Local; _desde = s.Desde; _hasta = s.Hasta; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
             return;
+        }
+        if (hayQuery)
+        {
+            if (LocalQ != null) _local = LocalQ;
+            if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+            if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+            if (TodosQ.HasValue) _verTodos = TodosQ.Value;
         }
         await Cargar();
     }

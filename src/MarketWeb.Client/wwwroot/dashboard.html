@@ -5,16 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Market</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
     <style>
         :root {
-            --bg-color: #0d1117; --card-bg: #161b22;
-            --luro-color: #39d353; --peralta-color: #58a6ff;
-            --ticket-color: #f0e68c; --text-main: #c9d1d9; --text-muted: #8b949e;
-            --pause-color: #ff7b72; --btn-bg: #21262d;
-            --proj-color: #87CEEB;
+            /* Paleta unificada con el dashboard de Logística */
+            --bg-0:#07090f; --bg-1:#0d1118; --bg-2:#141925; --bg-3:#1c2332;
+            --line:#1f2937; --tx-0:#f1f5f9; --tx-1:#cbd5e1; --tx-2:#94a3b8; --tx-3:#64748b;
+            /* Aliases para el markup existente del dashboard de Locales */
+            --bg-color: var(--bg-0); --card-bg: var(--bg-2);
+            --luro-color:#4ade80; --peralta-color:#38bdf8;
+            --ticket-color:#fbbf24; --text-main: var(--tx-0); --text-muted: var(--tx-2);
+            --pause-color:#f87171; --btn-bg:#1c2332;
+            --proj-color:#7dd3fc;
         }
 
-        body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 20px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { background: radial-gradient(1200px 700px at 20% -10%, #11192a 0%, var(--bg-0) 60%) var(--bg-0); color: var(--text-main); font-family: 'Inter', system-ui, 'Segoe UI', Tahoma, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; margin: 0; padding: 20px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
         .dots-nav { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
         .dot { width: 10px; height: 10px; border-radius: 50%; background: #30363d; cursor: pointer; transition: all 0.25s ease; }
@@ -25,8 +32,8 @@
         .progress-rotacion-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #39d353, #58a6ff); border-radius: 2px; transition: width 0.1s linear; }
         .hidden { display: none !important; }
 
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #30363d; padding-bottom: 10px; }
-        .header h1 { margin: 0; font-size: 2.5vw; font-weight: 800; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+        .header h1 { margin: 0; font-size: 2.3vw; font-weight: 800; letter-spacing: -.02em; background: linear-gradient(90deg, #e2e8f0 0%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .controls { display: flex; align-items: center; gap: 15px; }
         .clock { font-size: 1.4vw; color: var(--text-muted); margin-right: 10px; min-width: 140px; text-align: right; }
         .btn-control { background-color: var(--btn-bg); color: white; border: 1px solid #30363d; border-radius: 8px; width: 45px; height: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s; }
@@ -41,7 +48,7 @@
         .grid-sales, .grid-cashiers { display: grid; gap: 25px; height: 85vh; }
         .grid-sales { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; }
         .grid-cashiers { grid-template-columns: 1fr 1fr; }
-        .card { background-color: var(--card-bg); border-radius: 15px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .card { background: linear-gradient(180deg, var(--bg-2), var(--bg-1)); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
         .kpi-card { display: flex; flex-direction: column; align-items: center; border-top: 5px solid transparent; }
         .kpi-card.luro { border-top-color: var(--luro-color); }
         .kpi-card.peralta { border-top-color: var(--peralta-color); }
@@ -59,10 +66,11 @@
         .item-value { color: var(--ticket-color); font-weight: bold; }
 
         .table-container { width: 100%; max-height: 75vh; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 2vw; }
-        th { background-color: #21262d; color: var(--text-muted); padding: 15px; text-align: left; }
-        td { padding: 15px; border-bottom: 1px solid #30363d; }
-        td.qty { color: var(--luro-color); font-weight: bold; text-align: right; }
+        table { width: 100%; border-collapse: collapse; font-size: 1.9vw; }
+        th { background-color: var(--bg-3); color: var(--tx-2); padding: 14px 15px; text-align: left; text-transform: uppercase; letter-spacing: .06em; font-size: .8em; font-weight: 600; }
+        td { padding: 14px 15px; border-bottom: 1px solid var(--line); color: var(--tx-1); }
+        tbody tr:hover td { background: rgba(255,255,255,.03); }
+        td.qty { color: var(--luro-color); font-weight: 700; text-align: right; }
 
         .kpi-mini-title { color: var(--text-muted); font-size: 1.2vw; text-transform: uppercase; }
         .kpi-mini-value { font-size: 2vw; font-weight: bold; margin-top: 5px;}
@@ -116,13 +124,18 @@
 
     <div id="dashboard-content">
         <div class="header">
-            <h1 id="main-title">⚡ MARKET en vivo</h1>
+            <h1 id="main-title">Dashboard Locales</h1>
             <div class="controls">
                 <div class="date-group">
                     <button class="btn-control" onclick="cambiarFecha(-1)">&lt;</button>
                     <input type="date" id="date-picker" class="date-picker" onchange="fechaSeleccionada(this.value)">
                     <button class="btn-control" onclick="cambiarFecha(1)">&gt;</button>
                 </div>
+                <select id="admin-vercomo" class="date-picker hidden" onchange="setVerComo(this.value)" title="Ver el dashboard como...">
+                    <option value="">👁 Gerencial (admin)</option>
+                    <option value="LURO">🏪 Ver como LURO</option>
+                    <option value="PERALTA">🏪 Ver como PERALTA</option>
+                </select>
                 <div class="clock" id="reloj">Actualizando...</div>
                 <div class="dots-nav" id="dots-nav"></div>
                 <button class="btn-control" id="btn-pause" onclick="togglePause()"><span id="icon-pause">&#10074;&#10074;</span></button>
@@ -133,8 +146,8 @@
 
         <div id="admin-view-0" class="view-panel view-admin">
             <div class="grid-sales">
-                <div class="card kpi-card luro"><div class="kpi-title">Sucursal Luro</div><div class="kpi-value" id="monto-luro">$ 0</div><div class="kpi-tickets" id="tickets-luro">🎫 0 Tickets</div></div>
-                <div class="card kpi-card peralta"><div class="kpi-title">Sucursal Peralta</div><div class="kpi-value" id="monto-peralta">$ 0</div><div class="kpi-tickets" id="tickets-peralta">🎫 0 Tickets</div></div>
+                <div class="card kpi-card luro"><div class="kpi-title">Sucursal Luro</div><div class="kpi-value" id="monto-luro">0</div><div class="kpi-tickets" id="tickets-luro">🎫 0 Tickets</div></div>
+                <div class="card kpi-card peralta"><div class="kpi-title">Sucursal Peralta</div><div class="kpi-value" id="monto-peralta">0</div><div class="kpi-tickets" id="tickets-peralta">🎫 0 Tickets</div></div>
                 <div class="card"><canvas id="chartLuro"></canvas></div><div class="card"><canvas id="chartPeralta"></canvas></div>
             </div>
         </div>
@@ -149,12 +162,21 @@
 
         <div id="admin-view-2" class="view-panel view-admin hidden">
             <h2 class="view-title">🔥 ARTÍCULOS: TOP RECAUDACIÓN (DÍA)</h2>
-            <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 55%;">Descripción del Artículo</th><th style="width: 15%; text-align: center;">Unidades</th><th style="width: 25%; text-align: right;">Recaudación ($)</th></tr></thead><tbody id="table-articles"></tbody></table></div>
+            <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 15%;">Código</th><th style="width: 42%;">Descripción del Artículo</th><th style="width: 13%; text-align: center;">Unidades</th><th style="width: 25%; text-align: right;">Recaudación</th></tr></thead><tbody id="table-articles"></tbody></table></div>
         </div>
 
         <div id="admin-view-3" class="view-panel view-admin hidden">
-            <h2 class="view-title">📊 RUBROS: VENTAS POR TIPO (DÍA)</h2>
-            <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 55%;">Tipo de Artículo / Rubro</th><th style="width: 15%; text-align: center;">Unidades</th><th style="width: 25%; text-align: right;">Recaudación ($)</th></tr></thead><tbody id="table-tipos-venta"></tbody></table></div>
+            <div id="tipos-venta-lista">
+                <h2 class="view-title">📊 RUBROS: VENTAS POR TIPO (DÍA) <span style="font-size:1.1vw; color:var(--text-muted);">— tocá un rubro para ver su detalle</span></h2>
+                <div class="card table-container"><table><thead><tr><th style="width: 5%;">#</th><th style="width: 45%;">Tipo de Artículo / Rubro</th><th style="width: 15%; text-align: center;">Unidades</th><th style="width: 20%; text-align: right;">Recaudación</th><th style="width: 15%; text-align: right;">%</th></tr></thead><tbody id="table-tipos-venta"></tbody></table></div>
+            </div>
+            <div id="tipos-venta-detalle" class="hidden">
+                <h2 class="view-title" style="display:flex; align-items:center; justify-content:center; gap:15px;">
+                    <button class="btn-control" onclick="volverRubros()" style="width:auto; padding:0 16px;">&larr; Volver</button>
+                    <span id="rubro-detalle-titulo"></span>
+                </h2>
+                <div class="card table-container"><table><thead><tr id="rubro-detalle-head"></tr></thead><tbody id="table-rubro-detalle"></tbody></table></div>
+            </div>
         </div>
 
         <div id="admin-view-4" class="view-panel view-admin hidden">
@@ -236,6 +258,8 @@
         const ROTACION_MS = 60000;
         const PROGRESS_TICK_MS = 100;
         let fechaFiltro = new Date();
+        let esAdminReal = false;   // se vuelve true en cuanto el server responde rol admin (no se baja después)
+        let verComo = '';          // '' = gerencial; 'LURO'/'PERALTA' = ADMIN viendo como ese local
 
         // Formato AR: separador de miles, sin decimales (cantidades e importes).
         const nf = (n) => Math.round(Number(n || 0)).toLocaleString('es-AR', { maximumFractionDigits: 0 });
@@ -250,8 +274,7 @@
         function getFechaInput(d) { return d.getFullYear() + '-' + (d.getMonth() + 1).toString().padStart(2, '0') + '-' + d.getDate().toString().padStart(2, '0'); }
 
         function actualizarTitulo() {
-            const esHoy = (fechaFiltro.getDate() === new Date().getDate() && fechaFiltro.getMonth() === new Date().getMonth() && fechaFiltro.getFullYear() === new Date().getFullYear());
-            let titulo = esHoy ? '⚡ MARKET en vivo' : '⚡ MARKET';
+            let titulo = 'Dashboard Locales';
             if(rolUsuario === 'cajero' && dataGlobal && dataGlobal.local) {
                 titulo += ' - ' + dataGlobal.local;
             }
@@ -272,6 +295,16 @@
             actualizarTitulo(); fetchData();
         }
 
+        // ADMIN: cambiar entre vista gerencial y "ver como" un local (perfil cajero de ese local).
+        function setVerComo(v) {
+            verComo = v || '';
+            vistaActual = 0;
+            document.querySelectorAll('.view-panel').forEach(el => el.classList.add('hidden'));
+            resetRubros();
+            document.getElementById('reloj').innerText = 'Cargando...';
+            fetchData();
+        }
+
         Chart.defaults.color = '#8b949e'; Chart.defaults.font.size = 16;
 
         function initGraficoVentas(id, color, tit) {
@@ -279,13 +312,13 @@
                 data: { labels: [], datasets: [
                     { type: 'line', label: 'Tickets Reales', data: [], borderColor: '#f0e68c', borderWidth: 4, tension: 0.4, yAxisID: 'yT' },
                     { type: 'line', label: 'Proyección Tickets', data: [], borderColor: '#87CEEB', borderWidth: 3, borderDash: [6, 4], tension: 0.4, yAxisID: 'yT' },
-                    { type: 'bar', label: 'Monto ($)', data: [], backgroundColor: color + '80', borderColor: color, borderWidth: 2, borderRadius: 6, yAxisID: 'yM' }
+                    { type: 'bar', label: 'Monto', data: [], backgroundColor: color + '80', borderColor: color, borderWidth: 2, borderRadius: 6, yAxisID: 'yM' }
                 ]},
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: true, labels: { color: '#fff' } }, title: { display: true, text: tit, color: '#c9d1d9', font: { size: 20 } } },
                     scales: {
-                        yM: { position: 'left', grid: { color: '#30363d' }, ticks: { callback: v => '$ ' + (v/1000).toFixed(0) + 'k' } },
+                        yM: { position: 'left', grid: { color: '#30363d' }, ticks: { callback: v => (v/1000).toFixed(0) + 'k' } },
                         yT: { position: 'right', grid: { display: false }, ticks: { color: '#f0e68c', stepSize: 5 } },
                         x: { grid: { display: false } }
                     }
@@ -319,7 +352,7 @@
 
         async function fetchData() {
             try {
-                const fechaQS = '?fecha=' + getFechaSQL(fechaFiltro);
+                const fechaQS = '?fecha=' + getFechaSQL(fechaFiltro) + (verComo ? '&verComo=' + verComo : '');
                 const [respVentas, respFichadas] = await Promise.all([
                     fetch(API_VENTAS + fechaQS),
                     fetch(API_FICHADAS + fechaQS)
@@ -330,6 +363,12 @@
                 dataGlobal = await respVentas.json();
                 dataFichadas = respFichadas.ok ? await respFichadas.json() : null;
                 rolUsuario = dataGlobal.role;
+                if (dataGlobal.role === 'admin') esAdminReal = true;   // solo un ADMIN real recibe rol admin
+                const selVC = document.getElementById('admin-vercomo');
+                if (selVC) {
+                    if (esAdminReal) { selVC.classList.remove('hidden'); selVC.value = verComo; }
+                    else selVC.classList.add('hidden');
+                }
                 actualizarTitulo();
 
                 if (!isPaused) document.getElementById('reloj').innerText = 'Act: ' + new Date().toLocaleTimeString();
@@ -434,9 +473,9 @@
                 document.getElementById('admin-view-0').classList.remove('hidden');
             }
 
-            document.getElementById('monto-luro').innerText = '$ ' + nf(dataGlobal.totales_dia.LURO.monto);
+            document.getElementById('monto-luro').innerText = nf(dataGlobal.totales_dia.LURO.monto);
             document.getElementById('tickets-luro').innerText = '🎫 ' + dataGlobal.totales_dia.LURO.tickets + ' Tickets';
-            document.getElementById('monto-peralta').innerText = '$ ' + nf(dataGlobal.totales_dia.PERALTA.monto);
+            document.getElementById('monto-peralta').innerText = nf(dataGlobal.totales_dia.PERALTA.monto);
             document.getElementById('tickets-peralta').innerText = '🎫 ' + dataGlobal.totales_dia.PERALTA.tickets + ' Tickets';
 
             const updV = (c, d) => {
@@ -453,8 +492,13 @@
             const renderC = (id, loc) => { document.getElementById(id).innerHTML = Object.entries(dataGlobal.por_cajero[loc]).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([n,v], i) => `<div class="list-item"><span class="item-name">${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}${n}</span><span class="item-value">${v} Tks</span></div>`).join(''); };
             renderC('list-luro', 'LURO'); renderC('list-peralta', 'PERALTA');
 
-            document.getElementById('table-articles').innerHTML = dataGlobal.top_articulos.map((a, i) => `<tr><td>${i+1}</td><td>${a.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(a.cantidad)}</td><td class="qty">$ ${nf(a.monto)}</td></tr>`).join('');
-            document.getElementById('table-tipos-venta').innerHTML = dataGlobal.top_tipos_venta.map((t, i) => `<tr><td>${i+1}</td><td>${t.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(t.cantidad)}</td><td class="qty">$ ${nf(t.monto)}</td></tr>`).join('');
+            document.getElementById('table-articles').innerHTML = dataGlobal.top_articulos.map((a, i) => `<tr><td>${i+1}</td><td style="color: var(--text-muted);">${a.codigo||''}</td><td>${a.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(a.cantidad)}</td><td class="qty">${nf(a.monto)}</td></tr>`).join('');
+
+            const totTV = dataGlobal.top_tipos_venta.reduce((s, t) => s + Number(t.monto || 0), 0) || 1;
+            document.getElementById('table-tipos-venta').innerHTML = dataGlobal.top_tipos_venta.map((t, i) => {
+                const pct = Number(t.monto || 0) / totTV * 100;
+                return `<tr style="cursor:pointer;" title="Ver detalle del rubro" onclick="abrirRubroIdx(${i})"><td>${i+1}</td><td>${t.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(t.cantidad)}</td><td class="qty">${nf(t.monto)}</td><td style="text-align:right; color: var(--proj-color); font-weight:bold;">${pct.toFixed(1)}%</td></tr>`;
+            }).join('');
 
             const l7 = dataGlobal.totales_7_dias.LURO;
             document.getElementById('7d-venta-luro').innerText = nf(l7.venta); document.getElementById('7d-repo-luro').innerText = nf(l7.reposicion);
@@ -468,6 +512,93 @@
             updS(grafico7Luro, dataGlobal.ultimos_7_dias.LURO); updS(grafico7Peralta, dataGlobal.ultimos_7_dias.PERALTA);
 
             document.getElementById('table-tipos-balance').innerHTML = dataGlobal.top_tipos_balance.map((t, i) => { let saldo = t.reposicion - t.venta; let cS = saldo >= 0 ? 'saldo-pos' : 'saldo-neg'; return `<tr><td>${i+1}</td><td>${t.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(t.venta)}</td><td style="text-align:center; color: #58a6ff;">${nf(t.reposicion)}</td><td style="text-align:right;" class="${cS}">${saldo>0?'+':''}${nf(saldo)}</td></tr>`; }).join('');
+        }
+
+        // --- Rubro interactivo: drill Rubro → Familia → Grupo → Artículo ---
+        // drill = { tipoDesc, arts:[{codigo,descripcion,cantidad,monto,famCod,famDesc,gruCod,gruDesc}],
+        //           fam:{cod,desc}|null, gru:{cod,desc}|null, groups:[] }
+        let drill = null;
+
+        function abrirRubroIdx(i) {
+            const t = dataGlobal && dataGlobal.top_tipos_venta && dataGlobal.top_tipos_venta[i];
+            if (!t) return;
+            const arts = (dataGlobal.articulos_por_tipo && dataGlobal.articulos_por_tipo[t.codigo]) || [];
+            drill = { tipoDesc: t.descripcion, arts: arts, fam: null, gru: null, groups: [] };
+            renderDrill();
+            document.getElementById('tipos-venta-lista').classList.add('hidden');
+            document.getElementById('tipos-venta-detalle').classList.remove('hidden');
+            // Mientras se mira el detalle, frenamos la rotación automática para que no cambie de vista sola.
+            clearInterval(rotarInterval); pauseProgress();
+        }
+
+        // Agrupa artículos por una clave (cod) y descripción, sumando unidades/monto. Ordena por monto desc.
+        function agrupar(arr, codKey, descKey) {
+            const m = {};
+            arr.forEach(a => {
+                const c = a[codKey] || '?';
+                if (!m[c]) m[c] = { cod: c, desc: a[descKey] || '', cant: 0, monto: 0 };
+                m[c].cant += Number(a.cantidad || 0); m[c].monto += Number(a.monto || 0);
+            });
+            return Object.values(m).sort((x, y) => y.monto - x.monto);
+        }
+
+        function renderDrill() {
+            if (!drill) return;
+            const head = document.getElementById('rubro-detalle-head');
+            const body = document.getElementById('table-rubro-detalle');
+            const tit = document.getElementById('rubro-detalle-titulo');
+
+            let crumb = drill.tipoDesc;
+            if (drill.fam) crumb += ' › ' + (drill.fam.desc || drill.fam.cod);
+            if (drill.gru) crumb += ' › ' + (drill.gru.desc || drill.gru.cod);
+
+            if (!drill.fam) {                       // nivel FAMILIA
+                drill.groups = agrupar(drill.arts, 'famCod', 'famDesc');
+                const tot = drill.groups.reduce((s, g) => s + g.monto, 0) || 1;
+                tit.innerText = crumb + ' · ' + drill.groups.length + ' familia(s) — tocá una';
+                head.innerHTML = '<th style="width:5%;">#</th><th>Familia</th><th style="width:16%; text-align:center;">Unidades</th><th style="width:20%; text-align:right;">Recaudación</th><th style="width:12%; text-align:right;">%</th>';
+                body.innerHTML = drill.groups.map((g, j) => { const pct = g.monto / tot * 100; return `<tr style="cursor:pointer;" title="Ver grupos" onclick="drillInto(${j})"><td>${j+1}</td><td>${g.desc||g.cod}</td><td style="text-align:center; color: var(--tx-2);">${nf(g.cant)}</td><td class="qty">${nf(g.monto)}</td><td style="text-align:right; color: var(--proj-color); font-weight:bold;">${pct.toFixed(1)}%</td></tr>`; }).join('');
+            } else if (!drill.gru) {                // nivel GRUPO
+                const sub = drill.arts.filter(a => a.famCod === drill.fam.cod);
+                drill.groups = agrupar(sub, 'gruCod', 'gruDesc');
+                const tot = drill.groups.reduce((s, g) => s + g.monto, 0) || 1;
+                tit.innerText = crumb + ' · ' + drill.groups.length + ' grupo(s) — tocá uno';
+                head.innerHTML = '<th style="width:5%;">#</th><th>Grupo</th><th style="width:16%; text-align:center;">Unidades</th><th style="width:20%; text-align:right;">Recaudación</th><th style="width:12%; text-align:right;">%</th>';
+                body.innerHTML = drill.groups.map((g, j) => { const pct = g.monto / tot * 100; return `<tr style="cursor:pointer;" title="Ver artículos" onclick="drillInto(${j})"><td>${j+1}</td><td>${g.desc||g.cod}</td><td style="text-align:center; color: var(--tx-2);">${nf(g.cant)}</td><td class="qty">${nf(g.monto)}</td><td style="text-align:right; color: var(--proj-color); font-weight:bold;">${pct.toFixed(1)}%</td></tr>`; }).join('');
+            } else {                                // nivel ARTÍCULO
+                drill.groups = [];
+                const arts = drill.arts.filter(a => a.famCod === drill.fam.cod && a.gruCod === drill.gru.cod);
+                tit.innerText = crumb + ' · ' + arts.length + ' artículo(s)';
+                head.innerHTML = '<th style="width:5%;">#</th><th style="width:15%;">Código</th><th>Descripción del Artículo</th><th style="width:15%; text-align:center;">Unidades</th><th style="width:20%; text-align:right;">Recaudación</th>';
+                body.innerHTML = arts.length
+                    ? arts.map((a, j) => `<tr><td>${j+1}</td><td style="color: var(--tx-2);">${a.codigo||''}</td><td>${a.descripcion}</td><td style="text-align:center; color: var(--tx-2);">${nf(a.cantidad)}</td><td class="qty">${nf(a.monto)}</td></tr>`).join('')
+                    : '<tr><td colspan="5" style="text-align:center; color: var(--tx-2); padding:40px;">Sin artículos.</td></tr>';
+            }
+        }
+
+        // Entra al siguiente nivel desde la fila j del nivel actual.
+        function drillInto(j) {
+            if (!drill) return;
+            const g = drill.groups[j];
+            if (!g) return;
+            if (!drill.fam) drill.fam = { cod: g.cod, desc: g.desc };
+            else if (!drill.gru) drill.gru = { cod: g.cod, desc: g.desc };
+            renderDrill();
+        }
+
+        // "Volver" retrocede un nivel; desde Familia (raíz del drill) vuelve a la tabla de rubros.
+        function volverRubros() {
+            if (drill && drill.gru) { drill.gru = null; renderDrill(); return; }
+            if (drill && drill.fam) { drill.fam = null; renderDrill(); return; }
+            resetRubros();
+            if (!isPaused) { clearInterval(rotarInterval); rotarInterval = setInterval(() => cambiarVista(1), ROTACION_MS); resetProgress(); }
+        }
+
+        function resetRubros() {
+            drill = null;
+            const det = document.getElementById('tipos-venta-detalle');
+            const lis = document.getElementById('tipos-venta-lista');
+            if (det && lis) { det.classList.add('hidden'); lis.classList.remove('hidden'); }
         }
 
         function updateCajero() {
@@ -545,6 +676,7 @@
             paneles[vistaActual].classList.add('hidden');
             vistaActual = idx;
             paneles[vistaActual].classList.remove('hidden');
+            resetRubros();   // al cambiar de vista, los rubros vuelven a la lista (no quedan en detalle)
             renderDots();
             resetProgress();
             if (!isPaused) {

@@ -8,6 +8,9 @@ public interface IRemitosLookupService
     Task<ArticuloLookupDto?> BuscarArticuloAsync(string cod, CancellationToken ct = default);
     Task<BolsaDto?> BuscarBolsaAsync(string nroBolsa, CancellationToken ct = default);
     Task<IReadOnlyList<BolsaRenglonDto>> BuscarRemitoLocalAsync(string local, int punto, int numero, CancellationToken ct = default);
+
+    /// <summary>El QR de la bolsa es el CODIGO del comprobante; lo busca en COMPROBANTEV de las 3 bases (CENTRAL/LURO/PERALTA). Avisa si está anulado.</summary>
+    Task<RemitoPorCodigoDto> BuscarRemitoPorCodigoAsync(string codigo, CancellationToken ct = default);
     Task<IReadOnlyList<MotivoDto>> MotivosAsync(CancellationToken ct = default);
 
     /// <summary>

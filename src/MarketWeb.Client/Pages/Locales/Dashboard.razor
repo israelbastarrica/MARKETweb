@@ -11,7 +11,7 @@
 }
 else if (_mobile == false)
 {
-    <iframe src="dashboard.html" class="dashboard-frame" title="Dashboard Market" allow="fullscreen" allowfullscreen></iframe>
+    <iframe src="@_src" class="dashboard-frame" title="Dashboard Market" allow="fullscreen" allowfullscreen></iframe>
 }
 else
 {
@@ -32,6 +32,9 @@ else
 
 @code {
     private bool? _mobile;
+    // Cache-bust: el dashboard.html es estático y se carga en iframe; sin esto el navegador
+    // sirve la versión vieja tras un deploy. Token por carga → siempre trae el HTML fresco.
+    private readonly string _src = $"dashboard.html?v={Guid.NewGuid():N}";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
