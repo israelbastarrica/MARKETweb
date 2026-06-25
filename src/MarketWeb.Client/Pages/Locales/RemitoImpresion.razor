@@ -209,7 +209,7 @@
                                     @foreach (var r in _anulados)
                                     {
                                         <tr class="fila-anulado">
-                                            <td><span class="badge @BadgeRechazoClase(r.EstadoRechazo)">@TextoRechazo(r.EstadoRechazo)</span></td>
+                                            <td><span class="badge @BadgeRechazoClase(r)">@TextoRechazo(r)</span></td>
                                             <td class="fw-semibold">@r.NroRemito</td>
                                             <td>@r.LocalOrigen</td>
                                             <td>@r.LocalDestino</td>
@@ -390,18 +390,20 @@
         finally { _cargandoAnulados = false; }
     }
 
-    private static string TextoRechazo(string? estado) => estado switch
+    private static string TextoRechazo(RemitoColaDto r) => r.EstadoRechazo switch
     {
         "RECHAZADO_OK" => "Rechazado",
         "PENDIENTE_API" => "Pendiente",
+        "REVISAR" when r.PasoUnoHecho => "En curso",
         null or "" => "Anulado",
-        _ => estado
+        _ => r.EstadoRechazo
     };
 
-    private static string BadgeRechazoClase(string? estado) => estado switch
+    private static string BadgeRechazoClase(RemitoColaDto r) => r.EstadoRechazo switch
     {
         "RECHAZADO_OK" => "bg-danger",
         "PENDIENTE_API" => "bg-warning text-dark",
+        "REVISAR" when r.PasoUnoHecho => "bg-info text-dark",
         _ => "bg-secondary"
     };
 

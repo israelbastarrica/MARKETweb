@@ -48,7 +48,23 @@ public sealed class RemitoImpresionService : IRemitoImpresionService
                    c.ErrorMsg, c.FechaDetectado, c.FechaImpreso, c.IPImpresora AS IpImpresora, c.Reimpresiones, c.SALTAFW AS Saltafw,
                    Anulado       = CASE WHEN rr.RemitoCODIGO IS NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END,
                    EstadoRechazo = rr.Estado,
-                   FechaAnulado  = rr.FechaRecepcion
+                   FechaAnulado  = rr.FechaRecepcion,
+                   PasoUnoHecho  = CAST(CASE
+                       WHEN rr.RemitoCODIGO IS NULL THEN 0
+                       WHEN UPPER(RTRIM(c.LocalDestino)) = 'LURO' AND EXISTS (
+                           SELECT 1 FROM DRAGONFISH_LURO.ZooLogic.MTRANS WITH(NOLOCK)
+                           WHERE RTRIM(REMITO) = 'R ' + RIGHT('0000' + CAST(c.FPTOVEN AS VARCHAR), 4) + '-' +
+                                                        RIGHT('00000000' + CAST(c.FNUMCOMP AS VARCHAR), 8)
+                             AND DIRMOV = 2 AND ISNULL(ANULADO, 0) = 0
+                       ) THEN 1
+                       WHEN UPPER(RTRIM(c.LocalDestino)) = 'PERALTA' AND EXISTS (
+                           SELECT 1 FROM [marketperalta.ddns.net].DRAGONFISH_PERALTA.ZooLogic.MTRANS WITH(NOLOCK)
+                           WHERE RTRIM(REMITO) = 'R ' + RIGHT('0000' + CAST(c.FPTOVEN AS VARCHAR), 4) + '-' +
+                                                        RIGHT('00000000' + CAST(c.FNUMCOMP AS VARCHAR), 8)
+                             AND DIRMOV = 2 AND ISNULL(ANULADO, 0) = 0
+                       ) THEN 1
+                       ELSE 0
+                   END AS BIT)
             FROM   ImpresorRemito_Cola c
             OUTER APPLY (
                 SELECT TOP 1 RR.RemitoCODIGO, RR.Estado, RR.FechaRecepcion
