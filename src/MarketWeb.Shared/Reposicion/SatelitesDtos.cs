@@ -45,7 +45,16 @@ public sealed class EventoDetalleDto
     public bool Procesado { get; set; }
     public bool Eliminado { get; set; }
     public bool TieneFoto { get; set; }
+    public int? IDMotivoEvento { get; set; }       // motivo normalizado asignado al evento
+    public string MotivoEvento { get; set; } = "";  // nombre del motivo (para mostrar)
     public List<EventoItemDto> Items { get; set; } = new();
+}
+
+/// <summary>Motivo del catálogo normalizado de eventos (MARKET.dbo.MotivosEvento).</summary>
+public sealed class MotivoEventoDto
+{
+    public int Id { get; set; }
+    public string Nombre { get; set; } = "";
 }
 
 // ---- Reseteados (RepoReposicionArticulosReseteados) ----

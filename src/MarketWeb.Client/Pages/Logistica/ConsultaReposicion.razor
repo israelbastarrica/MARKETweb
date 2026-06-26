@@ -4,10 +4,18 @@
 @inject EventosApi EventosApi
 @inject PageStateService State
 @inject UiService Ui
+@inject NavigationManager Nav
 
 <PageTitle>Consulta Reposición</PageTitle>
 
 <div class="market-page cr">
+    @if (!string.IsNullOrWhiteSpace(Ref))
+    {
+        <button class="btn-volver" @onclick="Volver">
+            <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+            <span>Volver</span>
+        </button>
+    }
     <PageHeader Modulo="Logística" Titulo="Consulta Artículo" Icono="fa-solid fa-magnifying-glass-chart" CompartirQuery="@CompartirQuery" />
 
     <fieldset class="cr-box">
@@ -225,7 +233,11 @@
     [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQuery { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQuery { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "hist")] public bool? HistQuery { get; set; }
+    // De dónde se llegó (ej. /logistica/eventos), para el botón Volver. No entra en el link Compartir.
+    [Parameter, SupplyParameterFromQuery(Name = "ref")] public string? Ref { get; set; }
     private string? _ultimoQ;
+
+    private void Volver() => Nav.NavigateTo(string.IsNullOrWhiteSpace(Ref) ? "/logistica/eventos" : Ref);
 
     private sealed class Snap
     {

@@ -21,4 +21,13 @@ public interface IEventosService
 
     /// <summary>Soft-delete (Eliminado=1) — para cargas erradas, distinto de procesar.</summary>
     Task EliminarAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Catálogo de motivos normalizados (activos) para clasificar la causa del evento.</summary>
+    Task<IReadOnlyList<MotivoEventoDto>> ListarMotivosAsync(CancellationToken ct = default);
+
+    /// <summary>Alta de un motivo en el catálogo (idempotente por nombre). Devuelve el motivo (nuevo o existente).</summary>
+    Task<MotivoEventoDto> CrearMotivoAsync(string nombre, string usuario, CancellationToken ct = default);
+
+    /// <summary>Asigna (o limpia con 0) el motivo normalizado del evento (EventosReposicion.IDMotivoEvento).</summary>
+    Task GuardarMotivoAsync(int idEvento, int idMotivo, CancellationToken ct = default);
 }
