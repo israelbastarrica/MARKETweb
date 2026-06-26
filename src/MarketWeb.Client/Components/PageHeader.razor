@@ -1,3 +1,7 @@
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject MarketWeb.Client.Services.UiService Ui
+
 <div class="header">
     <div class="icon"><i class="@Icono" aria-hidden="true"></i></div>
     <div class="crumbs">
@@ -8,10 +12,38 @@
         }
         <h1 class="title">@Titulo</h1>
     </div>
+    @if (Compartible)
+    {
+        <button class="btn btn-outline-secondary btn-sm no-print" style="margin-left:auto" @onclick="Compartir"
+                title="Copiar un link a esta pantalla (con sus filtros) para compartirla">
+            <i class="fa-solid fa-share-nodes me-1"></i> Compartir
+        </button>
+    }
 </div>
 
 @code {
     [Parameter] public string? Modulo { get; set; }
     [Parameter, EditorRequired] public string Titulo { get; set; } = "";
     [Parameter] public string Icono { get; set; } = "fa-solid fa-square";
+
+    /// <summary>Querystring con el estado de la pantalla (ej. "local=LURO&amp;art=XXX"). Si es null, comparte la URL actual tal cual.</summary>
+    [Parameter] public string? CompartirQuery { get; set; }
+    /// <summary>Permite ocultar el botón Compartir en pantallas donde no aplica.</summary>
+    [Parameter] public bool Compartible { get; set; } = true;
+
+    // Arma el link a ESTA pantalla con su estado y lo copia al portapapeles, para pegarlo en chat/mail.
+    private async Task Compartir()
+    {
+        var basePath = Nav.Uri.Split('?')[0];
+        var url = string.IsNullOrWhiteSpace(CompartirQuery) ? Nav.Uri : $"{basePath}?{CompartirQuery}";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            Ui.Exito("Link copiado. Pegalo en el chat o mail del usuario.");
+        }
+        catch
+        {
+            Ui.Error("No se pudo copiar solo. Link: " + url);
+        }
+    }
 }

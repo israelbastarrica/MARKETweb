@@ -13,7 +13,7 @@
             <span>Volver</span>
         </button>
     }
-    <PageHeader Titulo="Consulta de Artículo" Icono="fa-solid fa-barcode" />
+    <PageHeader Titulo="Consulta de Artículo" Icono="fa-solid fa-barcode" CompartirQuery="@CompartirQuery" />
 
     <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
         <div>
@@ -159,6 +159,11 @@
     private bool _buscandoPalets;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    // Compartir: link con el artículo + ubicación (ya es deep-linkable por codigo/local).
+    private string? CompartirQuery => string.IsNullOrWhiteSpace(_codigo)
+        ? null
+        : $"codigo={Uri.EscapeDataString(_codigo)}" + (string.IsNullOrWhiteSpace(_ubicacion) ? "" : $"&local={Uri.EscapeDataString(_ubicacion)}");
 
     protected override async Task OnInitializedAsync()
     {

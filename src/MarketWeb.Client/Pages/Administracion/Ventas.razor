@@ -5,7 +5,7 @@
 <PageTitle>Ventas · Cobranzas</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Administración" Titulo="Ventas" Icono="fa-solid fa-cash-register" />
+    <PageHeader Modulo="Administración" Titulo="Ventas" Icono="fa-solid fa-cash-register" CompartirQuery="@CompartirQuery" />
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
         <div>
@@ -186,6 +186,34 @@
             : (MediosPorCategoria.TryGetValue(_categoria, out var m) ? m : Enumerable.Empty<string>());
 
     private void OnCategoriaChange() => _medio = "TODOS"; // al cambiar categoría, reset medio
+
+    // Deep-link / Compartir: filtros en la URL. Si llega con filtros, auto-procesa.
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "agr")] public string? AgrQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "det")] public string? DetQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "cat")] public string? CatQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "medio")] public string? MedioQ { get; set; }
+
+    private string CompartirQuery =>
+        $"desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}&local={Uri.EscapeDataString(_local)}"
+        + $"&agr={Uri.EscapeDataString(_agrupamiento)}&det={Uri.EscapeDataString(_detalle)}"
+        + $"&cat={Uri.EscapeDataString(_categoria)}&medio={Uri.EscapeDataString(_medio)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hayQuery = DesdeQ != null || HastaQ != null || LocalQ != null || AgrQ != null || DetQ != null || CatQ != null || MedioQ != null;
+        if (!hayQuery) return;
+        if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+        if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+        if (LocalQ != null) _local = LocalQ;
+        if (AgrQ != null) _agrupamiento = AgrQ;
+        if (DetQ != null) _detalle = DetQ;
+        if (CatQ != null) _categoria = CatQ;
+        if (MedioQ != null) _medio = MedioQ;
+        await Procesar();
+    }
 
     private async Task ExportarExcel()
     {

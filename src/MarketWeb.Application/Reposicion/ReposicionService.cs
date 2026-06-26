@@ -288,7 +288,7 @@ public sealed class ReposicionService : IReposicionService
         };
     }
 
-    public async Task<ExplicarDto> ExplicarAsync(string local, string artCod, CancellationToken ct = default)
+    public async Task<ExplicarDto> ExplicarAsync(string local, string artCod, bool historiaCompleta = false, CancellationToken ct = default)
     {
         local = (local ?? "").Trim();
         artCod = (artCod ?? "").Trim();
@@ -313,6 +313,10 @@ public sealed class ReposicionService : IReposicionService
         };
         cmd.Parameters.Add("@Local", SqlDbType.NVarChar, 20).Value = local;
         cmd.Parameters.Add("@ARTCOD", SqlDbType.VarChar, 20).Value = artCod;
+        // Solo lo mandamos cuando se pide: con el check apagado, el SP corre como siempre (no requiere
+        // la versión nueva del SP). Con historiaCompleta=1 el RS3 baja el piso a 1900 (ledger completo).
+        if (historiaCompleta)
+            cmd.Parameters.Add("@HistoriaCompleta", SqlDbType.Bit).Value = true;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
@@ -469,7 +473,7 @@ public sealed class ReposicionService : IReposicionService
             return new ResetResultadoDto { Ok = false, Mensaje = "El evento no tiene cantidad de packs para aplicar el reset." };
 
         // El reset por evento se ancla al ÚLTIMO REMITO (lo trae el explain del SP, igual que el desktop).
-        var exp = await ExplicarAsync(local, artCod, ct);
+        var exp = await ExplicarAsync(local, artCod, false, ct);
         if (exp.Resumen.UltRemitoFecha is null)
             return new ResetResultadoDto { Ok = false, Mensaje = "No hay último remito para este artículo/local; no se puede anclar el reset." };
 

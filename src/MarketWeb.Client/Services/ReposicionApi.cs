@@ -30,9 +30,9 @@ public sealed class ReposicionApi
         => await _http.GetFromJsonAsync<List<CorridaDto>>("api/reposicion/historial") ?? new();
 
     /// <summary>"Explain" de un artículo en un local (por qué repone lo que repone).</summary>
-    public async Task<ExplicarDto?> ExplicarAsync(string local, string artCod)
+    public async Task<ExplicarDto?> ExplicarAsync(string local, string artCod, bool historiaCompleta = false)
         => await _http.GetFromJsonAsync<ExplicarDto>(
-            $"api/reposicion/explicar?local={Uri.EscapeDataString(local)}&artCod={Uri.EscapeDataString(artCod)}");
+            $"api/reposicion/explicar?local={Uri.EscapeDataString(local)}&artCod={Uri.EscapeDataString(artCod)}&historiaCompleta={(historiaCompleta ? "true" : "false")}");
 
     /// <summary>Resetea un artículo desde un remito. Devuelve Ok + mensaje (idempotente).</summary>
     public async Task<ResetResultadoDto> ResetearDesdeRemitoAsync(ResetRemitoRequest req)

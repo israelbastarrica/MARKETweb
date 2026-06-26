@@ -5,7 +5,7 @@
 <PageTitle>Telas</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Producción" Titulo="Telas" Icono="fa-solid fa-scroll" />
+    <PageHeader Modulo="Producción" Titulo="Telas" Icono="fa-solid fa-scroll" CompartirQuery="@CompartirQuery" />
 
     @* Filtros *@
     <div class="market-card p-3 mb-3">
@@ -300,9 +300,29 @@
     private CatalogoSaveRequest _catEdit = new();
     private string? _catError;
 
+    // Deep-link / Compartir: filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "dep")] public int? DepQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "textil")] public int? TextilQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "material")] public string? MaterialQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string>();
+            if (_fDeposito != 0) p.Add($"dep={_fDeposito}");
+            if (_fTextil != 0) p.Add($"textil={_fTextil}");
+            if (!string.IsNullOrWhiteSpace(_fMaterial)) p.Add($"material={Uri.EscapeDataString(_fMaterial)}");
+            return string.Join("&", p);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await CargarCombos();
+        if (DepQ.HasValue) _fDeposito = DepQ.Value;
+        if (TextilQ.HasValue) _fTextil = TextilQ.Value;
+        if (MaterialQ != null) _fMaterial = MaterialQ;
         await Cargar();
     }
 

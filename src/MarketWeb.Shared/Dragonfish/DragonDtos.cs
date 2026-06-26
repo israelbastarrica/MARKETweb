@@ -69,6 +69,15 @@ public sealed class BolsaRenglonDto
     public int Cantidad { get; set; }
 }
 
+/// <summary>Resultado de buscar un remito por su CODIGO (QR de la bolsa) en las 3 bases.</summary>
+public sealed class RemitoPorCodigoDto
+{
+    public bool Encontrado { get; set; }
+    public bool Anulado { get; set; }
+    public string? Origen { get; set; }   // CENTRAL / LURO / PERALTA donde se encontró
+    public List<BolsaRenglonDto> Renglones { get; set; } = new();   // vacío si está anulado
+}
+
 /// <summary>Resultado del POST a Dragonfish (incluye lo enviado y la respuesta cruda para diagnosticar).</summary>
 public sealed class DragonRemitoResultDto
 {

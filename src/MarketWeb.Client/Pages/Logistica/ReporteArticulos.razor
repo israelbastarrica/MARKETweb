@@ -9,7 +9,7 @@
 <PageTitle>Reporte Artículos</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Reporte Artículos" Icono="fa-solid fa-shirt" />
+    <PageHeader Modulo="Logística" Titulo="Reporte Artículos" Icono="fa-solid fa-shirt" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Artículos con su configuración de packs. Seleccioná filas y usá <strong>Editar packs</strong> para fijar Cant. por pack / packs de reemplazo en masa.
     </p>
@@ -217,10 +217,44 @@
         public bool Busco;
     }
 
+    // Deep-link / Compartir: filtros en la URL. Si llega con filtros, auto-busca.
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desc")] public string? DescQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "tipo")] public string? TipoQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "combo")] public string? ComboQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "fam")] public string? FamQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "cat")] public string? CatQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "temp")] public string? TempQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "prov")] public string? ProvQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "anio")] public string? AnioQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "stock")] public int? StockQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_f.CodArt)) p.Add($"art={Uri.EscapeDataString(_f.CodArt)}");
+            if (!string.IsNullOrWhiteSpace(_f.Descripcion)) p.Add($"desc={Uri.EscapeDataString(_f.Descripcion)}");
+            if (_f.Tipo != "TODOS") p.Add($"tipo={Uri.EscapeDataString(_f.Tipo)}");
+            if (_f.Combo != "TODOS") p.Add($"combo={Uri.EscapeDataString(_f.Combo)}");
+            if (_f.Familia != "TODOS") p.Add($"fam={Uri.EscapeDataString(_f.Familia)}");
+            if (_f.Categoria != "TODOS") p.Add($"cat={Uri.EscapeDataString(_f.Categoria)}");
+            if (_f.Temporada != "TODOS") p.Add($"temp={Uri.EscapeDataString(_f.Temporada)}");
+            if (!string.IsNullOrEmpty(_provSel)) p.Add($"prov={Uri.EscapeDataString(_provSel)}");
+            if (!string.IsNullOrEmpty(_anioSel)) p.Add($"anio={Uri.EscapeDataString(_anioSel)}");
+            if (_f.Stock != 0) p.Add($"stock={_f.Stock}");
+            return string.Join("&", p);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        var hayQuery = ArtQ != null || DescQ != null || TipoQ != null || ComboQ != null || FamQ != null
+            || CatQ != null || TempQ != null || ProvQ != null || AnioQ != null || StockQ.HasValue;
+
         // Restaura la consulta al volver (ej. de la ficha del artículo) sin re-buscar ni recargar combos.
-        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
             _c = s.Combos;
             _f = s.Filtro;
@@ -233,6 +267,21 @@
             return;
         }
         try { _c = await Api.CombosAsync(); } catch { _c = new(); }
+
+        if (hayQuery)
+        {
+            if (ArtQ != null) _f.CodArt = ArtQ;
+            if (DescQ != null) _f.Descripcion = DescQ;
+            if (TipoQ != null) _f.Tipo = TipoQ;
+            if (ComboQ != null) _f.Combo = ComboQ;
+            if (FamQ != null) _f.Familia = FamQ;
+            if (CatQ != null) _f.Categoria = CatQ;
+            if (TempQ != null) _f.Temporada = TempQ;
+            if (ProvQ != null) _provSel = ProvQ;
+            if (AnioQ != null) _anioSel = AnioQ;
+            if (StockQ.HasValue) _f.Stock = StockQ.Value;
+            await Buscar();
+        }
     }
 
     public void Dispose()

@@ -7,7 +7,7 @@
 <PageTitle>Reposición</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Reposición" Icono="fa-solid fa-clipboard-check" />
+    <PageHeader Modulo="Logística" Titulo="Reposición" Icono="fa-solid fa-clipboard-check" CompartirQuery="@CompartirQuery" />
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
         <div>
@@ -186,6 +186,21 @@
     private string _local = "TODOS";
     private DateTime _fecha = DateTime.Today;
     private bool _generarReemplazos = true;
+
+    // Deep-link / Compartir: filtros en la URL. Pre-carga al abrir; NO calcula solo (Calcular corre el SP).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "fecha")] public string? FechaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "reemp")] public bool? ReempQ { get; set; }
+
+    private string CompartirQuery =>
+        $"local={Uri.EscapeDataString(_local)}&fecha={_fecha:yyyy-MM-dd}&reemp={(_generarReemplazos ? 1 : 0)}";
+
+    protected override void OnInitialized()
+    {
+        if (LocalQ != null) _local = LocalQ;
+        if (DateTime.TryParse(FechaQ, out var d)) _fecha = d;
+        if (ReempQ.HasValue) _generarReemplazos = ReempQ.Value;
+    }
 
     private bool _corriendo;
     private string? _error;

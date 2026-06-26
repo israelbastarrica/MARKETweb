@@ -9,7 +9,7 @@
 <PageTitle>Reseteados</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Reseteados" Icono="fa-solid fa-rotate-left" />
+    <PageHeader Modulo="Logística" Titulo="Reseteados" Icono="fa-solid fa-rotate-left" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Artículos cuyo contador de reposición se reseteó, con los packs detectados en ese momento.
     </p>
@@ -142,14 +142,31 @@
     private const string StateKey = "reseteados";
     private sealed class Snap { public List<string> Mobiliarios = new(); public string FLocal = "TODOS"; public string FMobiliario = "TODOS"; public string FArtCod = ""; public List<ReseteadoDto> Items = new(); }
 
+    // Deep-link / Compartir: filtros en la URL (?local=&mob=&art=).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "mob")] public string? MobQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+
+    private string CompartirQuery =>
+        $"local={Uri.EscapeDataString(_fLocal)}&mob={Uri.EscapeDataString(_fMobiliario)}"
+        + (string.IsNullOrWhiteSpace(_fArtCod) ? "" : $"&art={Uri.EscapeDataString(_fArtCod.Trim())}");
+
     protected override async Task OnInitializedAsync()
     {
-        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        var hayQuery = LocalQ != null || MobQ != null || ArtQ != null;
+
+        if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
             _mobiliarios = s.Mobiliarios; _fLocal = s.FLocal; _fMobiliario = s.FMobiliario; _fArtCod = s.FArtCod; _items = s.Items; _cargando = false;
             return;
         }
         try { _mobiliarios = await Api.MobiliariosAsync(); } catch { _mobiliarios = new(); }
+        if (hayQuery)
+        {
+            if (LocalQ != null) _fLocal = LocalQ;
+            if (MobQ != null) _fMobiliario = MobQ;
+            if (ArtQ != null) _fArtCod = ArtQ;
+        }
         await Cargar();
     }
 

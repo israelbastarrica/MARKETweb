@@ -26,6 +26,10 @@ public sealed class RemitoColaDto
     public string? EstadoRechazo { get; set; }   // PENDIENTE_API | RECHAZADO_OK | ... (RemitoRecepcion.Estado)
     public DateTime? FechaAnulado { get; set; }   // RemitoRecepcion.FechaRecepcion del pedido de rechazo
 
+    // True si el rechazo ya tiene Salida DIRMOV=2 en MTRANS del destino (paso 1 hecho).
+    // Se usa para mostrar "En curso" en vez de "REVISAR" cuando el paso 1 ya esta hecho.
+    public bool PasoUnoHecho { get; set; }
+
     public string NroRemito => $"{Punto:D4}-{NroComp:D8}";
 }
 

@@ -9,7 +9,7 @@
 <PageTitle>Mapeo</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Locales" Titulo="Mapeo" Icono="fa-solid fa-map" />
+    <PageHeader Modulo="Locales" Titulo="Mapeo" Icono="fa-solid fa-map" CompartirQuery="@CompartirQuery" />
 
     <div class="market-card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -363,6 +363,30 @@
         string FSector, string FMobiliario, string FModulo, string FFila, string FPosicion, string FArticulo,
         List<MapeoPosicionDto> Todas, List<MapeoPosicionDto> Resultado);
 
+    // Deep-link / Compartir: ubicación + filtros en la URL.
+    [Parameter, SupplyParameterFromQuery(Name = "ubic")] public int? UbicQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sector")] public string? SectorQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "mob")] public string? MobQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "modulo")] public string? ModuloQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "fila")] public string? FilaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "pos")] public string? PosQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string> { $"ubic={_idUbicacion}" };
+            if (!string.IsNullOrWhiteSpace(_fSector)) p.Add($"sector={Uri.EscapeDataString(_fSector)}");
+            if (!string.IsNullOrWhiteSpace(_fMobiliario)) p.Add($"mob={Uri.EscapeDataString(_fMobiliario)}");
+            if (!string.IsNullOrWhiteSpace(_fModulo)) p.Add($"modulo={Uri.EscapeDataString(_fModulo)}");
+            if (!string.IsNullOrWhiteSpace(_fFila)) p.Add($"fila={Uri.EscapeDataString(_fFila)}");
+            if (!string.IsNullOrWhiteSpace(_fPosicion)) p.Add($"pos={Uri.EscapeDataString(_fPosicion)}");
+            if (!string.IsNullOrWhiteSpace(_fArticulo)) p.Add($"art={Uri.EscapeDataString(_fArticulo)}");
+            return string.Join("&", p);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _navReg = Nav.RegisterLocationChangingHandler(OnNavegandoAfuera);
@@ -370,8 +394,10 @@
         try { _ubicaciones = await Api.ListarUbicacionesAsync(); }
         catch (Exception ex) { _error = "No se pudieron cargar las ubicaciones."; Console.Error.WriteLine(ex); }
 
+        var hayQuery = UbicQ.HasValue || SectorQ != null || MobQ != null || ModuloQ != null || FilaQ != null || PosQ != null || ArtQ != null;
+
         // Si hay estado guardado (se vuelve de otra pantalla), restaurar tal cual.
-        if (State.TryGet<EstadoMapeo>(EstadoKey, out var st, out _scroll))
+        if (!hayQuery && State.TryGet<EstadoMapeo>(EstadoKey, out var st, out _scroll))
         {
             _idUbicacion = st.IdUbicacion; _idUbicacionCargada = st.IdUbicacionCargada; _ubicacionFija = st.Fija;
             _fSector = st.FSector; _fMobiliario = st.FMobiliario; _fModulo = st.FModulo;
@@ -398,6 +424,18 @@
         else
         {
             _idUbicacion = _ubicaciones.FirstOrDefault()?.IdUbicacion ?? 0;
+        }
+
+        // Filtros del link (la ubicación se respeta solo si el perfil no la fija).
+        if (hayQuery)
+        {
+            if (!_ubicacionFija && UbicQ.HasValue) _idUbicacion = UbicQ.Value;
+            if (SectorQ != null) _fSector = SectorQ;
+            if (MobQ != null) _fMobiliario = MobQ;
+            if (ModuloQ != null) _fModulo = ModuloQ;
+            if (FilaQ != null) _fFila = FilaQ;
+            if (PosQ != null) _fPosicion = PosQ;
+            if (ArtQ != null) _fArticulo = ArtQ;
         }
 
         await Buscar();

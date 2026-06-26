@@ -26,4 +26,17 @@ public sealed class EventosApi
 
     public async Task<bool> EliminarAsync(int id)
         => (await _http.DeleteAsync($"api/eventos/{id}")).IsSuccessStatusCode;
+
+    // ---- Motivos normalizados ----
+    public async Task<List<MotivoEventoDto>> ListarMotivosAsync()
+        => await _http.GetFromJsonAsync<List<MotivoEventoDto>>("api/eventos/motivos") ?? new();
+
+    public async Task<MotivoEventoDto?> CrearMotivoAsync(string nombre)
+    {
+        var resp = await _http.PostAsJsonAsync("api/eventos/motivos", new { nombre });
+        return resp.IsSuccessStatusCode ? await resp.Content.ReadFromJsonAsync<MotivoEventoDto>() : null;
+    }
+
+    public async Task<bool> GuardarMotivoAsync(int id, int idMotivo)
+        => (await _http.PostAsJsonAsync($"api/eventos/{id}/motivo", new { idMotivo })).IsSuccessStatusCode;
 }

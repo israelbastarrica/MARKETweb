@@ -9,7 +9,7 @@
 <PageTitle>Eventos reposición</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Logística" Titulo="Eventos" Icono="fa-solid fa-triangle-exclamation" />
+    <PageHeader Modulo="Logística" Titulo="Eventos" Icono="fa-solid fa-triangle-exclamation" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Sobrantes y faltantes que cargan los locales en piso. Doble clic / botón para ver el detalle, foto y marcarlo como procesado.
     </p>
@@ -71,7 +71,7 @@
                                     {
                                         <span class="art-cod-link">
                                             <span class="badge-perfil">@ev.ArtCod</span>
-                                            <a class="art-cod-ir" href="@($"/logistica/consulta-reposicion?local={ev.Local}&art={Uri.EscapeDataString(ev.ArtCod)}")"
+                                            <a class="art-cod-ir" href="@($"/logistica/consulta-reposicion?local={ev.Local}&art={Uri.EscapeDataString(ev.ArtCod)}&ref={Uri.EscapeDataString("/logistica/eventos")}")"
                                                title="Ver consulta de reposición (remitos, venta, packs)">
                                                 <i class="fa-solid fa-up-right-from-square"></i>
                                             </a>
@@ -189,6 +189,35 @@
                             <div class="form-text">Re-ancla el artículo al último remito y pone el pendiente en cero. FALTANTE suma packs, SOBRANTE los resta.</div>
                         }
                     }
+
+                    @* Motivo normalizado (causa del desvío). Disponible para cualquier evento no eliminado. *@
+                    @if (!_det.Eliminado)
+                    {
+                        <hr />
+                        <div class="d-flex flex-wrap align-items-end gap-2">
+                            <div style="min-width:260px">
+                                <label class="form-label small text-muted mb-1">Motivo (causa del desvío)</label>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select" @bind="_idMotivoSel" @bind:after="GuardarMotivo">
+                                        <option value="0">— sin motivo —</option>
+                                        @foreach (var m in _motivos) { <option value="@m.Id">@m.Nombre</option> }
+                                    </select>
+                                    <button class="btn btn-outline-success" type="button" title="Agregar un motivo nuevo al catálogo"
+                                            @onclick="() => _agregandoMotivo = !_agregandoMotivo">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            @if (_agregandoMotivo)
+                            {
+                                <div class="input-group input-group-sm" style="max-width:340px">
+                                    <input class="form-control" placeholder="Nuevo motivo..." @bind="_nuevoMotivo" @onkeyup="OnMotivoKey" maxlength="200" />
+                                    <button class="btn btn-success" type="button" @onclick="AgregarMotivo" disabled="@_guardandoMotivo">Agregar</button>
+                                </div>
+                            }
+                        </div>
+                        <div class="form-text">Normalizá la causa (ej. "Refuerzo excesivo", "Pack mal cargado", "Venta no reflejada"). El <b>+</b> da de alta un motivo nuevo al catálogo.</div>
+                    }
                 </div>
                 <div class="modal-footer">
                     @if (_det.Eliminado)
@@ -233,15 +262,39 @@
     private EventoDetalleDto? _det;
     private string _accion = "", _accionComentario = "";
 
+    // Motivos normalizados (catálogo + alta inline).
+    private List<MotivoEventoDto> _motivos = new();
+    private int _idMotivoSel;
+    private string _nuevoMotivo = "";
+    private bool _agregandoMotivo, _guardandoMotivo;
+
     private const string StateKey = "eventos";
     private sealed class Snap { public string Local = "TODOS"; public DateTime Desde; public DateTime Hasta; public bool VerTodos; public List<EventoDto> Items = new(); }
 
+    // Deep-link / Compartir: filtros en la URL (?local=&desde=&hasta=&todos=1).
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "todos")] public bool? TodosQ { get; set; }
+
+    private string CompartirQuery =>
+        $"local={Uri.EscapeDataString(_local)}&desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}" + (_verTodos ? "&todos=1" : "");
+
     protected override async Task OnInitializedAsync()
     {
-        if (State.TryGet<Snap>(StateKey, out var s, out _))
+        var hayQuery = LocalQ != null || DesdeQ != null || HastaQ != null || TodosQ.HasValue;
+
+        if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
             _local = s.Local; _desde = s.Desde; _hasta = s.Hasta; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
             return;
+        }
+        if (hayQuery)
+        {
+            if (LocalQ != null) _local = LocalQ;
+            if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+            if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+            if (TodosQ.HasValue) _verTodos = TodosQ.Value;
         }
         await Cargar();
     }
@@ -266,13 +319,45 @@
 
     private async Task AbrirDetalle(int id)
     {
+        if (_motivos.Count == 0) { try { _motivos = await Api.ListarMotivosAsync(); } catch { } }
         _det = await Api.DetalleAsync(id);
         if (_det is not null)
         {
             _accion = _det.Accion;
             _accionComentario = "";
+            _idMotivoSel = _det.IDMotivoEvento ?? 0;
+            _nuevoMotivo = ""; _agregandoMotivo = false;
             _modal = true;
         }
+    }
+
+    private async Task GuardarMotivo()
+    {
+        if (_det is null) return;
+        await Api.GuardarMotivoAsync(_det.Id, _idMotivoSel);
+        _det.IDMotivoEvento = _idMotivoSel == 0 ? null : _idMotivoSel;
+    }
+
+    private async Task OnMotivoKey(KeyboardEventArgs e) { if (e.Key == "Enter") await AgregarMotivo(); }
+
+    private async Task AgregarMotivo()
+    {
+        var n = (_nuevoMotivo ?? "").Trim();
+        if (n.Length == 0 || _det is null) return;
+        _guardandoMotivo = true;
+        try
+        {
+            var m = await Api.CrearMotivoAsync(n);
+            if (m is not null)
+            {
+                if (!_motivos.Any(x => x.Id == m.Id)) _motivos.Add(m);
+                _motivos = _motivos.OrderBy(x => x.Nombre).ToList();
+                _idMotivoSel = m.Id;
+                await GuardarMotivo();
+                _nuevoMotivo = ""; _agregandoMotivo = false;
+            }
+        }
+        finally { _guardandoMotivo = false; }
     }
 
     private async Task GuardarAccion()

@@ -199,6 +199,12 @@
     text-overflow: ellipsis;
 }
 
+.vm-row .d .vm-cod {
+    color: var(--mk-text-muted, #8b949e);
+    font-weight: 600;
+    margin-right: 4px;
+}
+
 .vm-row .q {
     color: var(--mk-text-strong);
     font-weight: 800;

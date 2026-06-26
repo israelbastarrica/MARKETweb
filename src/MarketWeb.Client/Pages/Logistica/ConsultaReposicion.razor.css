@@ -1,3 +1,23 @@
+/* Botón Volver (mismo formato que Consulta de Artículo) */
+.btn-volver {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid #e6e4dd; border-radius: 999px;
+    padding: 6px 16px 6px 8px; margin-bottom: .5rem;
+    color: #555; font-weight: 600; font-size: .9rem; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+    transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+.btn-volver .ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fff3e0; color: #e8820c; transition: transform .12s ease;
+}
+.btn-volver:hover {
+    background: #faf9f6; color: #1f2430; transform: translateX(-2px);
+    box-shadow: 0 3px 10px rgba(16, 24, 40, .12);
+}
+.btn-volver:hover .ico { transform: translateX(-2px); }
+
 /* Cajas estilo GroupBox del .Net */
 .cr-box {
     border: 1px solid var(--mk-border);

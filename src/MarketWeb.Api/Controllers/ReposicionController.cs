@@ -55,8 +55,9 @@ public sealed class ReposicionController : ControllerBase
     // "Explain": por qué el sistema repone lo que repone (SP_RepoExplicarArticulo). Read-only.
     [HttpGet("explicar")]
     public async Task<ActionResult<ExplicarDto>> Explicar(
-        [FromServices] IReposicionService svc, [FromQuery] string local, [FromQuery] string artCod, CancellationToken ct)
-        => Ok(await svc.ExplicarAsync(local ?? "", artCod ?? "", ct));
+        [FromServices] IReposicionService svc, [FromQuery] string local, [FromQuery] string artCod,
+        [FromQuery] bool historiaCompleta, CancellationToken ct)
+        => Ok(await svc.ExplicarAsync(local ?? "", artCod ?? "", historiaCompleta, ct));
 
     // Resetea un artículo desde un remito (re-ancla la cuenta). Escribe en producción.
     [HttpPost("resetear")]

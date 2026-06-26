@@ -7,7 +7,7 @@
 <PageTitle>Informe de Ventas</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Informes" Titulo="Ventas" Icono="fa-solid fa-chart-column" />
+    <PageHeader Modulo="Informes" Titulo="Ventas" Icono="fa-solid fa-chart-column" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Comprado (remitos de ingreso; si no hay, lo enviado a los locales) vs vendido en el rango, con costo a la fecha, margen y venta forzada (el precio de venta bajó respecto del lanzamiento).
     </p>
@@ -227,15 +227,60 @@
         public string Dimension = "Familia", Metrica = "Unidades", Tipo = "line", GranuLabel = "";
     }
 
+    // Deep-link / Compartir: filtros + dimensión del gráfico en la URL. Si llega con filtros, auto-procesa.
+    [Parameter, SupplyParameterFromQuery(Name = "prov")] public string? ProvQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "temp")] public string? TempQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "anio")] public int? AnioQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "dim")] public string? DimQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "metrica")] public string? MetricaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "tipo")] public string? TipoQ { get; set; }
+
+    private string CompartirQuery
+    {
+        get
+        {
+            var p = new List<string>();
+            if (!string.IsNullOrEmpty(_provCod)) p.Add($"prov={Uri.EscapeDataString(_provCod)}");
+            if (_temporada != "TODOS") p.Add($"temp={Uri.EscapeDataString(_temporada)}");
+            if (_anio != 0) p.Add($"anio={_anio}");
+            p.Add($"desde={_desde:yyyy-MM-dd}");
+            p.Add($"hasta={_hasta:yyyy-MM-dd}");
+            p.Add($"dim={Uri.EscapeDataString(_dimension)}");
+            p.Add($"metrica={Uri.EscapeDataString(_metrica)}");
+            p.Add($"tipo={Uri.EscapeDataString(_tipo)}");
+            return string.Join("&", p);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _combos = await Api.CombosVentasAsync();
-        if (State.TryGet<Snap>(StateKey, out var s, out _))
+
+        var hayQuery = ProvQ != null || TempQ != null || AnioQ.HasValue || DesdeQ != null || HastaQ != null
+            || DimQ != null || MetricaQ != null || TipoQ != null;
+
+        if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
             _provCod = s.ProvCod; _temporada = s.Temporada; _anio = s.Anio;
             _desde = s.Desde; _hasta = s.Hasta; _filas = s.Filas; _busco = s.Busco;
             _serie = s.Serie; _dimension = s.Dimension; _metrica = s.Metrica; _tipo = s.Tipo; _granuLabel = s.GranuLabel;
             if (_serie.Count > 0) _renderPendiente = true;   // redibuja el gráfico al volver
+            return;
+        }
+
+        if (hayQuery)
+        {
+            if (ProvQ != null) _provCod = ProvQ;
+            if (TempQ != null) _temporada = TempQ;
+            if (AnioQ.HasValue) _anio = AnioQ.Value;
+            if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+            if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+            if (DimQ != null) _dimension = DimQ;
+            if (MetricaQ != null) _metrica = MetricaQ;
+            if (TipoQ != null) _tipo = TipoQ;
+            await Procesar();
         }
     }
 

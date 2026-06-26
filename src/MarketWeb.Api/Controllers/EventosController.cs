@@ -59,4 +59,28 @@ public sealed class EventosController : ControllerBase
         await _service.EliminarAsync(id, ct);
         return NoContent();
     }
+
+    // ---- Motivos normalizados (catálogo + asignación al evento) ----
+
+    [HttpGet("motivos")]
+    public async Task<ActionResult<IReadOnlyList<MotivoEventoDto>>> Motivos(CancellationToken ct)
+        => Ok(await _service.ListarMotivosAsync(ct));
+
+    public sealed record MotivoNuevoRequest(string Nombre);
+
+    [HttpPost("motivos")]
+    public async Task<ActionResult<MotivoEventoDto>> CrearMotivo([FromBody] MotivoNuevoRequest req, CancellationToken ct)
+    {
+        var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+        return Ok(await _service.CrearMotivoAsync(req?.Nombre ?? "", usuario, ct));
+    }
+
+    public sealed record MotivoEventoRequest(int IdMotivo);
+
+    [HttpPost("{id:int}/motivo")]
+    public async Task<IActionResult> GuardarMotivo(int id, [FromBody] MotivoEventoRequest req, CancellationToken ct)
+    {
+        await _service.GuardarMotivoAsync(id, req?.IdMotivo ?? 0, ct);
+        return NoContent();
+    }
 }
