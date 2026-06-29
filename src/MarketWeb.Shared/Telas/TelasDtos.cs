@@ -26,6 +26,7 @@ public sealed class DepoMaterialDto
     public string Material { get; set; } = "";
     public string Pedido { get; set; } = "";
     public string? Telera { get; set; }
+    public string? Unidad { get; set; }
     public int CantRollos { get; set; }
     public decimal Cantidad { get; set; }
 }

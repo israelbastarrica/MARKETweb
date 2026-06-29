@@ -37,12 +37,23 @@
         </div>
     }
 
+    <div class="d-flex justify-content-end mb-2">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de gráfico">
+            <button type="button" class="btn @(_donas ? "btn-outline-secondary" : "btn-secondary")" @onclick="() => _donas = false"><i class="fa-solid fa-chart-bar me-1"></i>Barras</button>
+            <button type="button" class="btn @(_donas ? "btn-secondary" : "btn-outline-secondary")" @onclick="() => _donas = true"><i class="fa-solid fa-chart-pie me-1"></i>Donas</button>
+        </div>
+    </div>
+
     @* ===== Stock por depósito (barras; clic para entrar) ===== *@
     <div class="market-card p-3 mb-3">
         <h6 class="mb-3">Stock depósito por rollo</h6>
         @if (_depoStock.Count == 0)
         {
             <p class="text-muted small mb-0">Sin datos.</p>
+        }
+        else if (_donas)
+        {
+            @RenderDonut(_depoStock.Select(d => (DepoLabel(d), d.CantRollos)).ToList())
         }
         else
         {
@@ -58,7 +69,7 @@
                         <div class="tl-bar-track" @onclick="() => SeleccionarDeposito(d.Id)" style="cursor:pointer">
                             <div class="tl-bar-fill @(d.Id == _idDeposito ? "sel" : "")" style="width:@(Pct(d.CantRollos, _maxDepo))%;background:@color"></div>
                         </div>
-                        <div class="tl-bar-val">@d.CantRollos <span class="text-muted">(@Num(d.Cantidad))</span></div>
+                        <div class="tl-bar-val">@d.CantRollos <span class="text-muted small">Rollos</span></div>
                     </div>
                 }
             </div>
@@ -74,12 +85,19 @@
             {
                 <p class="text-muted small mb-0">Este depósito no tiene rollos.</p>
             }
+            else if (_donas)
+            {
+                @RenderDonut(_materiales.GroupBy(m => m.Material).Select(g => (g.Key, g.Sum(x => x.CantRollos))).ToList())
+            }
             else
             {
                 <div class="tl-chart">
                     @foreach (var g in _materiales.GroupBy(m => new { m.IdMaterial, m.Material }).OrderByDescending(g => g.Sum(x => x.CantRollos)))
                     {
                         var total = g.Sum(x => x.CantRollos);
+                        var pesoTxt = string.Join(" · ", g.Where(x => x.Cantidad > 0)
+                            .GroupBy(x => string.IsNullOrWhiteSpace(x.Unidad) ? "" : x.Unidad!.Trim())
+                            .Select(u => $"{u.Sum(z => z.Cantidad):0.##} {u.Key}".Trim()));
                         <div class="tl-bar-row">
                             <div class="tl-bar-lbl">
                                 <a class="tl-mat @(_idMaterial == g.Key.IdMaterial ? "fw-bold" : "")" @onclick="() => SeleccionarMaterial(g.Key.IdMaterial, g.Key.Material)">@g.Key.Material</a>
@@ -96,7 +114,10 @@
                                     si++;
                                 }
                             </div>
-                            <div class="tl-bar-val">@total</div>
+                            <div class="tl-bar-val">
+                                @total <span class="text-muted small">Rollos</span>
+                                @if (!string.IsNullOrEmpty(pesoTxt)) { <div class="text-muted small">@pesoTxt</div> }
+                            </div>
                         </div>
                     }
                 </div>
@@ -121,6 +142,11 @@
             {
                 <p class="text-muted small mb-0">Sin stock.</p>
             }
+            else if (_donas)
+            {
+                @RenderDonut(_colores.GroupBy(c => new { c.ColorCod, c.Color })
+                    .Select(cg => ((cg.Key.ColorCod is null ? "" : cg.Key.ColorCod + "-") + cg.Key.Color, cg.Sum(x => x.CantRollos))).ToList())
+            }
             else
             {
                 <div class="tl-chart">
@@ -140,7 +166,7 @@
                                     ci++;
                                 }
                             </div>
-                            <div class="tl-bar-val">@ctot</div>
+                            <div class="tl-bar-val">@ctot <span class="text-muted small">Rollos</span></div>
                         </div>
                     }
                 </div>
@@ -408,6 +434,7 @@
 
     // Solapas
     private string _tab = "tablero";
+    private bool _donas;   // tablero: false = barras, true = donas
     // Solapa Stock (tabla)
     private int _fDep, _fMat, _fColor, _fTelera;
     private string _fPed = "";
@@ -454,6 +481,58 @@
     private static string Num(decimal? d) => d is null ? "" : d.Value.ToString("0.##");
     private static string SegColor(int i) => _palette[i % _palette.Length];
     private static int Pct(int v, int max) => max <= 0 ? 0 : (int)Math.Round(v * 100.0 / max);
+
+    // ---- Gráfico de dona (SVG) ----
+    private sealed record DonutSlice(string Label, int Value, int Pct, string Dash, string Offset, string Color);
+
+    private static List<DonutSlice> BuildDonut(IReadOnlyList<(string Label, int Value)> items)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        const double r = 60;
+        var circ = 2 * Math.PI * r;
+        var data = items.Where(i => i.Value > 0).ToList();
+        var total = data.Sum(i => i.Value);
+        var slices = new List<DonutSlice>();
+        double acc = 0;
+        for (var i = 0; i < data.Count; i++)
+        {
+            var frac = total == 0 ? 0 : (double)data[i].Value / total;
+            var len = frac * circ;
+            slices.Add(new DonutSlice(
+                data[i].Label, data[i].Value, (int)Math.Round(frac * 100),
+                $"{len.ToString("0.##", inv)} {circ.ToString("0.##", inv)}",
+                (-acc).ToString("0.##", inv), SegColor(i)));
+            acc += len;
+        }
+        return slices;
+    }
+
+    private RenderFragment RenderDonut(IReadOnlyList<(string Label, int Value)> items) =>
+    @<div class="tl-donut">
+        <svg viewBox="0 0 160 160" class="tl-donut-svg" role="img">
+            <g transform="rotate(-90 80 80)">
+                @foreach (var s in BuildDonut(items))
+                {
+                    <circle cx="80" cy="80" r="60" fill="none" stroke="@s.Color" stroke-width="26"
+                            stroke-dasharray="@s.Dash" stroke-dashoffset="@s.Offset">
+                        <title>@s.Label: @s.Value (@s.Pct%)</title>
+                    </circle>
+                }
+            </g>
+            <text x="80" y="73" text-anchor="middle" class="tl-donut-num">@items.Sum(i => i.Value)</text>
+            <text x="80" y="90" text-anchor="middle" class="tl-donut-cap">Rollos</text>
+        </svg>
+        <div class="tl-donut-legend">
+            @foreach (var s in BuildDonut(items))
+            {
+                <div class="tl-leg-item">
+                    <span class="tl-leg-dot" style="background:@s.Color"></span>
+                    <span class="tl-leg-lbl">@s.Label</span>
+                    <span class="tl-leg-val">@s.Value <span class="text-muted">(@s.Pct%)</span></span>
+                </div>
+            }
+        </div>
+    </div>;
 
     // Combo / celda de depósito: "código - nombre" (proveedor)
     private static string DepLabel(CatalogoItemDto d)

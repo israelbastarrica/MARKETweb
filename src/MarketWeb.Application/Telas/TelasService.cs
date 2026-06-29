@@ -72,13 +72,14 @@ public sealed class TelasService : ITelasService
             SELECT  M.Id AS IdMaterial, M.Nombre AS Material,
                     Pedido = ISNULL(NULLIF(LTRIM(RTRIM(R.NumPedido)), ''), '(sin pedido)'),
                     Telera = T.Nombre,
+                    Unidad = R.Unidad,
                     CantRollos = CAST(COUNT(*) AS int),
                     Cantidad = CAST(SUM(ISNULL(R.Cantidad,0)) AS decimal(18,2))
             FROM    TelasRollos R
             INNER JOIN TelasMateriales M ON M.Id = R.IdMaterial
             LEFT  JOIN TelasTeleras   T ON T.Id = R.IdTelera
             WHERE   R.Eliminado = 0 AND R.IdDeposito = @idDeposito
-            GROUP BY M.Id, M.Nombre, ISNULL(NULLIF(LTRIM(RTRIM(R.NumPedido)), ''), '(sin pedido)'), T.Nombre
+            GROUP BY M.Id, M.Nombre, ISNULL(NULLIF(LTRIM(RTRIM(R.NumPedido)), ''), '(sin pedido)'), T.Nombre, R.Unidad
             ORDER BY M.Nombre, COUNT(*) DESC;
             """;
         using var cn = _db.Create();

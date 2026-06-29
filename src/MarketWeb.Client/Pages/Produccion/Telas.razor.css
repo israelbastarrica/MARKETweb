@@ -8,6 +8,59 @@
     background: rgba(0, 0, 0, .04);
 }
 
+/* Gráfico de dona (SVG) + leyenda. */
+.tl-donut {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 24px;
+}
+.tl-donut-svg {
+    width: 200px;
+    height: 200px;
+    flex: 0 0 auto;
+}
+.tl-donut-num {
+    font-size: 28px;
+    font-weight: 700;
+    fill: var(--bs-body-color, #222);
+}
+.tl-donut-cap {
+    font-size: 11px;
+    fill: var(--bs-secondary-color, #888);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+.tl-donut-legend {
+    flex: 1 1 220px;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.tl-leg-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .85rem;
+}
+.tl-leg-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+.tl-leg-lbl {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tl-leg-val {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
 /* Gráfico de barras (rollos por pedido). */
 .tl-chart {
     display: flex;
