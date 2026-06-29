@@ -341,25 +341,25 @@
                         @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
                         <div class="row g-3">
                             <div class="col-12 col-md-6">
-                                <label class="form-label d-flex justify-content-between align-items-center">
-                                    <span>Material</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar material" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus"></i></button>
-                                </label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdMaterial">
-                                    <option value="0">— Seleccione —</option>
-                                    @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
-                                </InputSelect>
+                                <label class="form-label">Material</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="_editado.IdMaterial">
+                                        <option value="0">— Seleccione —</option>
+                                        @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
+                                    </InputSelect>
+                                    <button type="button" class="btn btn-outline-primary" title="Agregar material" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus"></i></button>
+                                </div>
                                 <ValidationMessage For="() => _editado.IdMaterial" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label d-flex justify-content-between align-items-center">
-                                    <span>Depósito</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar depósito" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus"></i></button>
-                                </label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
-                                    <option value="0">— Seleccione —</option>
-                                    @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
-                                </InputSelect>
+                                <label class="form-label">Depósito</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
+                                        <option value="0">— Seleccione —</option>
+                                        @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
+                                    </InputSelect>
+                                    <button type="button" class="btn btn-outline-primary" title="Agregar depósito" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus"></i></button>
+                                </div>
                                 <ValidationMessage For="() => _editado.IdDeposito" />
                             </div>
                             <div class="col-12 col-md-6">
@@ -374,14 +374,14 @@
                                 <InputText class="form-control" @bind-Value="_editado.ColorTelera" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label d-flex justify-content-between align-items-center">
-                                    <span>Telera</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar telera" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus"></i></button>
-                                </label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdTelera">
-                                    <option value="">— (ninguna) —</option>
-                                    @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
-                                </InputSelect>
+                                <label class="form-label">Telera</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="_editado.IdTelera">
+                                        <option value="">— (ninguna) —</option>
+                                        @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
+                                    </InputSelect>
+                                    <button type="button" class="btn btn-outline-primary" title="Agregar telera" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus"></i></button>
+                                </div>
                             </div>
                             <div class="col-6 col-md-3">
                                 <label class="form-label">N° Pedido</label>
