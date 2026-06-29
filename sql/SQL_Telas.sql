@@ -200,12 +200,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.TelasMateriales WHERE Nombre=N'Ribb c/lycra') I
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasMateriales WHERE Nombre=N'Ribb soft ada') INSERT INTO dbo.TelasMateriales (Nombre,Auditoria) VALUES (N'Ribb soft ada',@aud);
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasMateriales WHERE Nombre=N'Termico') INSERT INTO dbo.TelasMateriales (Nombre,Auditoria) VALUES (N'Termico',@aud);
 
--- ===== Seed Depositos (955 sin nombre) =====
+-- ===== Seed Depositos (955 = Marcelo) =====
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasDepositos WHERE Codigo=N'952') INSERT INTO dbo.TelasDepositos (Codigo,Nombre,Auditoria) VALUES (N'952',N'Ramon',@aud);
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasDepositos WHERE Codigo=N'953') INSERT INTO dbo.TelasDepositos (Codigo,Nombre,Auditoria) VALUES (N'953',N'Milena',@aud);
-IF NOT EXISTS (SELECT 1 FROM dbo.TelasDepositos WHERE Codigo=N'955') INSERT INTO dbo.TelasDepositos (Codigo,Nombre,Auditoria) VALUES (N'955',NULL,@aud);
+IF NOT EXISTS (SELECT 1 FROM dbo.TelasDepositos WHERE Codigo=N'955') INSERT INTO dbo.TelasDepositos (Codigo,Nombre,Auditoria) VALUES (N'955',N'Marcelo',@aud);
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasDepositos WHERE Codigo=N'Y50') INSERT INTO dbo.TelasDepositos (Codigo,Nombre,Auditoria) VALUES (N'Y50',N'Filomena',@aud);
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasDepositos WHERE Codigo=N'Y51') INSERT INTO dbo.TelasDepositos (Codigo,Nombre,Auditoria) VALUES (N'Y51',N'Vilma/jorge',@aud);
+-- Si la base ya tenía el 955 sin nombre (carga previa), fijarlo a Marcelo:
+UPDATE dbo.TelasDepositos SET Nombre = N'Marcelo' WHERE Codigo = N'955' AND (Nombre IS NULL OR LTRIM(RTRIM(Nombre)) = '');
 
 -- ===== Seed Teleras (952 repetida: Freeday y Ramon -> 2 filas) =====
 IF NOT EXISTS (SELECT 1 FROM dbo.TelasTeleras WHERE Codigo=N'913' AND Nombre=N'Freeday') INSERT INTO dbo.TelasTeleras (Codigo,Nombre,Auditoria) VALUES (N'913',N'Freeday',@aud);

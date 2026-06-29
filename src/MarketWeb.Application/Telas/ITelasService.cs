@@ -3,25 +3,24 @@ using MarketWeb.Shared.Telas;
 namespace MarketWeb.Application.Telas;
 
 /// <summary>
-/// Telas (Producción): catálogo de telas + catálogos propios de depósitos y textiles.
-/// Los COLORES salen de Dragonfish (DRAGONFISH_CENTRAL.Zoologic.DPCOLOR), no de una tabla propia.
-/// Tablas MARKET.dbo.Telas / TelasDepositos / TelasTextiles. Baja lógica. Stock/compras = Fase 2.
+/// Telas (Producción) - stock por rollo. Tablas TelasRollos + catálogos
+/// (TelasMateriales/TelasColores/TelasColoresEquivalencias/TelasDepositos/TelasTeleras).
+/// Baja lógica, consultas parametrizadas.
 /// </summary>
 public interface ITelasService
 {
-    // ---- Telas ----
-    Task<IReadOnlyList<TelaDto>> ListarAsync(int? idDeposito, string? material, int? idTextil, CancellationToken ct = default);
-    Task<TelaDto?> ObtenerAsync(int id, CancellationToken ct = default);
-    Task<int> CrearAsync(TelaSaveRequest req, string usuario, CancellationToken ct = default);
-    Task ModificarAsync(int id, TelaSaveRequest req, string usuario, CancellationToken ct = default);
-    Task EliminarAsync(int id, string usuario, CancellationToken ct = default);
-
-    // ---- Catálogos propios (depositos / textiles) ----
+    // Combos / catálogos (solo lectura para selectores)
     Task<IReadOnlyList<CatalogoItemDto>> ListarCatalogoAsync(string tipo, CancellationToken ct = default);
-    Task<int> CrearCatalogoAsync(string tipo, CatalogoSaveRequest req, string usuario, CancellationToken ct = default);
-    Task ModificarCatalogoAsync(string tipo, int id, CatalogoSaveRequest req, string usuario, CancellationToken ct = default);
-    Task EliminarCatalogoAsync(string tipo, int id, string usuario, CancellationToken ct = default);
 
-    // ---- Colores desde Dragonfish ----
-    Task<IReadOnlyList<ColorDragonDto>> ListarColoresAsync(CancellationToken ct = default);
+    // Tablero
+    Task<IReadOnlyList<DepoStockDto>> StockPorDepositoAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<PedidoBarraDto>> ResumenPorPedidoAsync(int? idDeposito, int top, CancellationToken ct = default);
+    Task<IReadOnlyList<DepoMaterialDto>> MaterialesPorDepositoAsync(int idDeposito, CancellationToken ct = default);
+    Task<IReadOnlyList<ColorStockDto>> ColoresStockAsync(int idDeposito, int idMaterial, CancellationToken ct = default);
+
+    // ABM de stock (rollos)
+    Task<IReadOnlyList<TelaRolloDto>> ListarRollosAsync(int? idDeposito, int? idMaterial, int? idColor, int? idTelera, string? numPedido, CancellationToken ct = default);
+    Task<int> CrearRolloAsync(RolloSaveRequest req, string usuario, CancellationToken ct = default);
+    Task ModificarRolloAsync(int id, RolloSaveRequest req, string usuario, CancellationToken ct = default);
+    Task EliminarRolloAsync(int id, string usuario, CancellationToken ct = default);
 }

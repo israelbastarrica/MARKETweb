@@ -6,8 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MarketWeb.Api.Controllers;
 
-/// <summary>Telas (Producción): catálogo de telas + catálogos propios (depósitos/textiles).
-/// Los colores se listan desde Dragonfish.</summary>
+/// <summary>Telas (Producción) - stock por rollo + tablero (por pedido / depósito / color) + ABM.</summary>
 [Authorize(Policy = "Aprobado")]
 [ApiController]
 [Route("api/[controller]")]
@@ -21,71 +20,56 @@ public sealed class TelasController : ControllerBase
            ?? (Request.Headers.TryGetValue("X-Pc", out var pc) ? pc.ToString() : null)
            ?? "WEB";
 
-    // ---- Telas ----
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<TelaDto>>> Listar(
-        [FromQuery] int? idDeposito, [FromQuery] string? material, [FromQuery] int? idTextil, CancellationToken ct)
-        => Ok(await _service.ListarAsync(idDeposito, material, idTextil, ct));
-
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<TelaDto>> Obtener(int id, CancellationToken ct)
-    {
-        var t = await _service.ObtenerAsync(id, ct);
-        return t is null ? NotFound() : Ok(t);
-    }
-
-    [HttpPost]
-    public async Task<ActionResult> Crear([FromBody] TelaSaveRequest req, CancellationToken ct)
-    {
-        try { return Ok(new { id = await _service.CrearAsync(req, Usuario(), ct) }); }
-        catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
-    }
-
-    [HttpPut("{id:int}")]
-    public async Task<ActionResult> Modificar(int id, [FromBody] TelaSaveRequest req, CancellationToken ct)
-    {
-        try { await _service.ModificarAsync(id, req, Usuario(), ct); return NoContent(); }
-        catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
-    }
-
-    [HttpDelete("{id:int}")]
-    public async Task<ActionResult> Eliminar(int id, CancellationToken ct)
-    {
-        await _service.EliminarAsync(id, Usuario(), ct);
-        return NoContent();
-    }
-
-    // ---- Colores (Dragonfish) ----
-    [HttpGet("colores")]
-    public async Task<ActionResult<IReadOnlyList<ColorDragonDto>>> Colores(CancellationToken ct)
-        => Ok(await _service.ListarColoresAsync(ct));
-
-    // ---- Catálogos propios (tipo = depositos | textiles) ----
+    // ---- Catálogos (combos) ----
     [HttpGet("catalogos/{tipo}")]
-    public async Task<ActionResult<IReadOnlyList<CatalogoItemDto>>> ListarCatalogo(string tipo, CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<CatalogoItemDto>>> Catalogo(string tipo, CancellationToken ct)
     {
         try { return Ok(await _service.ListarCatalogoAsync(tipo, ct)); }
         catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
-    [HttpPost("catalogos/{tipo}")]
-    public async Task<ActionResult> CrearCatalogo(string tipo, [FromBody] CatalogoSaveRequest req, CancellationToken ct)
+    // ---- Tablero ----
+    [HttpGet("stock-depositos")]
+    public async Task<ActionResult<IReadOnlyList<DepoStockDto>>> StockDepositos(CancellationToken ct)
+        => Ok(await _service.StockPorDepositoAsync(ct));
+
+    [HttpGet("resumen-pedidos")]
+    public async Task<ActionResult<IReadOnlyList<PedidoBarraDto>>> ResumenPedidos([FromQuery] int? idDeposito, [FromQuery] int top = 20, CancellationToken ct = default)
+        => Ok(await _service.ResumenPorPedidoAsync(idDeposito, top, ct));
+
+    [HttpGet("deposito/{idDeposito:int}/materiales")]
+    public async Task<ActionResult<IReadOnlyList<DepoMaterialDto>>> MaterialesDeposito(int idDeposito, CancellationToken ct)
+        => Ok(await _service.MaterialesPorDepositoAsync(idDeposito, ct));
+
+    [HttpGet("deposito/{idDeposito:int}/material/{idMaterial:int}/colores")]
+    public async Task<ActionResult<IReadOnlyList<ColorStockDto>>> ColoresStock(int idDeposito, int idMaterial, CancellationToken ct)
+        => Ok(await _service.ColoresStockAsync(idDeposito, idMaterial, ct));
+
+    // ---- ABM de stock (rollos) ----
+    [HttpGet("rollos")]
+    public async Task<ActionResult<IReadOnlyList<TelaRolloDto>>> Rollos(
+        [FromQuery] int? idDeposito, [FromQuery] int? idMaterial, [FromQuery] int? idColor,
+        [FromQuery] int? idTelera, [FromQuery] string? numPedido, CancellationToken ct)
+        => Ok(await _service.ListarRollosAsync(idDeposito, idMaterial, idColor, idTelera, numPedido, ct));
+
+    [HttpPost("rollos")]
+    public async Task<ActionResult> CrearRollo([FromBody] RolloSaveRequest req, CancellationToken ct)
     {
-        try { return Ok(new { id = await _service.CrearCatalogoAsync(tipo, req, Usuario(), ct) }); }
+        try { return Ok(new { id = await _service.CrearRolloAsync(req, Usuario(), ct) }); }
         catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
-    [HttpPut("catalogos/{tipo}/{id:int}")]
-    public async Task<ActionResult> ModificarCatalogo(string tipo, int id, [FromBody] CatalogoSaveRequest req, CancellationToken ct)
+    [HttpPut("rollos/{id:int}")]
+    public async Task<ActionResult> ModificarRollo(int id, [FromBody] RolloSaveRequest req, CancellationToken ct)
     {
-        try { await _service.ModificarCatalogoAsync(tipo, id, req, Usuario(), ct); return NoContent(); }
+        try { await _service.ModificarRolloAsync(id, req, Usuario(), ct); return NoContent(); }
         catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
-    [HttpDelete("catalogos/{tipo}/{id:int}")]
-    public async Task<ActionResult> EliminarCatalogo(string tipo, int id, CancellationToken ct)
+    [HttpDelete("rollos/{id:int}")]
+    public async Task<ActionResult> EliminarRollo(int id, CancellationToken ct)
     {
-        try { await _service.EliminarCatalogoAsync(tipo, id, Usuario(), ct); return NoContent(); }
-        catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
+        await _service.EliminarRolloAsync(id, Usuario(), ct);
+        return NoContent();
     }
 }
