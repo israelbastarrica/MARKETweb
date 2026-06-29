@@ -37,21 +37,17 @@
         </div>
     }
 
-    <div class="d-flex justify-content-end mb-2">
-        <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de gráfico">
-            <button type="button" class="btn @(_donas ? "btn-outline-secondary" : "btn-secondary")" @onclick="() => _donas = false"><i class="fa-solid fa-chart-bar me-1"></i>Barras</button>
-            <button type="button" class="btn @(_donas ? "btn-secondary" : "btn-outline-secondary")" @onclick="() => _donas = true"><i class="fa-solid fa-chart-pie me-1"></i>Donas</button>
-        </div>
-    </div>
-
     @* ===== Stock por depósito (barras; clic para entrar) ===== *@
     <div class="market-card p-3 mb-3">
-        <h6 class="mb-3">Stock depósito por rollo</h6>
+        <div class="d-flex align-items-center mb-3">
+            <h6 class="mb-0 flex-grow-1">Stock depósito por rollo</h6>
+            @ToggleGrafico(_donaDep, v => _donaDep = v)
+        </div>
         @if (_depoStock.Count == 0)
         {
             <p class="text-muted small mb-0">Sin datos.</p>
         }
-        else if (_donas)
+        else if (_donaDep)
         {
             @RenderDonut(_depoStock.Select(d => (DepoLabel(d), d.CantRollos)).ToList())
         }
@@ -80,12 +76,15 @@
     {
         @* ===== Materiales: barra apilada por material, segmentos = pedidos ===== *@
         <div class="market-card p-3 mb-3" @ref="_matRef" tabindex="-1" style="outline:none">
-            <h6 class="mb-3">Cantidad stock materiales <span class="text-muted small">· @NombreDep(_idDeposito) · (clic en un material para ver colores)</span></h6>
+            <div class="d-flex align-items-center mb-3">
+                <h6 class="mb-0 flex-grow-1">Cantidad stock materiales <span class="text-muted small">· @NombreDep(_idDeposito) · (clic en un material para ver colores)</span></h6>
+                @ToggleGrafico(_donaMat, v => _donaMat = v)
+            </div>
             @if (_materiales.Count == 0)
             {
                 <p class="text-muted small mb-0">Este depósito no tiene rollos.</p>
             }
-            else if (_donas)
+            else if (_donaMat)
             {
                 @RenderDonut(_materiales.GroupBy(m => m.Material).Select(g => (g.Key, g.Sum(x => x.CantRollos))).ToList())
             }
@@ -129,6 +128,7 @@
         <div class="market-card p-3">
             <div class="d-flex align-items-center mb-3">
                 <h6 class="mb-0 flex-grow-1">Cantidad stock colores @(_idMaterial > 0 ? $"· {_materialNombre}" : "")</h6>
+                <span class="me-2">@ToggleGrafico(_donaCol, v => _donaCol = v)</span>
                 @if (_idMaterial > 0)
                 {
                     <button class="btn btn-sm btn-outline-secondary" @onclick="AbrirAbm"><i class="fa-solid fa-pen-to-square me-1"></i> ABM rollos</button>
@@ -142,7 +142,7 @@
             {
                 <p class="text-muted small mb-0">Sin stock.</p>
             }
-            else if (_donas)
+            else if (_donaCol)
             {
                 @RenderDonut(_colores.GroupBy(c => new { c.ColorCod, c.Color })
                     .Select(cg => ((cg.Key.ColorCod is null ? "" : cg.Key.ColorCod + "-") + cg.Key.Color, cg.Sum(x => x.CantRollos))).ToList())
@@ -434,7 +434,8 @@
 
     // Solapas
     private string _tab = "tablero";
-    private bool _donas;   // tablero: false = barras, true = donas
+    // Tipo de gráfico por nivel (false = barras, true = dona)
+    private bool _donaDep, _donaMat, _donaCol;
     // Solapa Stock (tabla)
     private int _fDep, _fMat, _fColor, _fTelera;
     private string _fPed = "";
@@ -481,6 +482,13 @@
     private static string Num(decimal? d) => d is null ? "" : d.Value.ToString("0.##");
     private static string SegColor(int i) => _palette[i % _palette.Length];
     private static int Pct(int v, int max) => max <= 0 ? 0 : (int)Math.Round(v * 100.0 / max);
+
+    // Toggle Barras/Donas por gráfico
+    private RenderFragment ToggleGrafico(bool donas, Action<bool> set) =>
+    @<div class="btn-group btn-group-sm" role="group" aria-label="Tipo de gráfico">
+        <button type="button" class="btn @(donas ? "btn-outline-secondary" : "btn-secondary")" title="Barras" @onclick="() => set(false)"><i class="fa-solid fa-chart-bar"></i></button>
+        <button type="button" class="btn @(donas ? "btn-secondary" : "btn-outline-secondary")" title="Donas" @onclick="() => set(true)"><i class="fa-solid fa-chart-pie"></i></button>
+    </div>;
 
     // ---- Gráfico de dona (SVG) ----
     private sealed record DonutSlice(string Label, int Value, int Pct, string Dash, string Offset, string Color);
