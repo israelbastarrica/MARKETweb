@@ -58,11 +58,14 @@ public sealed class TelaRolloDto
     public int IdMaterial { get; set; }
     public string Material { get; set; } = "";
     public int? IdColor { get; set; }
+    public string? CodColor { get; set; }
     public string? Color { get; set; }
     public string? ColorTelera { get; set; }
     public int IdDeposito { get; set; }
+    public string? CodDeposito { get; set; }
     public string Deposito { get; set; } = "";
     public int? IdTelera { get; set; }
+    public string? CodTelera { get; set; }
     public string? Telera { get; set; }
     public string? NumPedido { get; set; }
     public string? NumRemito { get; set; }

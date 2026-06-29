@@ -106,9 +106,9 @@ public sealed class TelasService : ITelasService
     // ---------------- ABM de stock (rollos) ----------------
     private const string SelectRollo = """
         SELECT  R.Id, R.IdMaterial, M.Nombre AS Material,
-                R.IdColor, C.Descripcion AS Color, R.ColorTelera,
-                R.IdDeposito, D.Nombre AS Deposito,
-                R.IdTelera, T.Nombre AS Telera,
+                R.IdColor, C.Codigo AS CodColor, C.Descripcion AS Color, R.ColorTelera,
+                R.IdDeposito, D.Codigo AS CodDeposito, D.Nombre AS Deposito,
+                R.IdTelera, T.Codigo AS CodTelera, T.Nombre AS Telera,
                 R.NumPedido, R.NumRemito, R.Cantidad, R.Unidad
         FROM    TelasRollos R
         INNER JOIN TelasMateriales M ON M.Id = R.IdMaterial

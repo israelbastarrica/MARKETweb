@@ -1,3 +1,13 @@
+/* Encabezados ordenables de la tabla de stock. */
+::deep th[role="button"] {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+::deep th[role="button"]:hover {
+    background: rgba(0, 0, 0, .04);
+}
+
 /* Gráfico de barras (rollos por pedido). */
 .tl-chart {
     display: flex;

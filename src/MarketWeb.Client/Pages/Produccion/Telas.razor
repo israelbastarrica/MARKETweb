@@ -158,7 +158,7 @@
                 <label class="form-label small mb-1">Depósito</label>
                 <select class="form-select form-select-sm" @bind="_fDep">
                     <option value="0">TODOS</option>
-                    @foreach (var d in _depositos) { <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Nombre) ? d.Codigo : d.Nombre)</option> }
+                    @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
                 </select>
             </div>
             <div class="col-6 col-md-3">
@@ -199,24 +199,42 @@
     }
     else if (_tabla.Count == 0)
     {
-        <div class="market-empty"><i class="fa-solid fa-scroll"></i><p>Sin resultados. Ajustá los filtros y tocá buscar.</p></div>
+        <div class="market-empty">
+            <i class="fa-solid fa-scroll"></i>
+            <p>@(_busco ? "No se encontraron coincidencias para los filtros elegidos." : "Ajustá los filtros y tocá buscar.")</p>
+        </div>
     }
     else
     {
-        <p class="text-muted small mb-2">@_tabla.Count rollo(s).</p>
+        <p class="text-muted small mb-2">@_tabla.Count rollo(s). <span class="ms-1">Tocá un encabezado para ordenar.</span></p>
         <div class="market-card table-responsive" style="max-height:70vh;overflow:auto">
             <table class="market-table align-middle">
                 <thead>
-                    <tr><th>Material</th><th>Color</th><th>Color telera</th><th>Depósito</th><th>Telera</th><th>N° Pedido</th><th>Remito</th><th class="text-end">Cant.</th><th>Un.</th><th class="text-center" style="width:90px">Acc.</th></tr>
+                    <tr>
+                        <th role="button" @onclick='() => Ordenar("material")'>Material @Caret("material")</th>
+                        <th role="button" @onclick='() => Ordenar("codcolor")'>Cód. color @Caret("codcolor")</th>
+                        <th role="button" @onclick='() => Ordenar("color")'>Color @Caret("color")</th>
+                        <th role="button" @onclick='() => Ordenar("colortelera")'>Color telera @Caret("colortelera")</th>
+                        <th role="button" @onclick='() => Ordenar("deposito")'>Depósito @Caret("deposito")</th>
+                        <th role="button" @onclick='() => Ordenar("codtelera")'>Cód. telera @Caret("codtelera")</th>
+                        <th role="button" @onclick='() => Ordenar("telera")'>Telera @Caret("telera")</th>
+                        <th role="button" @onclick='() => Ordenar("pedido")'>N° Pedido @Caret("pedido")</th>
+                        <th role="button" @onclick='() => Ordenar("remito")'>Remito @Caret("remito")</th>
+                        <th role="button" class="text-end" @onclick='() => Ordenar("cantidad")'>Cant. @Caret("cantidad")</th>
+                        <th role="button" @onclick='() => Ordenar("unidad")'>Un. @Caret("unidad")</th>
+                        <th class="text-center" style="width:90px">Acc.</th>
+                    </tr>
                 </thead>
                 <tbody>
-                    @foreach (var r in _tabla)
+                    @foreach (var r in TablaOrdenada())
                     {
                         <tr>
                             <td>@r.Material</td>
+                            <td>@r.CodColor</td>
                             <td>@(r.Color ?? "—")</td>
                             <td>@r.ColorTelera</td>
-                            <td>@r.Deposito</td>
+                            <td>@DepCell(r)</td>
+                            <td>@r.CodTelera</td>
                             <td>@r.Telera</td>
                             <td>@r.NumPedido</td>
                             <td>@r.NumRemito</td>
@@ -305,7 +323,7 @@
                                 <label class="form-label">Depósito</label>
                                 <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
                                     <option value="0">— Seleccione —</option>
-                                    @foreach (var d in _depositos) { <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Nombre) ? d.Codigo : d.Nombre)</option> }
+                                    @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
                                 </InputSelect>
                                 <ValidationMessage For="() => _editado.IdDeposito" />
                             </div>
@@ -395,6 +413,9 @@
     private string _fPed = "";
     private List<TelaRolloDto> _tabla = new();
     private bool _tablaCargando;
+    private bool _busco;
+    private string _sortCol = "material";
+    private bool _sortAsc = true;
 
     private static readonly string[] _palette =
         { "#185FA5", "#1D9E75", "#D85A30", "#BA7517", "#534AB7", "#D4537E", "#0F6E56", "#888780", "#992929", "#067DBA" };
@@ -433,6 +454,46 @@
     private static string Num(decimal? d) => d is null ? "" : d.Value.ToString("0.##");
     private static string SegColor(int i) => _palette[i % _palette.Length];
     private static int Pct(int v, int max) => max <= 0 ? 0 : (int)Math.Round(v * 100.0 / max);
+
+    // Combo / celda de depósito: "código - nombre" (proveedor)
+    private static string DepLabel(CatalogoItemDto d)
+        => string.IsNullOrWhiteSpace(d.Nombre) ? (d.Codigo ?? "") : $"{d.Codigo} - {d.Nombre}";
+    private static string DepCell(TelaRolloDto r)
+        => string.IsNullOrWhiteSpace(r.Deposito) ? (r.CodDeposito ?? "") : $"{r.CodDeposito} - {r.Deposito}";
+
+    // ---- Orden de la tabla de stock ----
+    private string Caret(string col) => _sortCol == col ? (_sortAsc ? "▲" : "▼") : "";
+
+    private void Ordenar(string col)
+    {
+        if (_sortCol == col) _sortAsc = !_sortAsc;
+        else { _sortCol = col; _sortAsc = true; }
+    }
+
+    private static double CodNum(string? s)
+        => double.TryParse(s, out var n) ? n : double.MaxValue;   // no numéricos al final
+
+    private IEnumerable<TelaRolloDto> TablaOrdenada()
+    {
+        IOrderedEnumerable<TelaRolloDto> o = _sortCol switch
+        {
+            "codcolor"    => Ord(r => CodNum(r.CodColor)),
+            "color"       => Ord(r => r.Color ?? ""),
+            "colortelera" => Ord(r => r.ColorTelera ?? ""),
+            "deposito"    => Ord(r => CodNum(r.CodDeposito)),
+            "codtelera"   => Ord(r => CodNum(r.CodTelera)),
+            "telera"      => Ord(r => r.Telera ?? ""),
+            "pedido"      => Ord(r => CodNum(r.NumPedido)),
+            "remito"      => Ord(r => CodNum(r.NumRemito)),
+            "cantidad"    => Ord(r => r.Cantidad ?? 0m),
+            "unidad"      => Ord(r => r.Unidad ?? ""),
+            _             => Ord(r => r.Material),
+        };
+        return o;
+    }
+
+    private IOrderedEnumerable<TelaRolloDto> Ord<TKey>(Func<TelaRolloDto, TKey> key)
+        => _sortAsc ? _tabla.OrderBy(key) : _tabla.OrderByDescending(key);
 
     private async Task Cargar()
     {
@@ -546,6 +607,7 @@
             _tabla = await Api.RollosAsync(
                 _fDep > 0 ? _fDep : null, _fMat > 0 ? _fMat : null,
                 _fColor != 0 ? _fColor : null, _fTelera > 0 ? _fTelera : null, _fPed);
+            _busco = true;
         }
         finally { _tablaCargando = false; }
     }
