@@ -11,6 +11,8 @@ public interface ITelasService
 {
     // Combos / catálogos (solo lectura para selectores)
     Task<IReadOnlyList<CatalogoItemDto>> ListarCatalogoAsync(string tipo, CancellationToken ct = default);
+    // Alta de catálogo (material: solo nombre; depósito/telera: código + nombre)
+    Task<int> CrearCatalogoAsync(string tipo, string? codigo, string nombre, string usuario, CancellationToken ct = default);
 
     // Tablero
     Task<IReadOnlyList<DepoStockDto>> StockPorDepositoAsync(CancellationToken ct = default);

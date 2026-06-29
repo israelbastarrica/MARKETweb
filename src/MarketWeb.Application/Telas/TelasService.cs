@@ -32,6 +32,38 @@ public sealed class TelasService : ITelasService
         return (await cn.QueryAsync<CatalogoItemDto>(new CommandDefinition(sql, cancellationToken: ct))).ToList();
     }
 
+    public async Task<int> CrearCatalogoAsync(string tipo, string? codigo, string nombre, string usuario, CancellationToken ct = default)
+    {
+        nombre = (nombre ?? "").Trim();
+        if (nombre.Length == 0) throw new BusinessException("El nombre es obligatorio.");
+
+        var (tabla, colNombre, reqCod) = tipo switch
+        {
+            CatalogoTela.Materiales => ("TelasMateriales", "Nombre", false),
+            CatalogoTela.Depositos => ("TelasDepositos", "Nombre", true),
+            CatalogoTela.Teleras => ("TelasTeleras", "Nombre", true),
+            _ => throw new BusinessException("Catálogo inválido o no admite alta.")
+        };
+        var cod = string.IsNullOrWhiteSpace(codigo) ? null : codigo.Trim();
+        if (reqCod && cod is null) throw new BusinessException("El código es obligatorio.");
+
+        using var cn = _db.Create();
+        // Duplicados entre los no eliminados (por código si lo tiene, si no por nombre).
+        var dupSql = cod is not null
+            ? $"SELECT COUNT(*) FROM {tabla} WHERE Eliminado = 0 AND Codigo = @cod"
+            : $"SELECT COUNT(*) FROM {tabla} WHERE Eliminado = 0 AND {colNombre} = @nombre";
+        var dup = await cn.ExecuteScalarAsync<int>(new CommandDefinition(dupSql, new { cod, nombre }, cancellationToken: ct));
+        if (dup > 0) throw new BusinessException(cod is not null ? $"Ya existe un registro con el código {cod}." : "Ya existe un registro con ese nombre.");
+
+        var sql = $"""
+            INSERT INTO {tabla} (Codigo, {colNombre}, Eliminado, Auditoria)
+            OUTPUT INSERTED.Id
+            VALUES (@cod, @nombre, 0, @aud);
+            """;
+        return await cn.ExecuteScalarAsync<int>(new CommandDefinition(
+            sql, new { cod, nombre, aud = Auditoria("Alta de catálogo", usuario) }, cancellationToken: ct));
+    }
+
     // ---------------- Tablero ----------------
     public async Task<IReadOnlyList<DepoStockDto>> StockPorDepositoAsync(CancellationToken ct = default)
     {

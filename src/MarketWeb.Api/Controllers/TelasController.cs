@@ -28,6 +28,13 @@ public sealed class TelasController : ControllerBase
         catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
+    [HttpPost("catalogos/{tipo}")]
+    public async Task<ActionResult> CrearCatalogo(string tipo, [FromBody] CatalogoSaveRequest req, CancellationToken ct)
+    {
+        try { return Ok(new { id = await _service.CrearCatalogoAsync(tipo, req.Codigo, req.Nombre, Usuario(), ct) }); }
+        catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
+    }
+
     // ---- Tablero ----
     [HttpGet("stock-depositos")]
     public async Task<ActionResult<IReadOnlyList<DepoStockDto>>> StockDepositos(CancellationToken ct)

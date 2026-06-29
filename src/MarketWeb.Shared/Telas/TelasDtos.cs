@@ -95,6 +95,14 @@ public sealed class RolloSaveRequest
     [MaxLength(10)] public string? Unidad { get; set; }
 }
 
+/// <summary>Alta de un ítem de catálogo (material: solo nombre; depósito/telera: código + nombre).</summary>
+public sealed class CatalogoSaveRequest
+{
+    [MaxLength(20)] public string? Codigo { get; set; }
+    [Required(ErrorMessage = "El nombre es obligatorio.")]
+    [MaxLength(150)] public string Nombre { get; set; } = "";
+}
+
 /// <summary>Tipos de catálogo editable de Telas.</summary>
 public static class CatalogoTela
 {

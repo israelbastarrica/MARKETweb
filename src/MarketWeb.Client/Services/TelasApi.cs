@@ -13,6 +13,19 @@ public sealed class TelasApi
     public async Task<List<CatalogoItemDto>> CatalogoAsync(string tipo)
         => await _http.GetFromJsonAsync<List<CatalogoItemDto>>($"api/telas/catalogos/{tipo}") ?? new();
 
+    public async Task<(bool Ok, string? Error, int Id)> CrearCatalogoAsync(string tipo, string? codigo, string nombre)
+    {
+        var resp = await _http.PostAsJsonAsync($"api/telas/catalogos/{tipo}", new CatalogoSaveRequest { Codigo = codigo, Nombre = nombre });
+        if (resp.IsSuccessStatusCode)
+        {
+            var creado = await resp.Content.ReadFromJsonAsync<CreatedId>();
+            return (true, null, creado?.Id ?? 0);
+        }
+        try { var e = await resp.Content.ReadFromJsonAsync<Err>(); return (false, e?.Mensaje ?? "No se pudo agregar.", 0); }
+        catch { return (false, "No se pudo agregar.", 0); }
+    }
+    private sealed class CreatedId { public int Id { get; set; } }
+
     // Tablero
     public async Task<List<DepoStockDto>> StockDepositosAsync()
         => await _http.GetFromJsonAsync<List<DepoStockDto>>("api/telas/stock-depositos") ?? new();

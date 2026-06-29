@@ -11,6 +11,9 @@
         <button class="btn btn-primary" @onclick="() => AbrirAlta(null, null)">
             <i class="fa-solid fa-plus me-1"></i> Agregar rollo
         </button>
+        <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus me-1"></i> Material</button>
+        <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus me-1"></i> Depósito</button>
+        <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus me-1"></i> Telera</button>
         @if (_tab == "tablero" && _idDeposito > 0)
         {
             <button class="btn btn-outline-secondary" @onclick="() => SeleccionarDeposito(0)">
@@ -338,7 +341,10 @@
                         @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
                         <div class="row g-3">
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Material</label>
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span>Material</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar material" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus"></i></button>
+                                </label>
                                 <InputSelect class="form-select" @bind-Value="_editado.IdMaterial">
                                     <option value="0">— Seleccione —</option>
                                     @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
@@ -346,7 +352,10 @@
                                 <ValidationMessage For="() => _editado.IdMaterial" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Depósito</label>
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span>Depósito</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar depósito" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus"></i></button>
+                                </label>
                                 <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
                                     <option value="0">— Seleccione —</option>
                                     @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
@@ -365,7 +374,10 @@
                                 <InputText class="form-control" @bind-Value="_editado.ColorTelera" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Telera</label>
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span>Telera</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar telera" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus"></i></button>
+                                </label>
                                 <InputSelect class="form-select" @bind-Value="_editado.IdTelera">
                                     <option value="">— (ninguna) —</option>
                                     @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
@@ -404,6 +416,43 @@
     <div class="modal-backdrop fade show"></div>
 }
 
+@* ===== Modal alta de catálogo (material / depósito / telera) ===== *@
+@if (_catModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1060">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@_catTitulo</h5>
+                    <button type="button" class="btn-close" @onclick="() => _catModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_catError is not null) { <div class="alert alert-danger py-2">@_catError</div> }
+                    @if (_catReqCod)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Código</label>
+                            <input class="form-control" @bind="_catCodigo" @bind:event="oninput" placeholder="Ej: Y52" />
+                        </div>
+                    }
+                    <div class="mb-1">
+                        <label class="form-label">Nombre</label>
+                        <input class="form-control" @bind="_catNombre" @bind:event="oninput" @onkeyup="OnKeyCatalogo" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _catModal = false">Cancelar</button>
+                    <button class="btn btn-primary" disabled="@_catGuardando" @onclick="GuardarCatalogo">
+                        @if (_catGuardando) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Agregar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" style="z-index:1055"></div>
+}
+
 @code {
     private List<CatalogoItemDto> _depositos = new();
     private List<CatalogoItemDto> _materialesCombo = new();
@@ -431,6 +480,11 @@
     private int _idEditado;
     private string? _errorModal;
     private RolloSaveRequest _editado = new();
+
+    // Alta de catálogo (material / depósito / telera)
+    private bool _catModal, _catReqCod, _catGuardando;
+    private string _catTipo = "", _catTitulo = "", _catCodigo = "", _catNombre = "";
+    private string? _catError;
 
     // Solapas
     private string _tab = "tablero";
@@ -718,5 +772,67 @@
         await Api.EliminarRolloAsync(r.Id);
         Ui.Exito("Rollo eliminado.");
         await BuscarTabla();
+    }
+
+    // ---- Alta de catálogo (material / depósito / telera) ----
+    private void AbrirCatalogo(string tipo)
+    {
+        _catTipo = tipo;
+        _catReqCod = tipo != CatalogoTela.Materiales;
+        _catTitulo = tipo switch
+        {
+            CatalogoTela.Materiales => "Nuevo material",
+            CatalogoTela.Depositos => "Nuevo depósito",
+            CatalogoTela.Teleras => "Nueva telera",
+            _ => "Nuevo"
+        };
+        _catCodigo = "";
+        _catNombre = "";
+        _catError = null;
+        _catModal = true;
+    }
+
+    private async Task OnKeyCatalogo(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await GuardarCatalogo();
+    }
+
+    private async Task GuardarCatalogo()
+    {
+        _catError = null;
+        if (string.IsNullOrWhiteSpace(_catNombre)) { _catError = "El nombre es obligatorio."; return; }
+        if (_catReqCod && string.IsNullOrWhiteSpace(_catCodigo)) { _catError = "El código es obligatorio."; return; }
+
+        _catGuardando = true;
+        try
+        {
+            var (ok, err, id) = await Api.CrearCatalogoAsync(_catTipo, _catReqCod ? _catCodigo : null, _catNombre);
+            if (!ok) { _catError = err; return; }
+
+            await RecargarCatalogo(_catTipo);
+            // Si estoy en el alta/modif de rollo, dejo seleccionado el recién creado.
+            if (_modal && id > 0)
+            {
+                switch (_catTipo)
+                {
+                    case CatalogoTela.Materiales: _editado.IdMaterial = id; break;
+                    case CatalogoTela.Depositos: _editado.IdDeposito = id; break;
+                    case CatalogoTela.Teleras: _editado.IdTelera = id; break;
+                }
+            }
+            Ui.Exito("Agregado.");
+            _catModal = false;
+        }
+        finally { _catGuardando = false; }
+    }
+
+    private async Task RecargarCatalogo(string tipo)
+    {
+        switch (tipo)
+        {
+            case CatalogoTela.Materiales: _materialesCombo = await Api.CatalogoAsync(tipo); break;
+            case CatalogoTela.Depositos: _depositos = await Api.CatalogoAsync(tipo); break;
+            case CatalogoTela.Teleras: _telerasCombo = await Api.CatalogoAsync(tipo); break;
+        }
     }
 }
