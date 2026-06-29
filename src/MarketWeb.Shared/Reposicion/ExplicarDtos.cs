@@ -51,6 +51,11 @@ public sealed class ExplicarMovimientoDto
     public string Tipo { get; set; } = "";
     public int EventoId { get; set; }         // si Orden=6 y el Remito trae "EVT #N"
     public bool EventoTieneFoto { get; set; }
+    // Si la fila es un remito R real de Dragon (ancla Orden=0 o envío Orden=1), su CODIGO Dragon.
+    // Cuando viene seteado, la grilla muestra el comprobante como link al detalle (RemitoLink).
+    public string? RemitoCodigo { get; set; }
+    // Base Dragonfish donde vive ese remito (CENTRAL/CCENTRAL/LURO/PERALTA) → el modal elige la base correcta.
+    public string RemitoBase { get; set; } = "";
 }
 
 /// <summary>Pedido de reseteo de un artículo DESDE un remito (re-ancla a la fecha/hora de ese remito).</summary>

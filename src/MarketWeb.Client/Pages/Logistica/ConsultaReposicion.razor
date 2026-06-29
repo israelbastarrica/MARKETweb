@@ -101,7 +101,16 @@
                             <tr class="@MovClase(m)" @onclick="() => AbrirEvento(m)" style="@(m.EventoId > 0 ? "cursor:pointer" : "")">
                                 <td class="small">@(m.Fecha?.ToString("dd/MM/yyyy") ?? "")</td>
                                 <td class="small">@m.Hora</td>
-                                <td class="small">@m.Remito</td>
+                                <td class="small">
+                                    @if (!string.IsNullOrEmpty(m.RemitoCodigo))
+                                    {
+                                        <RemitoLink Numero="@m.Remito" Codigo="@m.RemitoCodigo" Origen="@m.RemitoBase" />
+                                    }
+                                    else
+                                    {
+                                        @m.Remito
+                                    }
+                                </td>
                                 <td class="text-center small">@m.Motivo</td>
                                 <td class="text-end fw-bold @(m.Cantidad < 0 ? "cr-rojo" : "")">@(m.Cantidad is null ? "" : ((int)m.Cantidad).ToString("N0"))</td>
                                 <td class="text-end fw-bold @SaldoClase(m, r.CantPack)">@(m.Saldo?.ToString("N0") ?? "")</td>

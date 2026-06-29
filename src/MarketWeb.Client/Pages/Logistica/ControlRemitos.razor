@@ -237,7 +237,7 @@
                                             <td class="small">@(l.Fecha?.ToString("dd/MM/yyyy HH:mm:ss") ?? "")</td>
                                             <td class="small">@l.MachineName</td>
                                             <td>@l.LocalUsuario</td>
-                                            <td>@l.NroRemito</td>
+                                            <td><RemitoLink Numero="@l.NroRemito" Codigo="@l.RemitoCodigo" Origen="@l.Origen" Destino="@l.Destino" /></td>
                                             <td>@l.Origen</td>
                                             <td>@l.Destino</td>
                                         </tr>

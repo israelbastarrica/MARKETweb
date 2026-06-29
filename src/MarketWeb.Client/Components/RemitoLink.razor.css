@@ -1,0 +1,19 @@
+.remito-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.remito-ir {
+    color: #e8820c;
+    text-decoration: none;
+    font-size: .8rem;
+    opacity: .75;
+    cursor: pointer;
+    transition: opacity .12s ease, transform .12s ease;
+}
+
+.remito-ir:hover {
+    opacity: 1;
+    transform: translate(1px, -1px);
+}

@@ -94,29 +94,39 @@ public sealed class DespachosService : IDespachosService
 
     public async Task<IReadOnlyList<DespachoArticuloDto>> ListarArticulosAsync(string remitoId, string origen, CancellationToken ct = default)
     {
-        // Origen restringido a un whitelist → nombre de base Dragonfish (anti-inyección).
-        var baseDb = (origen ?? "").Trim().ToUpperInvariant() switch
-        {
-            "LURO" => "DRAGONFISH_LURO",
-            "PERALTA" => "DRAGONFISH_PERALTA",
-            _ => "DRAGONFISH_CENTRAL"
-        };
         var cod = (remitoId ?? "").Trim();
         if (cod.Length == 0) return new List<DespachoArticuloDto>();
 
-        var sql = $@"
-            SELECT  ArtCod = RTRIM(DET.FART),
-                    Descripcion = MAX(ART.ARTDES),
-                    Color = DET.FCOLTXT,
-                    Talle = DET.TALLE,
-                    Cantidad = SUM(DET.FCANT)
-            FROM {baseDb}.ZooLogic.COMPROBANTEVDET DET
-            LEFT JOIN {baseDb}.ZooLogic.ART ART ON DET.FART = ART.ARTCOD
-            WHERE RTRIM(DET.CODIGO) = @cod
-            GROUP BY DET.FART, DET.FCOLTXT, DET.TALLE
-            ORDER BY RTRIM(DET.FART), DET.TALLE;";
         using var cn = _db.Create();
-        return (await cn.QueryAsync<DespachoArticuloDto>(new CommandDefinition(sql, new { cod }, commandTimeout: 60, cancellationToken: ct))).ToList();
+
+        // Origen restringido a un whitelist → nombre de base Dragonfish (anti-inyección).
+        async Task<List<DespachoArticuloDto>> Leer(string baseDb)
+        {
+            var sql = $@"
+                SELECT  ArtCod = RTRIM(DET.FART),
+                        Descripcion = MAX(ART.ARTDES),
+                        Color = DET.FCOLTXT,
+                        Talle = DET.TALLE,
+                        Cantidad = SUM(DET.FCANT)
+                FROM {baseDb}.ZooLogic.COMPROBANTEVDET DET
+                LEFT JOIN {baseDb}.ZooLogic.ART ART ON DET.FART = ART.ARTCOD
+                WHERE RTRIM(DET.CODIGO) = @cod
+                GROUP BY DET.FART, DET.FCOLTXT, DET.TALLE
+                ORDER BY RTRIM(DET.FART), DET.TALLE;";
+            return (await cn.QueryAsync<DespachoArticuloDto>(new CommandDefinition(sql, new { cod }, commandTimeout: 60, cancellationToken: ct))).ToList();
+        }
+
+        // Misma resolución de base que ControlRemitosService.ContenidoAsync (CENTRAL incluye CCENTRAL unificado).
+        switch ((origen ?? "").Trim().ToUpperInvariant())
+        {
+            case "LURO": return await Leer("DRAGONFISH_LURO");
+            case "PERALTA": return await Leer("DRAGONFISH_PERALTA");
+            case "CCENTRAL": return await Leer("DRAGONFISH_CCENTRAL");
+            default:
+                var items = await Leer("DRAGONFISH_CENTRAL");
+                if (items.Count == 0) items = await Leer("DRAGONFISH_CCENTRAL");
+                return items;
+        }
     }
 
     private sealed record ColaRow(string Cod, string? LocalOrigen, string? LocalDestino, int FPTOVEN, int FNUMCOMP);

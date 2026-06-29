@@ -1,0 +1,131 @@
+@* Número de remito con un acceso directo al detalle (artículos) del remito.
+   Gemelo de ArticuloLink, pero en vez de navegar abre una VENTANA (modal) con el contenido.
+   Usar en cualquier grilla que muestre un número de remito y tenga su CODIGO Dragon + local origen. *@
+@inject DespachosApi Api
+
+<span class="remito-link">
+    @if (Badge)
+    {
+        <span class="badge-perfil">@Numero</span>
+    }
+    else
+    {
+        <span>@Numero</span>
+    }
+    @if (PuedeVerDetalle)
+    {
+        @* stopPropagation: en grillas donde la fila es clickeable (ej. ControlRemitos) el ícono
+           no debe disparar la selección de la fila. *@
+        @* Sin href: con @onclick de Blazor alcanza, y así no se aplica a:visited (que pintaba el ícono de violeta). *@
+        <a class="remito-ir" role="button" tabindex="0" title="Ver detalle del remito"
+           @onclick="Abrir" @onclick:stopPropagation="true">
+            <i class="fa-solid fa-up-right-from-square"></i>
+        </a>
+    }
+</span>
+
+@if (_abierto)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        Remito @Numero
+                        @if (!string.IsNullOrWhiteSpace(Origen) || !string.IsNullOrWhiteSpace(Destino))
+                        {
+                            <span class="text-muted">· @Origen@(string.IsNullOrWhiteSpace(Destino) ? "" : $" → {Destino}")</span>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_cargando)
+                    {
+                        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+                    }
+                    else if (_error)
+                    {
+                        <div class="alert alert-danger mb-0"><i class="fa-solid fa-triangle-exclamation me-2"></i>No se pudo cargar el detalle del remito.</div>
+                    }
+                    else if (_articulos.Count == 0)
+                    {
+                        <p class="text-muted mb-0">Sin artículos para mostrar (remito vacío o no encontrado en Dragon).</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="market-table align-middle">
+                                <thead><tr><th style="width: 150px">Código</th><th>Descripción</th><th>Color</th><th>Talle</th><th class="text-end">Cant.</th></tr></thead>
+                                <tbody>
+                                    @foreach (var a in _articulos)
+                                    {
+                                        <tr>
+                                            <td><ArticuloLink Codigo="@a.ArtCod" /></td>
+                                            <td>@a.Descripcion</td>
+                                            <td>@a.Color</td>
+                                            <td>@a.Talle</td>
+                                            <td class="text-end">@Fmt.Miles(a.Cantidad)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-semibold">
+                                        <td colspan="4" class="text-end">Total</td>
+                                        <td class="text-end">@Fmt.Miles(_articulos.Sum(x => x.Cantidad))</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Cerrar">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string? Numero { get; set; }
+    // CODIGO Dragon del remito (RemitoId / RemitoCodigo) → clave para traer el detalle.
+    [Parameter] public string? Codigo { get; set; }
+    // Local origen → con esto el server elige la base Dragonfish correcta (CENTRAL/LURO/PERALTA).
+    [Parameter] public string? Origen { get; set; }
+    // Opcional, solo decorativo para el encabezado del modal.
+    [Parameter] public string? Destino { get; set; }
+    [Parameter] public bool Badge { get; set; }
+
+    private bool _abierto;
+    private bool _cargando;
+    private bool _error;
+    private List<DespachoArticuloDto> _articulos = new();
+
+    // Sin CODIGO no hay forma de traer el detalle → no mostramos el enlace.
+    private bool PuedeVerDetalle => !string.IsNullOrWhiteSpace(Numero) && !string.IsNullOrWhiteSpace(Codigo);
+
+    private async Task Abrir()
+    {
+        _abierto = true;
+        _cargando = true;
+        _error = false;
+        _articulos = new();
+        try
+        {
+            _articulos = await Api.ListarArticulosAsync(Codigo!.Trim(), (Origen ?? "").Trim());
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            Console.Error.WriteLine(ex);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void Cerrar() => _abierto = false;
+}
