@@ -5,111 +5,273 @@
 <PageTitle>Telas</PageTitle>
 
 <div class="market-page">
-    <PageHeader Modulo="Producción" Titulo="Telas" Icono="fa-solid fa-scroll" CompartirQuery="@CompartirQuery" />
+    <PageHeader Modulo="Producción" Titulo="Telas" Icono="fa-solid fa-scroll" />
 
-    @* Filtros *@
-    <div class="market-card p-3 mb-3">
-        <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-3">
-                <label class="form-label">Depósito</label>
-                <select class="form-select" @bind="_fDeposito">
-                    <option value="0">TODOS</option>
-                    @foreach (var d in _depositos)
-                    {
-                        <option value="@d.Id">@d.Nombre</option>
-                    }
-                </select>
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label">Textil</label>
-                <select class="form-select" @bind="_fTextil">
-                    <option value="0">TODOS</option>
-                    @foreach (var t in _textiles)
-                    {
-                        <option value="@t.Id">@t.Nombre</option>
-                    }
-                </select>
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label">Material</label>
-                <input class="form-control" placeholder="Buscar material..."
-                       @bind="_fMaterial" @bind:event="oninput" @onkeyup="OnKeyUp" />
-            </div>
-            <div class="col-12 col-md-3">
-                <button class="btn btn-outline-secondary w-100" @onclick="Procesar">
-                    <i class="fa-solid fa-magnifying-glass me-1"></i> Procesar
-                </button>
-            </div>
-        </div>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <button class="btn btn-primary" @onclick="() => AbrirAlta(null, null)">
+            <i class="fa-solid fa-plus me-1"></i> Agregar rollo
+        </button>
+        <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus me-1"></i> Material</button>
+        <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus me-1"></i> Depósito</button>
+        <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus me-1"></i> Telera</button>
+        @if (_tab == "tablero" && _idDeposito > 0)
+        {
+            <button class="btn btn-outline-secondary" @onclick="() => SeleccionarDeposito(0)">
+                <i class="fa-solid fa-arrow-left me-1"></i> Ver todos los depósitos
+            </button>
+        }
+        <span class="ms-auto align-self-center text-muted small">
+            @(_tab == "tablero" && _idDeposito > 0 ? $"Depósito: {NombreDep(_idDeposito)}" : "")
+        </span>
     </div>
 
-    @* Acciones *@
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <button class="btn btn-primary" @onclick="AbrirAlta">
-            <i class="fa-solid fa-plus me-1"></i> Agregar tela
-        </button>
-        <button class="btn btn-outline-secondary" @onclick="AbrirCatalogos">
-            <i class="fa-solid fa-sliders me-1"></i> Catálogos
-        </button>
-        <span class="ms-auto align-self-center text-muted small">@_items.Count tela(s)</span>
-    </div>
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item"><button type="button" class="nav-link @(_tab == "tablero" ? "active" : "")" @onclick='() => _tab = "tablero"'>Tablero</button></li>
+        <li class="nav-item"><button type="button" class="nav-link @(_tab == "stock" ? "active" : "")" @onclick="IrStock">Stock (tabla)</button></li>
+    </ul>
 
+@if (_tab == "tablero")
+{
     @if (_error is not null)
     {
         <div class="alert alert-danger d-flex align-items-center" role="alert">
-            <i class="fa-solid fa-triangle-exclamation me-2"></i>
-            <div class="flex-grow-1">@_error</div>
+            <i class="fa-solid fa-triangle-exclamation me-2"></i><div class="flex-grow-1">@_error</div>
             <button class="btn btn-sm btn-outline-danger ms-2" @onclick="Cargar">Reintentar</button>
         </div>
     }
 
-    @if (_cargando)
+    @* ===== Stock por depósito (barras; clic para entrar) ===== *@
+    <div class="market-card p-3 mb-3">
+        <div class="d-flex align-items-center mb-3">
+            <h6 class="mb-0 flex-grow-1">Stock depósito por rollo</h6>
+            @ToggleGrafico(_donaDep, v => _donaDep = v)
+        </div>
+        @if (_depoStock.Count == 0)
+        {
+            <p class="text-muted small mb-0">Sin datos.</p>
+        }
+        else if (_donaDep)
+        {
+            @RenderDonut(_depoStock.Select(d => DSlice(DepoLabel(d), d.CantRollos, () => SeleccionarDeposito(d.Id), d.Id == _idDeposito)).ToList())
+        }
+        else
+        {
+            <div class="tl-chart">
+                @{ var di = 0; }
+                @foreach (var d in _depoStock)
+                {
+                    var color = SegColor(di); di++;
+                    <div class="tl-bar-row">
+                        <div class="tl-bar-lbl">
+                            <a class="tl-mat" @onclick="() => SeleccionarDeposito(d.Id)">@DepoLabel(d)</a>
+                        </div>
+                        <div class="tl-bar-track" @onclick="() => SeleccionarDeposito(d.Id)" style="cursor:pointer">
+                            <div class="tl-bar-fill @(d.Id == _idDeposito ? "sel" : "")" style="width:@(Pct(d.CantRollos, _maxDepo))%;background:@color"></div>
+                        </div>
+                        <div class="tl-bar-val">@d.CantRollos <span class="text-muted small">Rollos</span></div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_idDeposito > 0)
+    {
+        @* ===== Materiales: barra apilada por material, segmentos = pedidos ===== *@
+        <div class="market-card p-3 mb-3" @ref="_matRef" tabindex="-1" style="outline:none">
+            <div class="d-flex align-items-center mb-3">
+                <h6 class="mb-0 flex-grow-1">Cantidad stock materiales <span class="text-muted small">· @NombreDep(_idDeposito) · (clic en un material para ver colores)</span></h6>
+                @ToggleGrafico(_donaMat, v => _donaMat = v)
+            </div>
+            @if (_materiales.Count == 0)
+            {
+                <p class="text-muted small mb-0">Este depósito no tiene rollos.</p>
+            }
+            else if (_donaMat)
+            {
+                @RenderDonut(_materiales.GroupBy(m => new { m.IdMaterial, m.Material }).Select(g => DSlice(g.Key.Material, g.Sum(x => x.CantRollos), () => SeleccionarMaterial(g.Key.IdMaterial, g.Key.Material), g.Key.IdMaterial == _idMaterial)).ToList())
+            }
+            else
+            {
+                <div class="tl-chart">
+                    @foreach (var g in _materiales.GroupBy(m => new { m.IdMaterial, m.Material }).OrderByDescending(g => g.Sum(x => x.CantRollos)))
+                    {
+                        var total = g.Sum(x => x.CantRollos);
+                        var pesoTxt = string.Join(" · ", g.Where(x => x.Cantidad > 0)
+                            .GroupBy(x => string.IsNullOrWhiteSpace(x.Unidad) ? "" : x.Unidad!.Trim())
+                            .Select(u => $"{u.Sum(z => z.Cantidad):0.##} {u.Key}".Trim()));
+                        <div class="tl-bar-row">
+                            <div class="tl-bar-lbl">
+                                <a class="tl-mat @(_idMaterial == g.Key.IdMaterial ? "fw-bold" : "")" @onclick="() => SeleccionarMaterial(g.Key.IdMaterial, g.Key.Material)">@g.Key.Material</a>
+                            </div>
+                            <div class="tl-bar-track tl-stack" style="cursor:pointer"
+                                 @onclick="() => SeleccionarMaterial(g.Key.IdMaterial, g.Key.Material)">
+                                @{ var si = 0; }
+                                @foreach (var seg in g.OrderByDescending(x => x.CantRollos))
+                                {
+                                    <div class="tl-seg" style="width:@(Pct(seg.CantRollos, _maxMat))%;background:@SegColor(si)"
+                                         title="@($"N° Pedido: {seg.Pedido} · Telera: {seg.Telera ?? "—"} · {seg.CantRollos} rollos")">
+                                        @if (Pct(seg.CantRollos, _maxMat) >= 6) { @seg.CantRollos }
+                                    </div>
+                                    si++;
+                                }
+                            </div>
+                            <div class="tl-bar-val">
+                                @total <span class="text-muted small">Rollos</span>
+                                @if (!string.IsNullOrEmpty(pesoTxt)) { <div class="text-muted small">@pesoTxt</div> }
+                            </div>
+                        </div>
+                    }
+                </div>
+                <p class="text-muted small mt-2 mb-0">Cada segmento es un N° de pedido (pasá el mouse para ver pedido y telera).</p>
+            }
+        </div>
+
+        @* ===== Stock por color (nuestros colores) ===== *@
+        <div class="market-card p-3">
+            <div class="d-flex align-items-center mb-3">
+                <h6 class="mb-0 flex-grow-1">Cantidad stock colores @(_idMaterial > 0 ? $"· {_materialNombre}" : "")</h6>
+                <span class="me-2">@ToggleGrafico(_donaCol, v => _donaCol = v)</span>
+                @if (_idMaterial > 0)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="AbrirAbm"><i class="fa-solid fa-pen-to-square me-1"></i> ABM rollos</button>
+                }
+            </div>
+            @if (_idMaterial == 0)
+            {
+                <p class="text-muted small mb-0">Elegí un material para ver el stock por color.</p>
+            }
+            else if (_colores.Count == 0)
+            {
+                <p class="text-muted small mb-0">Sin stock.</p>
+            }
+            else if (_donaCol)
+            {
+                @RenderDonut(_colores.GroupBy(c => new { c.ColorCod, c.Color })
+                    .Select(cg => DSlice((cg.Key.ColorCod is null ? "" : cg.Key.ColorCod + "-") + cg.Key.Color, cg.Sum(x => x.CantRollos))).ToList())
+            }
+            else
+            {
+                <div class="tl-chart">
+                    @foreach (var cg in _colores.GroupBy(c => new { c.ColorCod, c.Color }).OrderBy(cg => cg.Key.ColorCod ?? "zzz"))
+                    {
+                        var ctot = cg.Sum(x => x.CantRollos);
+                        <div class="tl-bar-row">
+                            <div class="tl-bar-lbl">@(cg.Key.ColorCod is null ? "" : cg.Key.ColorCod + "-")@cg.Key.Color</div>
+                            <div class="tl-bar-track tl-stack">
+                                @{ var ci = 0; }
+                                @foreach (var seg in cg.OrderByDescending(x => x.CantRollos))
+                                {
+                                    <div class="tl-seg" style="width:@(Pct(seg.CantRollos, _maxColor))%;background:@SegColor(ci)"
+                                         title="@($"N° Pedido: {seg.Pedido} · {seg.CantRollos} rollos")">
+                                        @if (Pct(seg.CantRollos, _maxColor) >= 6) { @seg.CantRollos }
+                                    </div>
+                                    ci++;
+                                }
+                            </div>
+                            <div class="tl-bar-val">@ctot <span class="text-muted small">Rollos</span></div>
+                        </div>
+                    }
+                </div>
+                <p class="text-muted small mt-2 mb-0">Cada segmento es un N° de pedido (hover para verlo).</p>
+            }
+        </div>
+    }
+}
+
+@if (_tab == "stock")
+{
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Depósito</label>
+                <select class="form-select form-select-sm" @bind="_fDep">
+                    <option value="0">TODOS</option>
+                    @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1">Tipo de tela</label>
+                <select class="form-select form-select-sm" @bind="_fMat">
+                    <option value="0">TODOS</option>
+                    @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Color</label>
+                <select class="form-select form-select-sm" @bind="_fColor">
+                    <option value="0">TODOS</option>
+                    <option value="-1">Fuera de carta</option>
+                    @foreach (var c in _coloresCombo) { <option value="@c.Id">@c.Codigo - @c.Nombre</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Telera</label>
+                <select class="form-select form-select-sm" @bind="_fTelera">
+                    <option value="0">TODAS</option>
+                    @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">N° Pedido</label>
+                <input class="form-control form-control-sm" @bind="_fPed" @bind:event="oninput" @onkeyup="OnKeyTabla" placeholder="Buscar..." />
+            </div>
+            <div class="col-6 col-md-1 d-flex">
+                <button class="btn btn-primary btn-sm w-100" @onclick="BuscarTabla" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i></button>
+            </div>
+        </div>
+    </div>
+
+    @if (_tablaCargando)
     {
         <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
     }
-    else if (_items.Count == 0)
+    else if (_tabla.Count == 0)
     {
         <div class="market-empty">
             <i class="fa-solid fa-scroll"></i>
-            <p>No se encontraron telas con esos filtros.</p>
+            <p>@(_busco ? "No se encontraron coincidencias para los filtros elegidos." : "Ajustá los filtros y tocá buscar.")</p>
         </div>
     }
     else
     {
-        <div class="market-card table-responsive">
+        <p class="text-muted small mb-2">@_tabla.Count rollo(s). <span class="ms-1">Tocá un encabezado para ordenar.</span></p>
+        <div class="market-card table-responsive" style="max-height:70vh;overflow:auto">
             <table class="market-table align-middle">
                 <thead>
                     <tr>
-                        <th style="width: 14%">Depósito</th>
-                        <th>Material</th>
-                        <th style="width: 13%">Textil</th>
-                        <th class="text-end" style="width: 90px">Ancho (cm)</th>
-                        <th>Composición</th>
-                        <th class="text-end" style="width: 90px">Rinde (m/kg)</th>
-                        <th class="text-end" style="width: 100px">Gramos/m²</th>
-                        <th style="width: 12%">Color</th>
-                        <th class="text-center" style="width: 100px">Acciones</th>
+                        <th role="button" @onclick='() => Ordenar("material")'>Material @Caret("material")</th>
+                        <th role="button" @onclick='() => Ordenar("codcolor")'>Cód. color @Caret("codcolor")</th>
+                        <th role="button" @onclick='() => Ordenar("color")'>Color @Caret("color")</th>
+                        <th role="button" @onclick='() => Ordenar("colortelera")'>Color telera @Caret("colortelera")</th>
+                        <th role="button" @onclick='() => Ordenar("deposito")'>Depósito @Caret("deposito")</th>
+                        <th role="button" @onclick='() => Ordenar("codtelera")'>Cód. telera @Caret("codtelera")</th>
+                        <th role="button" @onclick='() => Ordenar("telera")'>Telera @Caret("telera")</th>
+                        <th role="button" @onclick='() => Ordenar("pedido")'>N° Pedido @Caret("pedido")</th>
+                        <th role="button" @onclick='() => Ordenar("remito")'>Remito @Caret("remito")</th>
+                        <th role="button" class="text-end" @onclick='() => Ordenar("cantidad")'>Cant. @Caret("cantidad")</th>
+                        <th role="button" @onclick='() => Ordenar("unidad")'>Un. @Caret("unidad")</th>
+                        <th class="text-center" style="width:90px">Acc.</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var t in _items)
+                    @foreach (var r in TablaOrdenada())
                     {
-                        <tr @ondblclick="() => AbrirModificacion(t)">
-                            <td>@t.Deposito</td>
-                            <td>@t.Material</td>
-                            <td>@t.Textil</td>
-                            <td class="text-end">@Num(t.AnchoCm)</td>
-                            <td>@t.Composicion</td>
-                            <td class="text-end">@Num(t.RindeMKg)</td>
-                            <td class="text-end">@Num(t.GramosM2)</td>
-                            <td>@t.Color</td>
+                        <tr>
+                            <td>@r.Material</td>
+                            <td>@r.CodColor</td>
+                            <td>@(r.Color ?? "—")</td>
+                            <td>@r.ColorTelera</td>
+                            <td>@DepCell(r)</td>
+                            <td>@r.CodTelera</td>
+                            <td>@r.Telera</td>
+                            <td>@r.NumPedido</td>
+                            <td>@r.NumRemito</td>
+                            <td class="text-end">@Num(r.Cantidad)</td>
+                            <td>@r.Unidad</td>
                             <td class="text-center text-nowrap">
-                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModificacion(t)">
-                                    <i class="fa-solid fa-pen"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(t)">
-                                    <i class="fa-solid fa-trash"></i>
-                                </button>
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => AbrirModificacion(r)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarRolloTabla(r)"><i class="fa-solid fa-trash"></i></button>
                             </td>
                         </tr>
                     }
@@ -117,9 +279,53 @@
             </table>
         </div>
     }
+}
 </div>
 
-@* ===== Modal ABM tela ===== *@
+@* ===== Modal ABM rollos ===== *@
+@if (_abm)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Rollos · @_materialNombre · @NombreDep(_idDeposito)</h5>
+                    <button type="button" class="btn-close" @onclick="() => _abm = false"></button>
+                </div>
+                <div class="modal-body">
+                    <button class="btn btn-primary btn-sm mb-3" @onclick="() => AbrirAlta(_idDeposito, _idMaterial)">
+                        <i class="fa-solid fa-plus me-1"></i> Agregar rollo acá
+                    </button>
+                    <div class="table-responsive">
+                        <table class="market-table align-middle">
+                            <thead>
+                                <tr><th>Color</th><th>Color telera</th><th>Telera</th><th>Pedido</th><th>Remito</th><th class="text-end">Cant.</th><th>Un.</th><th class="text-center" style="width:90px">Acc.</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in _rollos)
+                                {
+                                    <tr>
+                                        <td>@(r.Color ?? "—")</td><td>@r.ColorTelera</td><td>@r.Telera</td>
+                                        <td>@r.NumPedido</td><td>@r.NumRemito</td>
+                                        <td class="text-end">@Num(r.Cantidad)</td><td>@r.Unidad</td>
+                                        <td class="text-center text-nowrap">
+                                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => AbrirModificacion(r)"><i class="fa-solid fa-pen"></i></button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarRollo(r)"><i class="fa-solid fa-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" @onclick="() => _abm = false">Cerrar</button></div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ===== Modal alta/modif rollo ===== *@
 @if (_modal)
 {
     <div class="modal fade show d-block" tabindex="-1" role="dialog">
@@ -128,66 +334,71 @@
                 <EditForm Model="_editado" OnValidSubmit="Guardar">
                     <DataAnnotationsValidator />
                     <div class="modal-header">
-                        <h5 class="modal-title">@(_esAlta ? "Nueva tela" : "Modificar tela")</h5>
+                        <h5 class="modal-title">@(_esAlta ? "Nuevo rollo" : "Modificar rollo")</h5>
                         <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
                     </div>
                     <div class="modal-body">
-                        @if (_errorModal is not null)
-                        {
-                            <div class="alert alert-danger py-2">@_errorModal</div>
-                        }
+                        @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
                         <div class="row g-3">
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Depósito</label>
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span>Material</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar material" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus"></i></button>
+                                </label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdMaterial">
+                                    <option value="0">— Seleccione —</option>
+                                    @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
+                                </InputSelect>
+                                <ValidationMessage For="() => _editado.IdMaterial" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span>Depósito</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar depósito" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus"></i></button>
+                                </label>
                                 <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
                                     <option value="0">— Seleccione —</option>
-                                    @foreach (var d in _depositos)
-                                    {
-                                        <option value="@d.Id">@d.Nombre</option>
-                                    }
+                                    @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
                                 </InputSelect>
                                 <ValidationMessage For="() => _editado.IdDeposito" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Textil / Proveedor</label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdTextil">
-                                    <option value="">— (ninguno) —</option>
-                                    @foreach (var t in _textiles)
-                                    {
-                                        <option value="@t.Id">@t.Nombre</option>
-                                    }
+                                <label class="form-label">Color (nuestro)</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdColor">
+                                    <option value="">— (sin color) —</option>
+                                    @foreach (var c in _coloresCombo) { <option value="@c.Id">@c.Codigo - @c.Nombre</option> }
                                 </InputSelect>
                             </div>
-                            <div class="col-12">
-                                <label class="form-label">Material</label>
-                                <InputText class="form-control" @bind-Value="_editado.Material" />
-                                <ValidationMessage For="() => _editado.Material" />
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Ancho (cm)</label>
-                                <InputNumber class="form-control" @bind-Value="_editado.AnchoCm" />
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Rinde (m/kg)</label>
-                                <InputNumber class="form-control" @bind-Value="_editado.RindeMKg" />
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Color telera (texto)</label>
+                                <InputText class="form-control" @bind-Value="_editado.ColorTelera" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Gramos/m² (calculado)</label>
-                                <input class="form-control" value="@GramosPreview()" disabled />
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span>Telera</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar telera" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus"></i></button>
+                                </label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdTelera">
+                                    <option value="">— (ninguna) —</option>
+                                    @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
+                                </InputSelect>
                             </div>
-                            <div class="col-12 col-md-8">
-                                <label class="form-label">Composición</label>
-                                <InputText class="form-control" @bind-Value="_editado.Composicion"
-                                           placeholder="96% poliester / 4% elastano" />
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">N° Pedido</label>
+                                <InputText class="form-control" @bind-Value="_editado.NumPedido" />
                             </div>
-                            <div class="col-12 col-md-4">
-                                <label class="form-label">Color (Dragonfish)</label>
-                                <InputSelect class="form-select" @bind-Value="_editado.ColorCod">
-                                    <option value="">— (ninguno) —</option>
-                                    @foreach (var c in _coloresDragon)
-                                    {
-                                        <option value="@c.Cod">@c.Nombre</option>
-                                    }
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">N° Remito</label>
+                                <InputText class="form-control" @bind-Value="_editado.NumRemito" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Cantidad</label>
+                                <InputNumber class="form-control" @bind-Value="_editado.Cantidad" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Unidad</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.Unidad">
+                                    <option value="">—</option><option value="Kg">Kg</option><option value="M">M</option>
                                 </InputSelect>
                             </div>
                         </div>
@@ -195,8 +406,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
                         <button type="submit" class="btn btn-primary" disabled="@_guardando">
-                            @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
-                            Guardar
+                            @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } Guardar
                         </button>
                     </div>
                 </EditForm>
@@ -206,198 +416,296 @@
     <div class="modal-backdrop fade show"></div>
 }
 
-@* ===== Modal catálogos (depósitos / textiles) ===== *@
-@if (_modalCat)
+@* ===== Modal alta de catálogo (material / depósito / telera) ===== *@
+@if (_catModal)
 {
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index:1060">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Catálogos de Telas</h5>
-                    <button type="button" class="btn-close" @onclick="() => _modalCat = false"></button>
+                    <h5 class="modal-title">@_catTitulo</h5>
+                    <button type="button" class="btn-close" @onclick="() => _catModal = false"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="btn-group mb-3 w-100">
-                        <button class="btn @(_catTipo == CatalogoTela.Depositos ? "btn-primary" : "btn-outline-primary")"
-                                @onclick='() => CambiarTipo(CatalogoTela.Depositos)'>Depósitos</button>
-                        <button class="btn @(_catTipo == CatalogoTela.Textiles ? "btn-primary" : "btn-outline-primary")"
-                                @onclick='() => CambiarTipo(CatalogoTela.Textiles)'>Textiles</button>
+                    @if (_catError is not null) { <div class="alert alert-danger py-2">@_catError</div> }
+                    @if (_catReqCod)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Código</label>
+                            <input class="form-control" @bind="_catCodigo" @bind:event="oninput" placeholder="Ej: Y52" />
+                        </div>
+                    }
+                    <div class="mb-1">
+                        <label class="form-label">Nombre</label>
+                        <input class="form-control" @bind="_catNombre" @bind:event="oninput" @onkeyup="OnKeyCatalogo" />
                     </div>
-                    <p class="text-muted small">Los colores no se editan acá: salen de Dragonfish.</p>
-
-                    @if (_catError is not null)
-                    {
-                        <div class="alert alert-danger py-2">@_catError</div>
-                    }
-
-                    <div class="d-flex gap-2 mb-3">
-                        <input class="form-control" placeholder="Nombre..." @bind="_catEdit.Nombre" />
-                        <button class="btn btn-primary text-nowrap" @onclick="GuardarCat">
-                            @(_catEditId is null ? "Agregar" : "Guardar")
-                        </button>
-                        @if (_catEditId is not null)
-                        {
-                            <button class="btn btn-outline-secondary" @onclick="CancelarEdicionCat">Cancelar</button>
-                        }
-                    </div>
-
-                    @if (_catItems.Count == 0)
-                    {
-                        <p class="text-muted small">Sin ítems.</p>
-                    }
-                    else
-                    {
-                        <ul class="list-group">
-                            @foreach (var it in _catItems)
-                            {
-                                <li class="list-group-item d-flex align-items-center">
-                                    <span class="flex-grow-1">@it.Nombre</span>
-                                    <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => EditarCat(it)">
-                                        <i class="fa-solid fa-pen"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarCat(it)">
-                                        <i class="fa-solid fa-trash"></i>
-                                    </button>
-                                </li>
-                            }
-                        </ul>
-                    }
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CerrarCatalogos">Cerrar</button>
+                    <button class="btn btn-secondary" @onclick="() => _catModal = false">Cancelar</button>
+                    <button class="btn btn-primary" disabled="@_catGuardando" @onclick="GuardarCatalogo">
+                        @if (_catGuardando) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Agregar
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-    <div class="modal-backdrop fade show"></div>
+    <div class="modal-backdrop fade show" style="z-index:1055"></div>
 }
 
 @code {
-    private readonly List<TelaDto> _items = new();
     private List<CatalogoItemDto> _depositos = new();
-    private List<CatalogoItemDto> _textiles = new();
-    private List<ColorDragonDto> _coloresDragon = new();
+    private List<CatalogoItemDto> _materialesCombo = new();
+    private List<CatalogoItemDto> _coloresCombo = new();
+    private List<CatalogoItemDto> _telerasCombo = new();
 
-    private int _fDeposito;
-    private int _fTextil;
-    private string _fMaterial = "";
-    private bool _cargando = true;
+    private int _idDeposito;
+    private int _idMaterial;
+    private string _materialNombre = "";
+
+    private List<DepoStockDto> _depoStock = new();
+    private List<DepoMaterialDto> _materiales = new();
+    private List<ColorStockDto> _colores = new();
     private string? _error;
 
-    // Modal tela
-    private bool _modal;
-    private bool _esAlta;
-    private bool _guardando;
+    private int _maxDepo = 1, _maxMat = 1, _maxColor = 1;
+
+    private ElementReference _matRef;
+    private bool _scrollToMat;
+
+    // ABM
+    private bool _abm;
+    private List<TelaRolloDto> _rollos = new();
+    private bool _modal, _esAlta, _guardando;
     private int _idEditado;
     private string? _errorModal;
-    private TelaSaveRequest _editado = new();
+    private RolloSaveRequest _editado = new();
 
-    // Modal catálogos
-    private bool _modalCat;
-    private string _catTipo = CatalogoTela.Depositos;
-    private List<CatalogoItemDto> _catItems = new();
-    private int? _catEditId;
-    private CatalogoSaveRequest _catEdit = new();
+    // Alta de catálogo (material / depósito / telera)
+    private bool _catModal, _catReqCod, _catGuardando;
+    private string _catTipo = "", _catTitulo = "", _catCodigo = "", _catNombre = "";
     private string? _catError;
 
-    // Deep-link / Compartir: filtros en la URL.
-    [Parameter, SupplyParameterFromQuery(Name = "dep")] public int? DepQ { get; set; }
-    [Parameter, SupplyParameterFromQuery(Name = "textil")] public int? TextilQ { get; set; }
-    [Parameter, SupplyParameterFromQuery(Name = "material")] public string? MaterialQ { get; set; }
+    // Solapas
+    private string _tab = "tablero";
+    // Tipo de gráfico por nivel (false = barras, true = dona)
+    private bool _donaDep, _donaMat, _donaCol;
+    // Solapa Stock (tabla)
+    private int _fDep, _fMat, _fColor, _fTelera;
+    private string _fPed = "";
+    private List<TelaRolloDto> _tabla = new();
+    private bool _tablaCargando;
+    private bool _busco;
+    private string _sortCol = "material";
+    private bool _sortAsc = true;
 
-    private string CompartirQuery
-    {
-        get
-        {
-            var p = new List<string>();
-            if (_fDeposito != 0) p.Add($"dep={_fDeposito}");
-            if (_fTextil != 0) p.Add($"textil={_fTextil}");
-            if (!string.IsNullOrWhiteSpace(_fMaterial)) p.Add($"material={Uri.EscapeDataString(_fMaterial)}");
-            return string.Join("&", p);
-        }
-    }
+    private static readonly string[] _palette =
+        { "#185FA5", "#1D9E75", "#D85A30", "#BA7517", "#534AB7", "#D4537E", "#0F6E56", "#888780", "#992929", "#067DBA" };
 
     protected override async Task OnInitializedAsync()
     {
-        await CargarCombos();
-        if (DepQ.HasValue) _fDeposito = DepQ.Value;
-        if (TextilQ.HasValue) _fTextil = TextilQ.Value;
-        if (MaterialQ != null) _fMaterial = MaterialQ;
+        try
+        {
+            _depositos = await Api.CatalogoAsync(CatalogoTela.Depositos);
+            _materialesCombo = await Api.CatalogoAsync(CatalogoTela.Materiales);
+            _coloresCombo = await Api.CatalogoAsync(CatalogoTela.Colores);
+            _telerasCombo = await Api.CatalogoAsync(CatalogoTela.Teleras);
+        }
+        catch { }
         await Cargar();
     }
 
-    private async Task CargarCombos()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try
+        if (_scrollToMat)
         {
-            _depositos = await Api.ListarCatalogoAsync(CatalogoTela.Depositos);
-            _textiles = await Api.ListarCatalogoAsync(CatalogoTela.Textiles);
-            _coloresDragon = await Api.ListarColoresAsync();
+            _scrollToMat = false;
+            try { await _matRef.FocusAsync(); } catch { }
         }
-        catch { /* el cartel de error de Cargar cubre la pantalla */ }
     }
+
+    private static string DepoLabel(DepoStockDto d)
+        => string.IsNullOrWhiteSpace(d.Deposito) ? (d.Codigo ?? "") : $"{d.Codigo} · {d.Deposito}";
+
+    private string NombreDep(int id)
+    {
+        var d = _depositos.FirstOrDefault(x => x.Id == id);
+        return d is null ? "" : (string.IsNullOrWhiteSpace(d.Nombre) ? d.Codigo ?? "" : d.Nombre);
+    }
+
+    private static string Num(decimal? d) => d is null ? "" : d.Value.ToString("0.##");
+    private static string SegColor(int i) => _palette[i % _palette.Length];
+    private static int Pct(int v, int max) => max <= 0 ? 0 : (int)Math.Round(v * 100.0 / max);
+
+    // Toggle Barras/Donas por gráfico
+    private RenderFragment ToggleGrafico(bool donas, Action<bool> set) =>
+    @<div class="btn-group btn-group-sm" role="group" aria-label="Tipo de gráfico">
+        <button type="button" class="btn @(donas ? "btn-outline-secondary" : "btn-secondary")" title="Barras" @onclick="() => set(false)"><i class="fa-solid fa-chart-bar"></i></button>
+        <button type="button" class="btn @(donas ? "btn-secondary" : "btn-outline-secondary")" title="Donas" @onclick="() => set(true)"><i class="fa-solid fa-chart-pie"></i></button>
+    </div>;
+
+    // ---- Gráfico de dona (SVG) ----
+    private sealed record DonutSlice(string Label, int Value, int Pct, string Dash, string Offset, string Color, Func<Task>? OnClick, bool Sel);
+
+    private static List<DonutSlice> BuildDonut(IReadOnlyList<(string Label, int Value, Func<Task>? OnClick, bool Sel)> items)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        const double r = 60;
+        var circ = 2 * Math.PI * r;
+        var data = items.Where(i => i.Value > 0).ToList();
+        var total = data.Sum(i => i.Value);
+        var slices = new List<DonutSlice>();
+        double acc = 0;
+        for (var i = 0; i < data.Count; i++)
+        {
+            var frac = total == 0 ? 0 : (double)data[i].Value / total;
+            var len = frac * circ;
+            slices.Add(new DonutSlice(
+                data[i].Label, data[i].Value, (int)Math.Round(frac * 100),
+                $"{len.ToString("0.##", inv)} {circ.ToString("0.##", inv)}",
+                (-acc).ToString("0.##", inv), SegColor(i), data[i].OnClick, data[i].Sel));
+            acc += len;
+        }
+        return slices;
+    }
+
+    private static async Task OnSlice(DonutSlice s) { if (s.OnClick is not null) await s.OnClick(); }
+
+    // Arma un ítem de dona con OnClick nullable (evita warnings de nulabilidad de tuplas).
+    private static (string, int, Func<Task>?, bool) DSlice(string label, int value, Func<Task>? onClick = null, bool sel = false)
+        => (label, value, onClick, sel);
+
+    private RenderFragment RenderDonut(IReadOnlyList<(string Label, int Value, Func<Task>? OnClick, bool Sel)> items) =>
+    @<div class="tl-donut">
+        <svg viewBox="0 0 160 160" class="tl-donut-svg" role="img">
+            <g transform="rotate(-90 80 80)">
+                @foreach (var s in BuildDonut(items))
+                {
+                    <circle cx="80" cy="80" r="60" fill="none" stroke="@s.Color"
+                            stroke-width="@(s.Sel ? 32 : 26)" class="@(s.OnClick is not null ? "tl-donut-seg" : null)"
+                            stroke-dasharray="@s.Dash" stroke-dashoffset="@s.Offset" @onclick="() => OnSlice(s)">
+                        <title>@s.Label: @s.Value (@s.Pct%)</title>
+                    </circle>
+                }
+            </g>
+            <text x="80" y="73" text-anchor="middle" class="tl-donut-num">@items.Sum(i => i.Value)</text>
+            <text x="80" y="90" text-anchor="middle" class="tl-donut-cap">Rollos</text>
+        </svg>
+        <div class="tl-donut-legend">
+            @foreach (var s in BuildDonut(items))
+            {
+                <div class="tl-leg-item @(s.OnClick is not null ? "tl-leg-click" : null) @(s.Sel ? "tl-leg-sel" : null)" @onclick="() => OnSlice(s)">
+                    <span class="tl-leg-dot" style="background:@s.Color"></span>
+                    <span class="tl-leg-lbl">@s.Label</span>
+                    <span class="tl-leg-val">@s.Value <span class="text-muted">(@s.Pct%)</span></span>
+                </div>
+            }
+        </div>
+    </div>;
+
+    // Combo / celda de depósito: "código - nombre" (proveedor)
+    private static string DepLabel(CatalogoItemDto d)
+        => string.IsNullOrWhiteSpace(d.Nombre) ? (d.Codigo ?? "") : $"{d.Codigo} - {d.Nombre}";
+    private static string DepCell(TelaRolloDto r)
+        => string.IsNullOrWhiteSpace(r.Deposito) ? (r.CodDeposito ?? "") : $"{r.CodDeposito} - {r.Deposito}";
+
+    // ---- Orden de la tabla de stock ----
+    private string Caret(string col) => _sortCol == col ? (_sortAsc ? "▲" : "▼") : "";
+
+    private void Ordenar(string col)
+    {
+        if (_sortCol == col) _sortAsc = !_sortAsc;
+        else { _sortCol = col; _sortAsc = true; }
+    }
+
+    private static double CodNum(string? s)
+        => double.TryParse(s, out var n) ? n : double.MaxValue;   // no numéricos al final
+
+    private IEnumerable<TelaRolloDto> TablaOrdenada()
+    {
+        IOrderedEnumerable<TelaRolloDto> o = _sortCol switch
+        {
+            "codcolor"    => Ord(r => CodNum(r.CodColor)),
+            "color"       => Ord(r => r.Color ?? ""),
+            "colortelera" => Ord(r => r.ColorTelera ?? ""),
+            "deposito"    => Ord(r => CodNum(r.CodDeposito)),
+            "codtelera"   => Ord(r => CodNum(r.CodTelera)),
+            "telera"      => Ord(r => r.Telera ?? ""),
+            "pedido"      => Ord(r => CodNum(r.NumPedido)),
+            "remito"      => Ord(r => CodNum(r.NumRemito)),
+            "cantidad"    => Ord(r => r.Cantidad ?? 0m),
+            "unidad"      => Ord(r => r.Unidad ?? ""),
+            _             => Ord(r => r.Material),
+        };
+        return o;
+    }
+
+    private IOrderedEnumerable<TelaRolloDto> Ord<TKey>(Func<TelaRolloDto, TKey> key)
+        => _sortAsc ? _tabla.OrderBy(key) : _tabla.OrderByDescending(key);
 
     private async Task Cargar()
     {
-        _cargando = true;
         _error = null;
         try
         {
-            var datos = await Api.ListarAsync(_fDeposito, _fMaterial, _fTextil);
-            _items.Clear();
-            _items.AddRange(datos);
+            _depoStock = await Api.StockDepositosAsync();
+            _maxDepo = _depoStock.Count > 0 ? _depoStock.Max(d => d.CantRollos) : 1;
+            if (_idDeposito > 0)
+            {
+                _materiales = await Api.MaterialesDepositoAsync(_idDeposito);
+                _maxMat = _materiales.Count > 0 ? _materiales.GroupBy(m => m.IdMaterial).Max(g => g.Sum(x => x.CantRollos)) : 1;
+            }
+            else { _materiales = new(); }
         }
         catch (Exception ex)
         {
-            _items.Clear();
-            _error = "No se pudieron cargar las telas. Verificá la conexión a la base de datos.";
+            _error = "No se pudo cargar el tablero de telas. Verificá la conexión a la base.";
             Console.Error.WriteLine(ex);
         }
-        finally
-        {
-            _cargando = false;
-        }
     }
 
-    private Task Procesar() => Cargar();
-
-    private async Task OnKeyUp(KeyboardEventArgs e)
+    private async Task SeleccionarDeposito(int id)
     {
-        if (e.Key == "Enter") await Cargar();
+        _idDeposito = id;
+        _idMaterial = 0;
+        _materialNombre = "";
+        _colores = new();
+        _scrollToMat = id > 0;   // al entrar a un depósito, baja al segregado por materiales
+        await Cargar();
     }
 
-    private static string Num(decimal? d) => d?.ToString("0.##") ?? "";
-
-    private string GramosPreview()
+    private async Task SeleccionarMaterial(int idMat, string nombre)
     {
-        var r = _editado.RindeMKg ?? 0;
-        var a = _editado.AnchoCm ?? 0;
-        if (r <= 0 || a <= 0) return "";
-        return (1000m / (r * (a / 100m))).ToString("0.##");
+        _idMaterial = idMat;
+        _materialNombre = nombre;
+        _colores = await Api.ColoresStockAsync(_idDeposito, idMat);
+        _maxColor = _colores.Count > 0 ? _colores.GroupBy(c => c.ColorCod).Max(g => g.Sum(x => x.CantRollos)) : 1;
     }
 
-    private void AbrirAlta()
+    // ---- ABM ----
+    private async Task AbrirAbm()
+    {
+        _rollos = await Api.RollosAsync(_idDeposito, _idMaterial, null, null, null);
+        _abm = true;
+    }
+
+    private void AbrirAlta(int? idDeposito, int? idMaterial)
     {
         _esAlta = true;
         _idEditado = 0;
-        _editado = new TelaSaveRequest();
+        _editado = new RolloSaveRequest { IdDeposito = idDeposito ?? 0, IdMaterial = idMaterial ?? 0 };
         _errorModal = null;
         _modal = true;
     }
 
-    private void AbrirModificacion(TelaDto t)
+    private void AbrirModificacion(TelaRolloDto r)
     {
         _esAlta = false;
-        _idEditado = t.Id;
-        _editado = new TelaSaveRequest
+        _idEditado = r.Id;
+        _editado = new RolloSaveRequest
         {
-            IdDeposito = t.IdDeposito,
-            Material = t.Material,
-            IdTextil = t.IdTextil,
-            AnchoCm = t.AnchoCm,
-            Composicion = t.Composicion,
-            RindeMKg = t.RindeMKg,
-            ColorCod = t.ColorCod,
+            IdMaterial = r.IdMaterial, IdDeposito = r.IdDeposito, IdColor = r.IdColor, IdTelera = r.IdTelera,
+            ColorTelera = r.ColorTelera, NumPedido = r.NumPedido, NumRemito = r.NumRemito, Cantidad = r.Cantidad, Unidad = r.Unidad,
         };
         _errorModal = null;
         _modal = true;
@@ -407,80 +715,124 @@
     {
         _guardando = true;
         _errorModal = null;
-        var (ok, error) = _esAlta
-            ? await Api.CrearAsync(_editado)
-            : await Api.ModificarAsync(_idEditado, _editado);
+        var (ok, error) = _esAlta ? await Api.CrearRolloAsync(_editado) : await Api.ModificarRolloAsync(_idEditado, _editado);
         _guardando = false;
         if (!ok) { _errorModal = error; return; }
         _modal = false;
-        Ui.Exito(_esAlta ? "Tela agregada." : "Tela modificada.");
-        await Cargar();
+        Ui.Exito(_esAlta ? "Rollo agregado." : "Rollo modificado.");
+        await RefrescarTrasAbm();
     }
 
-    private async Task Eliminar(TelaDto t)
+    private async Task EliminarRollo(TelaRolloDto r)
     {
-        var ok = await Ui.ConfirmAsync($"¿Eliminar la tela \"{t.Material}\" ({t.Deposito})?",
-            "Eliminar tela", "Eliminar", "Cancelar", peligro: true);
+        var ok = await Ui.ConfirmAsync($"¿Eliminar este rollo de {r.Material}?", "Eliminar rollo", "Eliminar", "Cancelar", peligro: true);
         if (!ok) return;
-        await Api.EliminarAsync(t.Id);
-        Ui.Exito("Tela eliminada.");
-        await Cargar();
+        await Api.EliminarRolloAsync(r.Id);
+        Ui.Exito("Rollo eliminado.");
+        await RefrescarTrasAbm();
     }
 
-    // ---- Catálogos ----
-    private async Task AbrirCatalogos()
+    private async Task RefrescarTrasAbm()
     {
-        _modalCat = true;
-        await CambiarTipo(CatalogoTela.Depositos);
+        await Cargar();
+        if (_idMaterial > 0) await SeleccionarMaterial(_idMaterial, _materialNombre);
+        if (_abm) _rollos = await Api.RollosAsync(_idDeposito, _idMaterial, null, null, null);
+        if (_tab == "stock") await BuscarTabla();
     }
 
-    private async Task CambiarTipo(string tipo)
+    // ---- Solapa Stock (tabla) ----
+    private async Task IrStock()
+    {
+        _tab = "stock";
+        if (_tabla.Count == 0 && !_tablaCargando) await BuscarTabla();
+    }
+
+    private async Task BuscarTabla()
+    {
+        _tablaCargando = true;
+        try
+        {
+            _tabla = await Api.RollosAsync(
+                _fDep > 0 ? _fDep : null, _fMat > 0 ? _fMat : null,
+                _fColor != 0 ? _fColor : null, _fTelera > 0 ? _fTelera : null, _fPed);
+            _busco = true;
+        }
+        finally { _tablaCargando = false; }
+    }
+
+    private async Task OnKeyTabla(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarTabla();
+    }
+
+    private async Task EliminarRolloTabla(TelaRolloDto r)
+    {
+        var ok = await Ui.ConfirmAsync($"¿Eliminar este rollo de {r.Material}?", "Eliminar rollo", "Eliminar", "Cancelar", peligro: true);
+        if (!ok) return;
+        await Api.EliminarRolloAsync(r.Id);
+        Ui.Exito("Rollo eliminado.");
+        await BuscarTabla();
+    }
+
+    // ---- Alta de catálogo (material / depósito / telera) ----
+    private void AbrirCatalogo(string tipo)
     {
         _catTipo = tipo;
+        _catReqCod = tipo != CatalogoTela.Materiales;
+        _catTitulo = tipo switch
+        {
+            CatalogoTela.Materiales => "Nuevo material",
+            CatalogoTela.Depositos => "Nuevo depósito",
+            CatalogoTela.Teleras => "Nueva telera",
+            _ => "Nuevo"
+        };
+        _catCodigo = "";
+        _catNombre = "";
         _catError = null;
-        CancelarEdicionCat();
-        _catItems = await Api.ListarCatalogoAsync(tipo);
+        _catModal = true;
     }
 
-    private void EditarCat(CatalogoItemDto it)
+    private async Task OnKeyCatalogo(KeyboardEventArgs e)
     {
-        _catEditId = it.Id;
-        _catEdit = new CatalogoSaveRequest { Nombre = it.Nombre };
+        if (e.Key == "Enter") await GuardarCatalogo();
     }
 
-    private void CancelarEdicionCat()
-    {
-        _catEditId = null;
-        _catEdit = new CatalogoSaveRequest();
-    }
-
-    private async Task GuardarCat()
+    private async Task GuardarCatalogo()
     {
         _catError = null;
-        var (ok, error) = _catEditId is null
-            ? await Api.CrearCatalogoAsync(_catTipo, _catEdit)
-            : await Api.ModificarCatalogoAsync(_catTipo, _catEditId.Value, _catEdit);
-        if (!ok) { _catError = error; return; }
-        CancelarEdicionCat();
-        _catItems = await Api.ListarCatalogoAsync(_catTipo);
-        Ui.Exito("Catálogo actualizado.");
+        if (string.IsNullOrWhiteSpace(_catNombre)) { _catError = "El nombre es obligatorio."; return; }
+        if (_catReqCod && string.IsNullOrWhiteSpace(_catCodigo)) { _catError = "El código es obligatorio."; return; }
+
+        _catGuardando = true;
+        try
+        {
+            var (ok, err, id) = await Api.CrearCatalogoAsync(_catTipo, _catReqCod ? _catCodigo : null, _catNombre);
+            if (!ok) { _catError = err; return; }
+
+            await RecargarCatalogo(_catTipo);
+            // Si estoy en el alta/modif de rollo, dejo seleccionado el recién creado.
+            if (_modal && id > 0)
+            {
+                switch (_catTipo)
+                {
+                    case CatalogoTela.Materiales: _editado.IdMaterial = id; break;
+                    case CatalogoTela.Depositos: _editado.IdDeposito = id; break;
+                    case CatalogoTela.Teleras: _editado.IdTelera = id; break;
+                }
+            }
+            Ui.Exito("Agregado.");
+            _catModal = false;
+        }
+        finally { _catGuardando = false; }
     }
 
-    private async Task EliminarCat(CatalogoItemDto it)
+    private async Task RecargarCatalogo(string tipo)
     {
-        var ok = await Ui.ConfirmAsync($"¿Eliminar \"{it.Nombre}\" del catálogo?",
-            "Eliminar", "Eliminar", "Cancelar", peligro: true);
-        if (!ok) return;
-        var (okDel, error) = await Api.EliminarCatalogoAsync(_catTipo, it.Id);
-        if (!okDel) { _catError = error; return; }
-        _catItems = await Api.ListarCatalogoAsync(_catTipo);
-        Ui.Exito("Ítem eliminado.");
-    }
-
-    private async Task CerrarCatalogos()
-    {
-        _modalCat = false;
-        await CargarCombos();
-        await Cargar();
+        switch (tipo)
+        {
+            case CatalogoTela.Materiales: _materialesCombo = await Api.CatalogoAsync(tipo); break;
+            case CatalogoTela.Depositos: _depositos = await Api.CatalogoAsync(tipo); break;
+            case CatalogoTela.Teleras: _telerasCombo = await Api.CatalogoAsync(tipo); break;
+        }
     }
 }

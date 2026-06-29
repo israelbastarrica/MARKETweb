@@ -1,4 +1,5 @@
 using System.Data;
+using MarketWeb.Application.Common;
 using MarketWeb.Application.Data;
 using MarketWeb.Shared.Reposicion;
 using Microsoft.Data.SqlClient;
@@ -74,6 +75,7 @@ public sealed class EventosService : IEventosService
     {
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
+        await EnsureMotivosSchemaAsync(cn, ct);   // garantiza la columna IDMotivoEvento + el catálogo
 
         EventoDetalleDto dto;
         string remitoCodigo, origen;
@@ -82,11 +84,13 @@ public sealed class EventosService : IEventosService
             "       RTRIM(ISNULL(ER.ARTCOD,'')) AS ARTCOD, RTRIM(ISNULL(ER.Accion,'')) AS Accion, " +
             "       ER.CodigoEscaneado, ER.DescripcionArt, ER.RemitoCODIGO, ER.RemitoDisplay, " +
             "       RTRIM(ER.TipoDiferencia) AS TipoDiferencia, ER.CantidadPacks, " +
-            "       ER.Procesado, ER.Eliminado, ER.UsuarioApp, " +
+            "       ER.Procesado, ER.Eliminado, ER.UsuarioApp, ER.IDMotivoEvento, " +
+            "       RTRIM(ISNULL(MO.Nombre,'')) AS MotivoEvento, " +
             "       CASE WHEN ER.Foto IS NULL THEN 0 ELSE 1 END AS TieneFoto, " +
             "       UPPER(RTRIM(ISNULL(RD.LocalOrigen, ''))) AS OrigenRemito " +
             "FROM MARKET.dbo.EventosReposicion ER " +
             "LEFT JOIN MARKET.dbo.RemitosDespachados RD ON RD.CODIGO = ER.RemitoCODIGO AND RD.Eliminado = 0 " +
+            "LEFT JOIN MARKET.dbo.MotivosEvento MO ON MO.ID = ER.IDMotivoEvento " +
             "WHERE ER.ID = @ID";
         await using (var cmd = new SqlCommand(sql, cn))
         {
@@ -110,7 +114,9 @@ public sealed class EventosService : IEventosService
                 Usuario = Str(rdr, "UsuarioApp"),
                 Procesado = Convert.ToInt32(rdr["Procesado"]) == 1,
                 Eliminado = Convert.ToInt32(rdr["Eliminado"]) == 1,
-                TieneFoto = Convert.ToInt32(rdr["TieneFoto"]) == 1
+                TieneFoto = Convert.ToInt32(rdr["TieneFoto"]) == 1,
+                IDMotivoEvento = rdr["IDMotivoEvento"] is DBNull or null ? null : Convert.ToInt32(rdr["IDMotivoEvento"]),
+                MotivoEvento = Str(rdr, "MotivoEvento")
             };
             remitoCodigo = rdr["RemitoCODIGO"] is DBNull or null ? "" : rdr["RemitoCODIGO"].ToString()!.Trim();
             origen = Str(rdr, "OrigenRemito").ToUpperInvariant();
@@ -203,6 +209,78 @@ public sealed class EventosService : IEventosService
 
     public async Task EliminarAsync(int id, CancellationToken ct = default)
         => await EjecutarAsync("UPDATE MARKET.dbo.EventosReposicion SET Eliminado = 1 WHERE ID = @ID", id, ct);
+
+    // ---- Motivos normalizados del evento (catálogo + asignación) ----
+
+    // Crea la tabla de catálogo y la columna en EventosReposicion si faltan. Idempotente y barato.
+    private static async Task EnsureMotivosSchemaAsync(SqlConnection cn, CancellationToken ct)
+    {
+        const string ddl = @"
+IF OBJECT_ID('MARKET.dbo.MotivosEvento','U') IS NULL
+CREATE TABLE MARKET.dbo.MotivosEvento(
+    ID        INT IDENTITY(1,1) CONSTRAINT PK_MotivosEvento PRIMARY KEY,
+    Nombre    NVARCHAR(200) NOT NULL,
+    Eliminado BIT NOT NULL CONSTRAINT DF_MotivosEvento_Elim DEFAULT 0,
+    Auditoria NVARCHAR(200) NULL
+);
+IF COL_LENGTH('MARKET.dbo.EventosReposicion','IDMotivoEvento') IS NULL
+    ALTER TABLE MARKET.dbo.EventosReposicion ADD IDMotivoEvento INT NULL;";
+        await using var cmd = new SqlCommand(ddl, cn);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<MotivoEventoDto>> ListarMotivosAsync(CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await EnsureMotivosSchemaAsync(cn, ct);
+
+        var lista = new List<MotivoEventoDto>();
+        await using var cmd = new SqlCommand(
+            "SELECT ID, RTRIM(Nombre) AS Nombre FROM MARKET.dbo.MotivosEvento WHERE ISNULL(Eliminado,0)=0 ORDER BY Nombre", cn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+            lista.Add(new MotivoEventoDto { Id = Convert.ToInt32(rdr["ID"]), Nombre = Str(rdr, "Nombre") });
+        return lista;
+    }
+
+    public async Task<MotivoEventoDto> CrearMotivoAsync(string nombre, string usuario, CancellationToken ct = default)
+    {
+        var n = (nombre ?? "").Trim();
+        if (n.Length == 0) throw new BusinessException("El motivo no puede estar vacío.");
+        if (n.Length > 200) n = n.Substring(0, 200);
+
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await EnsureMotivosSchemaAsync(cn, ct);
+
+        // Idempotente: si ya existe uno activo con el mismo nombre, lo devuelve (no duplica el catálogo).
+        const string sql = @"
+DECLARE @id INT = (SELECT TOP 1 ID FROM MARKET.dbo.MotivosEvento WHERE ISNULL(Eliminado,0)=0 AND RTRIM(Nombre)=@n ORDER BY ID);
+IF @id IS NULL
+BEGIN
+    INSERT INTO MARKET.dbo.MotivosEvento (Nombre, Auditoria) VALUES (@n, @aud);
+    SET @id = SCOPE_IDENTITY();
+END
+SELECT @id;";
+        await using var cmd = new SqlCommand(sql, cn);
+        cmd.Parameters.Add("@n", SqlDbType.NVarChar, 200).Value = n;
+        cmd.Parameters.Add("@aud", SqlDbType.NVarChar, 200).Value = $"Alta web {usuario}".Trim();
+        var id = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        return new MotivoEventoDto { Id = id, Nombre = n };
+    }
+
+    public async Task GuardarMotivoAsync(int idEvento, int idMotivo, CancellationToken ct = default)
+    {
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await EnsureMotivosSchemaAsync(cn, ct);
+        await using var cmd = new SqlCommand(
+            "UPDATE MARKET.dbo.EventosReposicion SET IDMotivoEvento = NULLIF(@m, 0) WHERE ID = @ID", cn);
+        cmd.Parameters.Add("@ID", SqlDbType.Int).Value = idEvento;
+        cmd.Parameters.Add("@m", SqlDbType.Int).Value = idMotivo;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 
     private async Task EjecutarAsync(string sql, int id, CancellationToken ct)
     {

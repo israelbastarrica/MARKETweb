@@ -4,10 +4,18 @@
 @inject EventosApi EventosApi
 @inject PageStateService State
 @inject UiService Ui
+@inject NavigationManager Nav
 
 <PageTitle>Consulta Reposición</PageTitle>
 
 <div class="market-page cr">
+    @if (!string.IsNullOrWhiteSpace(Ref))
+    {
+        <button class="btn-volver" @onclick="Volver">
+            <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+            <span>Volver</span>
+        </button>
+    }
     <PageHeader Modulo="Logística" Titulo="Consulta Artículo" Icono="fa-solid fa-magnifying-glass-chart" CompartirQuery="@CompartirQuery" />
 
     <fieldset class="cr-box">
@@ -25,6 +33,12 @@
             {
                 <ArticuloLink Codigo="@_d.ArtCod" Badge="false" />
             }
+            <div class="form-check ms-2">
+                <input class="form-check-input" type="checkbox" id="chkHist" @bind="_historiaCompleta" @bind:after="OnHistoriaChange" />
+                <label class="form-check-label small" for="chkHist" title="Trae toda la vida del artículo en el local (incluye lo anterior al ancla, marcado PRE-ANCLA). El pendiente/packs no cambia.">
+                    Ver historia completa
+                </label>
+            </div>
             <div class="cr-datos-btns">
                 <button class="btn btn-primary btn-sm" @onclick="Buscar" disabled="@_cargando">
                     @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
@@ -212,6 +226,7 @@
     private string _local = "LURO";
     private string _artCod = "";
     private bool _cargando, _busco;
+    private bool _historiaCompleta;
     private ExplicarDto? _d;
 
     private bool _modalEvt;
@@ -226,12 +241,18 @@
     // Permite abrir ya procesando un artículo en un local: /logistica/consulta-reposicion?local=LURO&art=XXX (ej. desde Eventos).
     [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQuery { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQuery { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hist")] public bool? HistQuery { get; set; }
+    // De dónde se llegó (ej. /logistica/eventos), para el botón Volver. No entra en el link Compartir.
+    [Parameter, SupplyParameterFromQuery(Name = "ref")] public string? Ref { get; set; }
     private string? _ultimoQ;
+
+    private void Volver() => Nav.NavigateTo(string.IsNullOrWhiteSpace(Ref) ? "/logistica/eventos" : Ref);
 
     private sealed class Snap
     {
         public string Local = "LURO";
         public string ArtCod = "";
+        public bool HistoriaCompleta;
         public ExplicarDto? D;
         public bool Busco;
     }
@@ -243,6 +264,7 @@
         {
             _local = s.Local;
             _artCod = s.ArtCod;
+            _historiaCompleta = s.HistoriaCompleta;
             _d = s.D;
             _busco = s.Busco;
         }
@@ -252,29 +274,35 @@
     protected override async Task OnParametersSetAsync()
     {
         if (string.IsNullOrWhiteSpace(ArtQuery)) return;
-        var key = $"{LocalQuery}|{ArtQuery}";
+        var key = $"{LocalQuery}|{ArtQuery}|{HistQuery}";
         if (key == _ultimoQ) return;
         _ultimoQ = key;
         if (!string.IsNullOrWhiteSpace(LocalQuery)) _local = LocalQuery.Trim().ToUpperInvariant();
+        _historiaCompleta = HistQuery ?? false;
         _artCod = ArtQuery.Trim();
         await Buscar();
     }
 
     private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
 
-    // Estado de la pantalla para el botón Compartir del header (local + artículo).
+    private async Task OnHistoriaChange()
+    {
+        if (!string.IsNullOrWhiteSpace(_artCod)) await Buscar();
+    }
+
+    // Estado de la pantalla para el botón Compartir del header (local + artículo + historia completa).
     private string? CompartirQuery => string.IsNullOrWhiteSpace(_artCod)
         ? null
-        : $"local={Uri.EscapeDataString(_local)}&art={Uri.EscapeDataString(_artCod.Trim())}";
+        : $"local={Uri.EscapeDataString(_local)}&art={Uri.EscapeDataString(_artCod.Trim())}" + (_historiaCompleta ? "&hist=1" : "");
 
     private async Task Buscar()
     {
         if (string.IsNullOrWhiteSpace(_artCod)) return;
         _cargando = true; _busco = true;
-        try { _d = await Api.ExplicarAsync(_local, _artCod.Trim()); }
+        try { _d = await Api.ExplicarAsync(_local, _artCod.Trim(), _historiaCompleta); }
         catch { _d = null; }
         finally { _cargando = false; }
-        State.Save(StateKey, new Snap { Local = _local, ArtCod = _artCod, D = _d, Busco = _busco }, 0);
+        State.Save(StateKey, new Snap { Local = _local, ArtCod = _artCod, HistoriaCompleta = _historiaCompleta, D = _d, Busco = _busco }, 0);
     }
 
     private async Task AbrirEvento(ExplicarMovimientoDto m)

@@ -88,11 +88,18 @@ public sealed class LogisticaDashboardService : ILogisticaDashboardService
             """;
         var demora = (await cn.QueryAsync<IdNum>(new CommandDefinition(sqlDem, new { inicio, fin }, cancellationToken: ct))).ToDictionary(r => r.IdLocal, r => r.N);
 
+        // Anulados = remitos CENTRAL→local de la jornada que NOSOTROS anulamos = tienen un pedido de
+        // rechazo en RemitoRecepcion (Accion='RECHAZAR', cualquier estado). Es la señal correcta (más
+        // temprana que COMPROBANTEV.ANULADO=1, que recién marca cuando el agente concreta el rechazo).
         const string sqlAnul = """
-            SELECT UPPER(RTRIM(IR.LocalDestino)) AS Local, SUM(CASE WHEN CV.ANULADO = 1 THEN 1 ELSE 0 END) AS Anulados
+            SELECT UPPER(RTRIM(IR.LocalDestino)) AS Local, COUNT(DISTINCT LTRIM(RTRIM(IR.RemitoCODIGO))) AS Anulados
             FROM dbo.ImpresorRemito_Cola IR
-            LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.COMPROBANTEV CV ON CV.CODIGO = IR.RemitoCODIGO
             WHERE IR.FechaEmision >= @inicio AND IR.FechaEmision < @fin AND UPPER(RTRIM(IR.LocalOrigen)) = 'CENTRAL'
+              AND EXISTS (
+                  SELECT 1 FROM dbo.RemitoRecepcion RR WITH(NOLOCK)
+                  WHERE RTRIM(RR.RemitoCODIGO) = RTRIM(IR.RemitoCODIGO)
+                    AND RTRIM(RR.LocalRecepcion) = RTRIM(IR.LocalDestino)
+                    AND RR.Accion = 'RECHAZAR')
             GROUP BY UPPER(RTRIM(IR.LocalDestino));
             """;
         var anul = (await cn.QueryAsync<AnulRow>(new CommandDefinition(sqlAnul, new { inicio, fin }, cancellationToken: ct))).ToDictionary(r => r.Local, r => r.Anulados, StringComparer.OrdinalIgnoreCase);

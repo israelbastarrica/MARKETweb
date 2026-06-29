@@ -1,10 +1,161 @@
-/* Chip de color estandarizado en grilla y catálogo. */
-.tela-chip {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
+/* Encabezados ordenables de la tabla de stock. */
+::deep th[role="button"] {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+::deep th[role="button"]:hover {
+    background: rgba(0, 0, 0, .04);
+}
+
+/* Gráfico de dona (SVG) + leyenda. */
+.tl-donut {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 24px;
+}
+.tl-donut-svg {
+    width: 200px;
+    height: 200px;
+    flex: 0 0 auto;
+}
+.tl-donut-num {
+    font-size: 28px;
+    font-weight: 700;
+    fill: var(--bs-body-color, #222);
+}
+.tl-donut-cap {
+    font-size: 11px;
+    fill: var(--bs-secondary-color, #888);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+.tl-donut-legend {
+    flex: 1 1 220px;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.tl-leg-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .85rem;
+}
+.tl-leg-dot {
+    width: 12px;
+    height: 12px;
     border-radius: 3px;
-    border: 1px solid var(--bs-border-color, #ced4da);
-    margin-right: 6px;
-    vertical-align: -2px;
+    flex: 0 0 auto;
+}
+.tl-leg-lbl {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tl-leg-val {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+/* Porciones clickeables */
+.tl-donut-seg {
+    cursor: pointer;
+    transition: opacity .15s;
+}
+.tl-donut-seg:hover {
+    opacity: .8;
+}
+.tl-leg-click {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+.tl-leg-click:hover {
+    background: rgba(0, 0, 0, .05);
+}
+.tl-leg-sel {
+    font-weight: 700;
+}
+
+/* Gráfico de barras (rollos por pedido). */
+.tl-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tl-bar-row {
+    display: grid;
+    grid-template-columns: 160px 1fr 120px;
+    align-items: center;
+    gap: 10px;
+}
+
+.tl-bar-lbl {
+    font-size: .82rem;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tl-bar-track {
+    background: var(--bs-tertiary-bg, #f1f3f5);
+    border-radius: .3rem;
+    overflow: hidden;
+    height: 18px;
+}
+
+.tl-bar-fill {
+    height: 100%;
+    background: var(--bs-primary, #0d6efd);
+    border-radius: .3rem;
+    min-width: 2px;
+    transition: width .2s ease;
+}
+
+.tl-bar-val {
+    font-size: .82rem;
+    white-space: nowrap;
+}
+
+.tl-bar-fill.sel {
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35);
+}
+
+/* Barra apilada (segmentos = pedidos dentro de un material). */
+.tl-stack {
+    display: flex;
+    align-items: stretch;
+}
+
+.tl-seg {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: .72rem;
+    overflow: hidden;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255, 255, 255, .55);
+}
+
+/* Material clickable en la tabla de drill-down. */
+.tl-mat {
+    cursor: pointer;
+    color: var(--bs-primary, #0d6efd);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.tl-mat:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 576px) {
+    .tl-bar-row { grid-template-columns: 110px 1fr 90px; }
 }
