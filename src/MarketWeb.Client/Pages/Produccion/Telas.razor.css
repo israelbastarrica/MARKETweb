@@ -60,6 +60,25 @@
     flex: 0 0 auto;
     font-variant-numeric: tabular-nums;
 }
+/* Porciones clickeables */
+.tl-donut-seg {
+    cursor: pointer;
+    transition: opacity .15s;
+}
+.tl-donut-seg:hover {
+    opacity: .8;
+}
+.tl-leg-click {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+.tl-leg-click:hover {
+    background: rgba(0, 0, 0, .05);
+}
+.tl-leg-sel {
+    font-weight: 700;
+}
 
 /* Gráfico de barras (rollos por pedido). */
 .tl-chart {

@@ -49,7 +49,7 @@
         }
         else if (_donaDep)
         {
-            @RenderDonut(_depoStock.Select(d => (DepoLabel(d), d.CantRollos)).ToList())
+            @RenderDonut(_depoStock.Select(d => DSlice(DepoLabel(d), d.CantRollos, () => SeleccionarDeposito(d.Id), d.Id == _idDeposito)).ToList())
         }
         else
         {
@@ -86,7 +86,7 @@
             }
             else if (_donaMat)
             {
-                @RenderDonut(_materiales.GroupBy(m => m.Material).Select(g => (g.Key, g.Sum(x => x.CantRollos))).ToList())
+                @RenderDonut(_materiales.GroupBy(m => new { m.IdMaterial, m.Material }).Select(g => DSlice(g.Key.Material, g.Sum(x => x.CantRollos), () => SeleccionarMaterial(g.Key.IdMaterial, g.Key.Material), g.Key.IdMaterial == _idMaterial)).ToList())
             }
             else
             {
@@ -145,7 +145,7 @@
             else if (_donaCol)
             {
                 @RenderDonut(_colores.GroupBy(c => new { c.ColorCod, c.Color })
-                    .Select(cg => ((cg.Key.ColorCod is null ? "" : cg.Key.ColorCod + "-") + cg.Key.Color, cg.Sum(x => x.CantRollos))).ToList())
+                    .Select(cg => DSlice((cg.Key.ColorCod is null ? "" : cg.Key.ColorCod + "-") + cg.Key.Color, cg.Sum(x => x.CantRollos))).ToList())
             }
             else
             {
@@ -491,9 +491,9 @@
     </div>;
 
     // ---- Gráfico de dona (SVG) ----
-    private sealed record DonutSlice(string Label, int Value, int Pct, string Dash, string Offset, string Color);
+    private sealed record DonutSlice(string Label, int Value, int Pct, string Dash, string Offset, string Color, Func<Task>? OnClick, bool Sel);
 
-    private static List<DonutSlice> BuildDonut(IReadOnlyList<(string Label, int Value)> items)
+    private static List<DonutSlice> BuildDonut(IReadOnlyList<(string Label, int Value, Func<Task>? OnClick, bool Sel)> items)
     {
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         const double r = 60;
@@ -509,20 +509,27 @@
             slices.Add(new DonutSlice(
                 data[i].Label, data[i].Value, (int)Math.Round(frac * 100),
                 $"{len.ToString("0.##", inv)} {circ.ToString("0.##", inv)}",
-                (-acc).ToString("0.##", inv), SegColor(i)));
+                (-acc).ToString("0.##", inv), SegColor(i), data[i].OnClick, data[i].Sel));
             acc += len;
         }
         return slices;
     }
 
-    private RenderFragment RenderDonut(IReadOnlyList<(string Label, int Value)> items) =>
+    private static async Task OnSlice(DonutSlice s) { if (s.OnClick is not null) await s.OnClick(); }
+
+    // Arma un ítem de dona con OnClick nullable (evita warnings de nulabilidad de tuplas).
+    private static (string, int, Func<Task>?, bool) DSlice(string label, int value, Func<Task>? onClick = null, bool sel = false)
+        => (label, value, onClick, sel);
+
+    private RenderFragment RenderDonut(IReadOnlyList<(string Label, int Value, Func<Task>? OnClick, bool Sel)> items) =>
     @<div class="tl-donut">
         <svg viewBox="0 0 160 160" class="tl-donut-svg" role="img">
             <g transform="rotate(-90 80 80)">
                 @foreach (var s in BuildDonut(items))
                 {
-                    <circle cx="80" cy="80" r="60" fill="none" stroke="@s.Color" stroke-width="26"
-                            stroke-dasharray="@s.Dash" stroke-dashoffset="@s.Offset">
+                    <circle cx="80" cy="80" r="60" fill="none" stroke="@s.Color"
+                            stroke-width="@(s.Sel ? 32 : 26)" class="@(s.OnClick is not null ? "tl-donut-seg" : null)"
+                            stroke-dasharray="@s.Dash" stroke-dashoffset="@s.Offset" @onclick="() => OnSlice(s)">
                         <title>@s.Label: @s.Value (@s.Pct%)</title>
                     </circle>
                 }
@@ -533,7 +540,7 @@
         <div class="tl-donut-legend">
             @foreach (var s in BuildDonut(items))
             {
-                <div class="tl-leg-item">
+                <div class="tl-leg-item @(s.OnClick is not null ? "tl-leg-click" : null) @(s.Sel ? "tl-leg-sel" : null)" @onclick="() => OnSlice(s)">
                     <span class="tl-leg-dot" style="background:@s.Color"></span>
                     <span class="tl-leg-lbl">@s.Label</span>
                     <span class="tl-leg-val">@s.Value <span class="text-muted">(@s.Pct%)</span></span>
