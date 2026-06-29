@@ -36,7 +36,8 @@ public sealed class TelasApi
         var qs = new List<string>();
         if (idDeposito is > 0) qs.Add($"idDeposito={idDeposito}");
         if (idMaterial is > 0) qs.Add($"idMaterial={idMaterial}");
-        if (idColor is > 0) qs.Add($"idColor={idColor}");
+        if (idColor == -1) qs.Add("sinColor=true");            // fuera de carta (sin color de paleta)
+        else if (idColor is > 0) qs.Add($"idColor={idColor}");
         if (idTelera is > 0) qs.Add($"idTelera={idTelera}");
         if (!string.IsNullOrWhiteSpace(numPedido)) qs.Add($"numPedido={Uri.EscapeDataString(numPedido)}");
         var url = "api/telas/rollos" + (qs.Count > 0 ? "?" + string.Join("&", qs) : "");

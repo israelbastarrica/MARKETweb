@@ -172,6 +172,7 @@
                 <label class="form-label small mb-1">Color</label>
                 <select class="form-select form-select-sm" @bind="_fColor">
                     <option value="0">TODOS</option>
+                    <option value="-1">Fuera de carta</option>
                     @foreach (var c in _coloresCombo) { <option value="@c.Id">@c.Codigo - @c.Nombre</option> }
                 </select>
             </div>
@@ -544,7 +545,7 @@
         {
             _tabla = await Api.RollosAsync(
                 _fDep > 0 ? _fDep : null, _fMat > 0 ? _fMat : null,
-                _fColor > 0 ? _fColor : null, _fTelera > 0 ? _fTelera : null, _fPed);
+                _fColor != 0 ? _fColor : null, _fTelera > 0 ? _fTelera : null, _fPed);
         }
         finally { _tablaCargando = false; }
     }

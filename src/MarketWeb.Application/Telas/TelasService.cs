@@ -18,15 +18,16 @@ public sealed class TelasService : ITelasService
     // ---------------- Catálogos (combos) ----------------
     public async Task<IReadOnlyList<CatalogoItemDto>> ListarCatalogoAsync(string tipo, CancellationToken ct = default)
     {
-        var (tabla, colNombre) = tipo switch
+        var (tabla, colNombre, orderBy) = tipo switch
         {
-            CatalogoTela.Materiales => ("TelasMateriales", "Nombre"),
-            CatalogoTela.Colores => ("TelasColores", "Descripcion"),
-            CatalogoTela.Depositos => ("TelasDepositos", "Nombre"),
-            CatalogoTela.Teleras => ("TelasTeleras", "Nombre"),
+            CatalogoTela.Materiales => ("TelasMateriales", "Nombre", "Nombre"),
+            // Colores ordenados por código ascendente (código es texto con ceros a la izquierda).
+            CatalogoTela.Colores => ("TelasColores", "Descripcion", "TRY_CONVERT(int, Codigo), Codigo"),
+            CatalogoTela.Depositos => ("TelasDepositos", "Nombre", "Nombre"),
+            CatalogoTela.Teleras => ("TelasTeleras", "Nombre", "Nombre"),
             _ => throw new BusinessException("Catálogo inválido.")
         };
-        var sql = $"SELECT Id, Codigo, {colNombre} AS Nombre FROM {tabla} WHERE Eliminado = 0 ORDER BY {colNombre};";
+        var sql = $"SELECT Id, Codigo, {colNombre} AS Nombre FROM {tabla} WHERE Eliminado = 0 ORDER BY {orderBy};";
         using var cn = _db.Create();
         return (await cn.QueryAsync<CatalogoItemDto>(new CommandDefinition(sql, cancellationToken: ct))).ToList();
     }
@@ -116,13 +117,14 @@ public sealed class TelasService : ITelasService
         LEFT  JOIN TelasTeleras    T ON T.Id = R.IdTelera
         """;
 
-    public async Task<IReadOnlyList<TelaRolloDto>> ListarRollosAsync(int? idDeposito, int? idMaterial, int? idColor, int? idTelera, string? numPedido, CancellationToken ct = default)
+    public async Task<IReadOnlyList<TelaRolloDto>> ListarRollosAsync(int? idDeposito, int? idMaterial, int? idColor, int? idTelera, string? numPedido, bool sinColor = false, CancellationToken ct = default)
     {
         var sql = SelectRollo + " WHERE R.Eliminado = 0";
         var ped = string.IsNullOrWhiteSpace(numPedido) ? null : numPedido.Trim();
         if (idDeposito is > 0) sql += " AND R.IdDeposito = @idDeposito";
         if (idMaterial is > 0) sql += " AND R.IdMaterial = @idMaterial";
-        if (idColor is > 0) sql += " AND R.IdColor = @idColor";
+        if (sinColor) sql += " AND R.IdColor IS NULL";          // fuera de carta (sin color de nuestra paleta)
+        else if (idColor is > 0) sql += " AND R.IdColor = @idColor";
         if (idTelera is > 0) sql += " AND R.IdTelera = @idTelera";
         if (ped is not null) sql += " AND R.NumPedido LIKE '%' + @ped + '%'";
         sql += " ORDER BY M.Nombre, R.Id;";

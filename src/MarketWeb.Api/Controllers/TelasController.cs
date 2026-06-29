@@ -49,8 +49,8 @@ public sealed class TelasController : ControllerBase
     [HttpGet("rollos")]
     public async Task<ActionResult<IReadOnlyList<TelaRolloDto>>> Rollos(
         [FromQuery] int? idDeposito, [FromQuery] int? idMaterial, [FromQuery] int? idColor,
-        [FromQuery] int? idTelera, [FromQuery] string? numPedido, CancellationToken ct)
-        => Ok(await _service.ListarRollosAsync(idDeposito, idMaterial, idColor, idTelera, numPedido, ct));
+        [FromQuery] int? idTelera, [FromQuery] string? numPedido, [FromQuery] bool sinColor, CancellationToken ct)
+        => Ok(await _service.ListarRollosAsync(idDeposito, idMaterial, idColor, idTelera, numPedido, sinColor, ct));
 
     [HttpPost("rollos")]
     public async Task<ActionResult> CrearRollo([FromBody] RolloSaveRequest req, CancellationToken ct)
