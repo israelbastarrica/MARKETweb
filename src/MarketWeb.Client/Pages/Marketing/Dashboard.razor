@@ -82,6 +82,9 @@
             {
                 <div class="col-12 col-md-6 col-lg-3">
                     <div class="market-card h-100 d-flex flex-column">
+                        <img src="@($"api/marketing/thumb/{p.Red}/{Uri.EscapeDataString(p.PostId)}")" loading="lazy" alt=""
+                             style="width:100%;height:140px;object-fit:cover;border-radius:8px;margin-bottom:8px;background:var(--mk-row-hover)"
+                             onerror="this.style.display='none'" />
                         <div class="small text-muted mb-1">
                             <i class="@(p.Red == "IG" ? "fa-brands fa-instagram text-danger" : "fa-brands fa-facebook text-primary")"></i>
                             @(p.FechaPublicacion?.ToString("dd/MM/yyyy") ?? "")

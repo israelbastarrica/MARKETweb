@@ -9,6 +9,7 @@ public interface IMarketingService
     Task<IReadOnlyList<MktPerfilDto>> PerfilesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<MktPublicacionDto>> PublicacionesAsync(string? red, int top, CancellationToken ct = default);
     Task<MktDashboardDto> DashboardAsync(CancellationToken ct = default);
+    Task<string?> ThumbUrlAsync(string red, string postId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -20,6 +21,32 @@ public sealed class MarketingService : IMarketingService
 {
     private readonly ISqlConnectionFactory _db;
     public MarketingService(ISqlConnectionFactory db) => _db = db;
+
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private const string Api = "https://graph.facebook.com/v22.0";
+
+    // Resuelve la URL de imagen vigente de una publicación (las URLs de Meta caducan → se piden al vuelo).
+    public async Task<string?> ThumbUrlAsync(string red, string postId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(postId)) return null;
+        using var cn = _db.Create();
+        var token = await cn.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT Valor FROM dbo.MKT_Config WHERE Clave='META_ACCESS_TOKEN'", cancellationToken: ct));
+        if (string.IsNullOrWhiteSpace(token)) return null;
+        var campos = red == "FB" ? "full_picture" : "thumbnail_url,media_url";
+        try
+        {
+            using var resp = await Http.GetAsync(
+                $"{Api}/{Uri.EscapeDataString(postId)}?fields={campos}&access_token={Uri.EscapeDataString(token!)}", ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            var r = doc.RootElement;
+            foreach (var f in new[] { "thumbnail_url", "media_url", "full_picture" })
+                if (r.TryGetProperty(f, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return v.GetString();
+        }
+        catch { }
+        return null;
+    }
 
     private static async Task<bool> ExistenAsync(Microsoft.Data.SqlClient.SqlConnection cn, CancellationToken ct)
         => await cn.ExecuteScalarAsync<int>(new CommandDefinition(

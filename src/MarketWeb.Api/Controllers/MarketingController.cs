@@ -13,6 +13,13 @@ public sealed class MarketingController : ControllerBase
     private readonly IMarketingService _service;
     public MarketingController(IMarketingService service) => _service = service;
 
+    [HttpGet("thumb/{red}/{postId}")]
+    public async Task<IActionResult> Thumb(string red, string postId, CancellationToken ct)
+    {
+        var url = await _service.ThumbUrlAsync(red, postId, ct);
+        return string.IsNullOrEmpty(url) ? NotFound() : Redirect(url);
+    }
+
     [HttpGet("dashboard")]
     public async Task<ActionResult<MktDashboardDto>> Dashboard(CancellationToken ct)
         => Ok(await _service.DashboardAsync(ct));
