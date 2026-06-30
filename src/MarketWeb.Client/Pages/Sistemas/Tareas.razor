@@ -431,9 +431,12 @@
 
     private async Task Ejecutar(TareaProgramadaDto t)
     {
-        var aviso = t.Tipo == TipoTarea.Backup
-            ? $"¿Ejecutar \"{t.Nombre}\" ahora? Hace el BACKUP de MARKET y lo comprime a .rar (puede tardar)."
-            : $"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF.";
+        var aviso = t.Tipo switch
+        {
+            TipoTarea.Backup => $"¿Ejecutar \"{t.Nombre}\" ahora? Hace el BACKUP de MARKET y lo comprime a .rar (puede tardar).",
+            TipoTarea.Redes => $"¿Ejecutar \"{t.Nombre}\" ahora? Baja publicaciones y métricas de Facebook e Instagram. No manda mail ni corre reposición.",
+            _ => $"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF."
+        };
         if (!await Ui.ConfirmAsync(aviso, "Ejecutar ahora")) return;
         var arrancada = await Api.EjecutarAsync(t.Id);
         _flash = arrancada
