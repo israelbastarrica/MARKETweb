@@ -313,7 +313,9 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
         var p = string.IsNullOrWhiteSpace(parametrosJson)
             ? new ParametrosRedes()
             : (System.Text.Json.JsonSerializer.Deserialize<ParametrosRedes>(parametrosJson!) ?? new ParametrosRedes());
-        return await _redes.RecolectarAsync(p.Limite, ct);
+        var (okPosts, resPosts) = await _redes.RecolectarAsync(p.Limite, ct);
+        var (okIns, resIns) = await _redes.RecolectarInsightsAsync(28, ct);
+        return (okPosts && okIns, $"{resPosts} | {resIns}");
     }
 
     private async Task<(bool Ok, string Resultado)> EjecutarReposicionAsync(string? parametrosJson, CancellationToken ct)

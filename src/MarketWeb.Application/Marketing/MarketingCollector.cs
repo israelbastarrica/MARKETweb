@@ -9,6 +9,9 @@ public interface IMarketingCollector
 {
     /// <summary>Recolecta FB+IG (perfil + posts + métricas) y los guarda en MKT_Redes*. Token desde MKT_Config.</summary>
     Task<(bool Ok, string Resultado)> RecolectarAsync(int limite, CancellationToken ct = default);
+
+    /// <summary>Recolecta insights DE CUENTA (IG+FB) de los últimos N días → MKT_RedesInsights (para el Dashboard).</summary>
+    Task<(bool Ok, string Resultado)> RecolectarInsightsAsync(int dias, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -84,6 +87,126 @@ IF COL_LENGTH('dbo.MKT_RedesMetricas','ImpresionesOrganico') IS NULL ALTER TABLE
             }
 
         return (true, $"OK: {n} publicaciones (IG {igPosts.Count} + FB {fbPosts.Count}) · IG {igFollowers} seg · FB {fbFollowers} seg.");
+    }
+
+    private const string InsightsDdl = @"
+IF OBJECT_ID('dbo.MKT_RedesInsights') IS NULL
+CREATE TABLE dbo.MKT_RedesInsights (
+    Id INT IDENTITY(1,1) PRIMARY KEY, Red VARCHAR(4) NOT NULL, Fecha DATE NOT NULL,
+    Metrica VARCHAR(60) NOT NULL, Segmento VARCHAR(20) NOT NULL, Valor BIGINT NULL,
+    FechaActualizacion DATETIME NOT NULL,
+    CONSTRAINT UQ_MKT_RedesInsights UNIQUE (Red, Fecha, Metrica, Segmento));";
+
+    public async Task<(bool Ok, string Resultado)> RecolectarInsightsAsync(int dias, CancellationToken ct = default)
+    {
+        if (dias <= 0 || dias > 90) dias = 28;
+        using var cn = _db.Create();
+        await cn.ExecuteAsync(new CommandDefinition(InsightsDdl, cancellationToken: ct));
+
+        var token = await ConfigAsync(cn, "META_ACCESS_TOKEN", ct);
+        var igUser = await ConfigAsync(cn, "META_IG_USER_ID", ct);
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(igUser))
+            return (false, "Falta token/IG en MKT_Config.");
+
+        var ahora = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TzAr).DateTime;
+        var hasta = ahora.Date;
+        var s = hasta.AddDays(-dias).ToString("yyyy-MM-dd");
+        var u = hasta.ToString("yyyy-MM-dd");
+        int n = 0;
+
+        // IG
+        n += await SerieDiaAsync(cn, "IG", igUser!, "reach", token!, s, u, ahora, ct);
+        n += await TotalValueAsync(cn, "IG", igUser!, "views", token!, s, u, ahora, ct);
+        n += await TotalValueAsync(cn, "IG", igUser!, "total_interactions", token!, s, u, ahora, ct);
+        n += await TotalValueAsync(cn, "IG", igUser!, "accounts_engaged", token!, s, u, ahora, ct);
+        n += await TotalValueAsync(cn, "IG", igUser!, "reach", token!, s, u, ahora, ct, "follow_type");
+
+        // FB (con el page token)
+        try
+        {
+            var acc = await GetAsync("me/accounts", new[] { ("fields", "id,access_token") }, token!, ct);
+            var pg = acc.GetProperty("data").EnumerateArray().First();
+            var pid = Str(pg, "id")!; var ptoken = Str(pg, "access_token")!;
+            n += await SerieDiaAsync(cn, "FB", pid, "page_post_engagements", ptoken, s, u, ahora, ct);
+            n += await SerieDiaAsync(cn, "FB", pid, "page_daily_follows", ptoken, s, u, ahora, ct);
+            n += await SerieDiaAsync(cn, "FB", pid, "page_daily_unfollows", ptoken, s, u, ahora, ct);
+        }
+        catch { /* FB no debe tumbar IG */ }
+
+        return (true, $"Insights cuenta OK: {n} valores ({s}→{u}).");
+    }
+
+    private async Task<int> SerieDiaAsync(Microsoft.Data.SqlClient.SqlConnection cn, string red, string path, string metric, string token, string since, string until, DateTime ahora, CancellationToken ct)
+    {
+        try
+        {
+            var root = await GetAsync($"{path}/insights", new[] { ("metric", metric), ("period", "day"), ("since", since), ("until", until) }, token, ct);
+            int n = 0;
+            if (root.TryGetProperty("data", out var arr))
+                foreach (var m in arr.EnumerateArray())
+                {
+                    var name = Str(m, "name") ?? metric;
+                    if (m.TryGetProperty("values", out var vals))
+                        foreach (var v in vals.EnumerateArray())
+                        {
+                            var et = Str(v, "end_time");
+                            if (et is { Length: >= 10 } && v.TryGetProperty("value", out var val) && val.ValueKind == JsonValueKind.Number
+                                && DateTime.TryParse(et[..10], out var f))
+                            { await UpsertInsightAsync(cn, red, f, name, "TOTAL", val.GetInt64(), ahora, ct); n++; }
+                        }
+                }
+            return n;
+        }
+        catch { return 0; }
+    }
+
+    private async Task<int> TotalValueAsync(Microsoft.Data.SqlClient.SqlConnection cn, string red, string path, string metric, string token, string since, string until, DateTime ahora, CancellationToken ct, string? breakdown = null)
+    {
+        try
+        {
+            var pars = new List<(string, string)> { ("metric", metric), ("metric_type", "total_value"), ("period", "day"), ("since", since), ("until", until) };
+            if (breakdown is not null) pars.Add(("breakdown", breakdown));
+            var root = await GetAsync($"{path}/insights", pars, token, ct);
+            var fechaU = DateTime.Parse(until);
+            int n = 0;
+            if (root.TryGetProperty("data", out var arr))
+                foreach (var m in arr.EnumerateArray())
+                {
+                    var name = Str(m, "name") ?? metric;
+                    if (!m.TryGetProperty("total_value", out var tv)) continue;
+                    if (tv.TryGetProperty("breakdowns", out var bks))
+                    {
+                        foreach (var b in bks.EnumerateArray())
+                            if (b.TryGetProperty("results", out var rs))
+                                foreach (var res in rs.EnumerateArray())
+                                {
+                                    var seg = res.TryGetProperty("dimension_values", out var dv)
+                                        ? string.Join("/", dv.EnumerateArray().Select(x => x.GetString())).ToUpperInvariant() : "TOTAL";
+                                    if (res.TryGetProperty("value", out var rv) && rv.ValueKind == JsonValueKind.Number)
+                                    { await UpsertInsightAsync(cn, red, fechaU, name, seg, rv.GetInt64(), ahora, ct); n++; }
+                                }
+                    }
+                    else if (tv.TryGetProperty("value", out var val) && val.ValueKind == JsonValueKind.Number)
+                    { await UpsertInsightAsync(cn, red, fechaU, name, "TOTAL", val.GetInt64(), ahora, ct); n++; }
+                }
+            return n;
+        }
+        catch { return 0; }
+    }
+
+    private static async Task UpsertInsightAsync(Microsoft.Data.SqlClient.SqlConnection cn, string red, DateTime fecha, string metrica, string segmento, long valor, DateTime ahora, CancellationToken ct)
+    {
+        var id = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
+            "SELECT Id FROM dbo.MKT_RedesInsights WHERE Red=@red AND Fecha=@fecha AND Metrica=@metrica AND Segmento=@segmento",
+            new { red, fecha, metrica, segmento }, cancellationToken: ct));
+        if (id.HasValue)
+            await cn.ExecuteAsync(new CommandDefinition(
+                "UPDATE dbo.MKT_RedesInsights SET Valor=@valor, FechaActualizacion=@ahora WHERE Id=@id",
+                new { valor, ahora, id = id.Value }, cancellationToken: ct));
+        else
+            await cn.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO dbo.MKT_RedesInsights (Red, Fecha, Metrica, Segmento, Valor, FechaActualizacion) VALUES (@red,@fecha,@metrica,@segmento,@valor,@ahora)",
+                new { red, fecha, metrica, segmento, valor, ahora }, cancellationToken: ct));
     }
 
     // ---------------- Meta Graph API ----------------
