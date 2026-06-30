@@ -60,6 +60,9 @@ public sealed class TelasApi
     public async Task<(bool Ok, string? Error)> CrearRolloAsync(RolloSaveRequest req)
         => await Leer(await _http.PostAsJsonAsync("api/telas/rollos", req));
 
+    public async Task<(bool Ok, string? Error)> CrearLoteRollosAsync(RolloSaveRequest req)
+        => await Leer(await _http.PostAsJsonAsync("api/telas/rollos/lote", req));
+
     public async Task<(bool Ok, string? Error)> ModificarRolloAsync(int id, RolloSaveRequest req)
         => await Leer(await _http.PutAsJsonAsync($"api/telas/rollos/{id}", req));
 

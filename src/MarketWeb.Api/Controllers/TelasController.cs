@@ -66,6 +66,13 @@ public sealed class TelasController : ControllerBase
         catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
     }
 
+    [HttpPost("rollos/lote")]
+    public async Task<ActionResult> CrearLote([FromBody] RolloSaveRequest req, CancellationToken ct)
+    {
+        try { return Ok(new { creados = await _service.CrearRollosLoteAsync(req, Usuario(), ct) }); }
+        catch (BusinessException ex) { return BadRequest(new { mensaje = ex.Message }); }
+    }
+
     [HttpPut("rollos/{id:int}")]
     public async Task<ActionResult> ModificarRollo(int id, [FromBody] RolloSaveRequest req, CancellationToken ct)
     {
