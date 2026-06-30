@@ -45,7 +45,7 @@ IF OBJECT_ID('dbo.MKT_RedesMetricas') IS NOT NULL AND COL_LENGTH('dbo.MKT_RedesM
         using var cn = _db.Create();
         if (!await ExistenAsync(cn, ct)) return new List<MktPublicacionDto>();
         await cn.ExecuteAsync(new CommandDefinition(EnsureColsDdl, cancellationToken: ct));
-        if (top <= 0 || top > 500) top = 100;
+        if (top <= 0 || top > 2000) top = 100;
         var r = string.IsNullOrWhiteSpace(red) || red == "TODOS" ? null : red.Trim().ToUpperInvariant();
         // Gasto de pauta (MKT_RedesAds) solo si la tabla existe (la crea colector_ads.py).
         var hayAds = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
