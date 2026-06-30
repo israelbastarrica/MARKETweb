@@ -5,6 +5,14 @@ public static class TipoTarea
 {
     public const string Reposicion = "REPOSICION";
     public const string Backup = "BACKUP";
+    public const string Redes = "REDES";
+}
+
+/// <summary>Parámetros serializados (JSON) de una tarea de Redes (colector Marketing FB/IG).</summary>
+public sealed class ParametrosRedes
+{
+    public int IntervaloHoras { get; set; } = 4;   // corre cada N horas (no a una hora fija)
+    public int Limite { get; set; } = 25;           // publicaciones por red por corrida
 }
 
 /// <summary>Una tarea programada (fila del listado en SISTEMAS → Tareas).</summary>

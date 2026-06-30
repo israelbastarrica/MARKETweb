@@ -160,6 +160,7 @@
                             <select class="form-select" @bind="_eTipo">
                                 <option value="@TipoTarea.Reposicion">Reposición (PDF + mail)</option>
                                 <option value="@TipoTarea.Backup">Backup MARKET (.rar)</option>
+                                <option value="@TipoTarea.Redes">Redes Sociales (FB/IG, cada 4 h)</option>
                             </select>
                         </div>
                         <div class="col">
@@ -222,6 +223,13 @@
                                 <label class="form-label">Mail de aviso (sólo si falla)</label>
                                 <input class="form-control" @bind="_eBackupMail" placeholder="sistemas@marketarg.com" />
                             </div>
+                        </div>
+                    }
+                    else if (_eTipo == TipoTarea.Redes)
+                    {
+                        <div class="alert alert-info py-2 small mb-0">
+                            Baja publicaciones y métricas de <b>Facebook e Instagram</b> cada <b>4 horas</b> (no usa la "Hora"; sí respeta los días marcados).
+                            El token de Meta lo toma de <code>MKT_Config</code> (lo deja el colector Python al correr/renovar).
                         </div>
                     }
 
