@@ -66,6 +66,7 @@
             <div class="market-card mb-3">
                 <div class="small text-muted mb-2">Alcance de Instagram por día</div>
                 <svg viewBox="0 0 640 140" preserveAspectRatio="none" style="width:100%;height:140px">
+                    <polygon points="@($"0,130 {LineaPuntos(640, 130)} 640,130")" fill="#0F6E56" fill-opacity="0.12" stroke="none" />
                     <polyline points="@LineaPuntos(640, 130)" fill="none" stroke="#0F6E56" stroke-width="2" />
                 </svg>
                 <div class="d-flex justify-content-between small text-muted">
@@ -135,7 +136,8 @@
         {
             double x = s.Count == 1 ? 0 : (double)i / (s.Count - 1) * w;
             double y = h - (s[i].Valor - min) / rango * (h - 6) - 3;
-            sb.Append($"{x:0.#},{y:0.#} ");
+            // Coordenadas como ENTEROS: si uso decimales, la cultura es-AR mete coma y rompe el "x,y" del SVG.
+            sb.Append((int)Math.Round(x)).Append(',').Append((int)Math.Round(y)).Append(' ');
         }
         return sb.ToString().Trim();
     }
