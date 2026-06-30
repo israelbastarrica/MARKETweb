@@ -8,7 +8,23 @@
 <PageTitle>Reemplazos</PageTitle>
 
 <div class="market-page">
+    @if (!string.IsNullOrWhiteSpace(Ref))
+    {
+        <button class="btn-volver" @onclick="Volver">
+            <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+            <span>Volver</span>
+        </button>
+    }
     <PageHeader Modulo="Logística" Titulo="Reemplazos" Icono="fa-solid fa-retweet" CompartirQuery="@CompartirQuery" />
+
+    @if (!string.IsNullOrEmpty(_filtroArt))
+    {
+        <div class="alert alert-info d-flex align-items-center py-2 mb-3">
+            <i class="fa-solid fa-filter me-2"></i>
+            <div class="flex-grow-1">Filtrando por artículo <strong>@_filtroArt</strong> (todos los reemplazos, incluso procesados).</div>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => _filtroArt = "")">Quitar filtro</button>
+        </div>
+    }
 
     <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
         <div>
@@ -25,6 +41,10 @@
                 @foreach (var m in MueblesEnUso) { <option value="@m">@m</option> }
             </select>
         </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Código artículo</label>
+            <input class="form-control" style="width:150px" @bind="_filtroArt" @bind:event="oninput" placeholder="Ej: IH097" />
+        </div>
         <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" id="chkTodos" @bind="_verTodos" @bind:after="Cargar" />
             <label class="form-check-label small" for="chkTodos">Ver todos (incluye procesados)</label>
@@ -40,6 +60,27 @@
             <i class="fa-solid fa-ban me-1"></i> Bloqueos por mueble
         </button>
     </div>
+
+    @if (_mesasSinAsignar.Count > 0)
+    {
+        <div class="alert alert-danger" role="alert">
+            <div class="d-flex align-items-center mb-1">
+                <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                <strong>Hay @_mesasSinAsignar.Count reemplazo(s) de mesa "PASAR A PERCHERO" sin asignar a un perchero.</strong>
+            </div>
+            <div class="small">Asignalos abriendo el reemplazo del perchero correspondiente. Igual podés procesar.</div>
+            <ul class="small mb-0 mt-1">
+                @foreach (var m in _mesasSinAsignar.Take(20))
+                {
+                    <li>@m.Local · <strong>@m.ArtCod</strong> @m.Descripcion @(string.IsNullOrWhiteSpace(m.Mueble) ? "" : $"({m.Mueble} {m.Modulo})")</li>
+                }
+                @if (_mesasSinAsignar.Count > 20)
+                {
+                    <li>… y @(_mesasSinAsignar.Count - 20) más.</li>
+                }
+            </ul>
+        </div>
+    }
 
     @if (_flash is not null)
     {
@@ -112,7 +153,7 @@
             </table>
         </div>
         <p class="text-muted small">
-            @ItemsFiltrados.Count reemplazo(s)@(string.IsNullOrEmpty(_filtroMueble) ? "" : $" de {_items.Count}").
+            @ItemsFiltrados.Count reemplazo(s)@(string.IsNullOrEmpty(_filtroMueble) && string.IsNullOrWhiteSpace(_filtroArt) ? "" : $" de {_items.Count}").
         </p>
     }
 </div>
@@ -172,6 +213,27 @@
                                 </button>
                             </div>
                         </div>
+
+                        @if (_abmEsPerchero)
+                        {
+                            <div class="col-12">
+                                <div class="alert alert-warning py-2 mb-2">
+                                    <i class="fa-solid fa-arrows-turn-right me-1"></i>
+                                    Este reemplazo está en <strong>PERCHERO</strong>. Asignale una <strong>mesa que pasa a perchero</strong> (1 a 1):
+                                </div>
+                                <select class="form-select" @bind="_abmMesaSel" @bind:after="OnElegirMesa">
+                                    <option value="">— Elegí la mesa que viene a este perchero —</option>
+                                    @foreach (var m in MesasElegibles)
+                                    {
+                                        <option value="@m.ArtCod">@m.ArtCod — @m.Descripcion@(string.IsNullOrWhiteSpace(m.Mueble) ? "" : $"  ·  {m.Mueble} {m.Modulo}")</option>
+                                    }
+                                </select>
+                                @if (!MesasElegibles.Any())
+                                {
+                                    <div class="form-text text-danger">No hay mesas con acción "PASAR A PERCHERO" sin asignar en este local.</div>
+                                }
+                            </div>
+                        }
                         <div class="col-md-4">
                             <label class="form-label small text-muted mb-1">Código</label>
                             <input class="form-control" @bind="_abmArtReemp" @bind:after="BuscarDescReemp" placeholder="Código del reemplazo" />
@@ -267,10 +329,30 @@
     <div class="modal-backdrop fade show" style="z-index: 1055"></div>
 }
 
+<style>
+    /* Botón Volver (mismo formato que Consulta de Artículo / Reposición) */
+    .btn-volver {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: #fff; border: 1px solid #e6e4dd; border-radius: 999px;
+        padding: 6px 16px 6px 8px; margin-bottom: .5rem;
+        color: #555; font-weight: 600; font-size: .9rem; cursor: pointer;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+        transition: background .12s ease, color .12s ease, transform .12s ease, box-shadow .12s ease;
+    }
+    .btn-volver .ico {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 50%;
+        background: #fff3e0; color: #e8820c; transition: transform .12s ease;
+    }
+    .btn-volver:hover { background: #faf9f6; color: #1f2430; transform: translateX(-2px); box-shadow: 0 3px 10px rgba(16, 24, 40, .12); }
+    .btn-volver:hover .ico { transform: translateX(-2px); }
+</style>
+
 @code {
     private List<LocalReemplazoDto> _locales = new();
     private int _filtroLocal;
     private string _filtroMueble = "";
+    private string _filtroArt = "";   // viene por deep-link desde la Consulta de Reposición
     private bool _verTodos;
     private List<ReemplazoDto> _items = new();
 
@@ -278,10 +360,23 @@
     private List<string> MueblesEnUso => _items.Where(r => !string.IsNullOrWhiteSpace(r.MobiliarioLocal))
         .Select(r => r.MobiliarioLocal!.Trim()).Distinct().OrderBy(m => m).ToList();
 
-    // Lo que se muestra: items filtrados por mueble (client-side sobre lo ya cargado).
-    private List<ReemplazoDto> ItemsFiltrados => string.IsNullOrEmpty(_filtroMueble)
-        ? _items
-        : _items.Where(r => string.Equals(r.MobiliarioLocal?.Trim(), _filtroMueble, StringComparison.OrdinalIgnoreCase)).ToList();
+    // Lo que se muestra: items filtrados por mueble y/o artículo (client-side sobre lo ya cargado).
+    private List<ReemplazoDto> ItemsFiltrados
+    {
+        get
+        {
+            IEnumerable<ReemplazoDto> q = _items;
+            if (!string.IsNullOrEmpty(_filtroMueble))
+                q = q.Where(r => string.Equals(r.MobiliarioLocal?.Trim(), _filtroMueble, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(_filtroArt))
+            {
+                var f = _filtroArt.Trim();
+                q = q.Where(r => (r.ArtCod ?? "").Contains(f, StringComparison.OrdinalIgnoreCase)
+                              || (r.ArtCodReemplazo ?? "").Contains(f, StringComparison.OrdinalIgnoreCase));
+            }
+            return q.ToList();
+        }
+    }
     private bool _cargando = true;
     private bool _procesando;
     private string? _error;
@@ -301,8 +396,15 @@
     private static readonly string[] _accionesBase =
     {
         "DEFINIR REEMPLAZO", "ENVIAR A LOCAL", "ENVIAR A LOGÍSTICA", "PASAR A PERCHERO",
+        "REEMPLAZADO POR MESA",
         "PASAR DE PERCHERO A PERCHERO DISCONTINUO", "UNIFICAR EN MEDIA MESA", "REEMPLAZO DE PANEL"
     };
+
+    // Asignación mesa→perchero (lado del perchero): combo de mesas y bandera de si el reemplazo en edición es un perchero.
+    private bool _abmEsPerchero;
+    private string _abmMesaSel = "";
+    private List<MesaPercheroDto> _mesas = new();         // mesas para el combo del modal (del local en edición)
+    private List<MesaPercheroDto> _mesasSinAsignar = new(); // para el cartel rojo de la pantalla
 
     private bool ComboDistinto => !string.IsNullOrEmpty(_abmComboReemp) && !string.Equals(_abmComboOrig?.Trim(), _abmComboReemp?.Trim(), StringComparison.OrdinalIgnoreCase);
 
@@ -323,26 +425,32 @@
     private string LocalNombre(int id) => _locales.FirstOrDefault(l => l.Id == id)?.Descripcion ?? "";
 
     private const string StateKey = "reemplazos";
-    private sealed class Snap { public List<LocalReemplazoDto> Locales = new(); public int FiltroLocal; public string FiltroMueble = ""; public bool VerTodos; public List<ReemplazoDto> Items = new(); }
+    private sealed class Snap { public List<LocalReemplazoDto> Locales = new(); public int FiltroLocal; public string FiltroMueble = ""; public bool VerTodos; public List<ReemplazoDto> Items = new(); public List<MesaPercheroDto> MesasSinAsignar = new(); }
 
     // Deep-link / Compartir: filtros en la URL (?local=&mueble=&todos=1).
     [Parameter, SupplyParameterFromQuery(Name = "local")] public int? LocalQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "mueble")] public string? MuebleQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "todos")] public bool? TodosQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "art")] public string? ArtQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "abrir")] public int? AbrirId { get; set; }   // abre ese reemplazo puntual
+    [Parameter, SupplyParameterFromQuery(Name = "ref")] public string? Ref { get; set; }   // de dónde se llegó (Volver)
 
     private string CompartirQuery =>
         $"local={_filtroLocal}"
         + (string.IsNullOrEmpty(_filtroMueble) ? "" : $"&mueble={Uri.EscapeDataString(_filtroMueble)}")
-        + (_verTodos ? "&todos=1" : "");
+        + (string.IsNullOrEmpty(_filtroArt) ? "" : $"&art={Uri.EscapeDataString(_filtroArt)}")
+        + (_verTodos ? "&todos=true" : "");
+
+    private void Volver() => Nav.NavigateTo(Ref!);
 
     protected override async Task OnInitializedAsync()
     {
-        var hayQuery = LocalQ.HasValue || MuebleQ != null || TodosQ.HasValue;
+        var hayQuery = LocalQ.HasValue || MuebleQ != null || TodosQ.HasValue || ArtQ != null || AbrirId.HasValue;
 
         // Si llega por link con filtros, mandan ellos (no el estado guardado).
         if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
-            _locales = s.Locales; _filtroLocal = s.FiltroLocal; _filtroMueble = s.FiltroMueble; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
+            _locales = s.Locales; _filtroLocal = s.FiltroLocal; _filtroMueble = s.FiltroMueble; _verTodos = s.VerTodos; _items = s.Items; _mesasSinAsignar = s.MesasSinAsignar; _cargando = false;
             return;
         }
         try { _locales = await Api.LocalesAsync(); } catch { _locales = new(); }
@@ -351,12 +459,18 @@
             if (LocalQ.HasValue) _filtroLocal = LocalQ.Value;
             if (MuebleQ != null) _filtroMueble = MuebleQ;
             if (TodosQ.HasValue) _verTodos = TodosQ.Value;
+            // Llega desde la Consulta de Reposición por un artículo puntual: filtra por él y muestra todos
+            // (también procesados) para ver qué acción se tomó.
+            if (ArtQ != null) { _filtroArt = ArtQ.Trim(); _verTodos = true; }
         }
         await Cargar();
+
+        // Deep-link a un reemplazo puntual: abre directo su ficha (lo que pidió el usuario para ver la Acción).
+        if (AbrirId is int aid && aid > 0) await AbrirModif(new ReemplazoDto { Id = aid });
     }
 
     public void Dispose()
-        => State.Save(StateKey, new Snap { Locales = _locales, FiltroLocal = _filtroLocal, FiltroMueble = _filtroMueble, VerTodos = _verTodos, Items = _items }, 0);
+        => State.Save(StateKey, new Snap { Locales = _locales, FiltroLocal = _filtroLocal, FiltroMueble = _filtroMueble, VerTodos = _verTodos, Items = _items, MesasSinAsignar = _mesasSinAsignar }, 0);
 
     private async Task Cargar()
     {
@@ -364,6 +478,9 @@
         try { _items = await Api.ListarAsync(_filtroLocal, _verTodos); }
         catch (Exception ex) { _items = new(); _error = "No se pudieron cargar los reemplazos."; Console.Error.WriteLine(ex); }
         finally { _cargando = false; }
+        // Mesas con acción PASAR A PERCHERO que todavía no asignó ningún perchero (para el cartel rojo).
+        try { _mesasSinAsignar = (await Api.MesasParaPercheroAsync(_filtroLocal)).Where(m => !m.Asignado).ToList(); }
+        catch { _mesasSinAsignar = new(); }
         // Si el mueble filtrado ya no existe en lo cargado (cambió el local), limpiamos el filtro.
         if (!string.IsNullOrEmpty(_filtroMueble) && !MueblesEnUso.Contains(_filtroMueble, StringComparer.OrdinalIgnoreCase))
             _filtroMueble = "";
@@ -375,6 +492,7 @@
         _abmLocal = _filtroLocal; // si hay un local filtrado, lo pre-cargamos
         _abmArtCod = ""; _abmDescArt = ""; _abmArtReemp = ""; _abmDescReemp = ""; _abmAccion = "";
         _abmComboOrig = ""; _abmComboReemp = ""; _validOrig = null; _errorModal = null;
+        _abmEsPerchero = false; _abmMesaSel = ""; _mesas = new();
         _modalAbm = true;
     }
 
@@ -390,7 +508,33 @@
         var a1 = await Api.ArticuloAsync(ed.ArtCod); _abmComboOrig = a1?.Combo ?? "";
         var a2 = string.IsNullOrEmpty(ed.ArtCodReemplazo) ? null : await Api.ArticuloAsync(ed.ArtCodReemplazo); _abmComboReemp = a2?.Combo ?? "";
         if (_abmLocal > 0 && !string.IsNullOrEmpty(ed.ArtCod)) _validOrig = await Api.ValidarAsync(_abmLocal, ed.ArtCod);
+
+        // Si el reemplazo en edición está en un PERCHERO, ofrecemos asignarle una mesa que pasa a perchero (1 a 1).
+        _abmEsPerchero = string.Equals(ed.MobiliarioLocal?.Trim(), "PERCHERO", StringComparison.OrdinalIgnoreCase);
+        _abmMesaSel = _abmEsPerchero ? (ed.ArtCodReemplazo ?? "") : "";
+        _mesas = _abmEsPerchero && _abmLocal > 0 ? await Api.MesasParaPercheroAsync(_abmLocal) : new();
+
         _modalAbm = true;
+    }
+
+    // Mesas que se pueden elegir para este perchero: las no asignadas + la que ya tiene asignada (para que se vea elegida).
+    private IEnumerable<MesaPercheroDto> MesasElegibles =>
+        _mesas.Where(m => !m.Asignado || string.Equals(m.ArtCod, _abmArtReemp, StringComparison.OrdinalIgnoreCase));
+
+    private async Task OnElegirMesa()
+    {
+        var cod = (_abmMesaSel ?? "").Trim();
+        if (cod.Length == 0)
+        {
+            // Desasignar: vuelve a quedar el perchero sin mesa (acción la elige el usuario).
+            _abmArtReemp = ""; _abmDescReemp = ""; _abmComboReemp = "";
+            return;
+        }
+        var m = _mesas.FirstOrDefault(x => string.Equals(x.ArtCod, cod, StringComparison.OrdinalIgnoreCase));
+        _abmArtReemp = cod;
+        _abmDescReemp = m?.Descripcion ?? "";
+        _abmAccion = "REEMPLAZADO POR MESA";
+        var a = await Api.ArticuloAsync(cod); _abmComboReemp = a?.Combo ?? "";
     }
 
     private void CerrarAbm() => _modalAbm = false;
@@ -460,7 +604,10 @@
 
     private async Task MarcarProcesados()
     {
-        var ok = await Ui.ConfirmAsync("¿Marcar TODOS los reemplazos visibles como procesados y notificar a los locales?", "Procesar reemplazos");
+        var pregunta = "¿Marcar TODOS los reemplazos visibles como procesados y notificar a los locales?";
+        if (_mesasSinAsignar.Count > 0)
+            pregunta += $"\n\nATENCIÓN: quedan {_mesasSinAsignar.Count} reemplazo(s) de mesa \"PASAR A PERCHERO\" sin asignar a un perchero.";
+        var ok = await Ui.ConfirmAsync(pregunta, "Procesar reemplazos");
         if (!ok) return;
         _procesando = true; _error = null; _flash = null;
         try

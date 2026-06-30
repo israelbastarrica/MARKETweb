@@ -57,6 +57,36 @@ public sealed class MotivoEventoDto
     public string Nombre { get; set; } = "";
 }
 
+// ---- Reporte de Motivos de Reposición (Sistemas) ----
+
+/// <summary>Reporte de motivos: dona (% por motivo) + registro de eventos clasificados.</summary>
+public sealed class MotivosReporteDto
+{
+    public List<MotivoConteoDto> Resumen { get; set; } = new();   // para la dona / tabla de %
+    public List<EventoMotivoDto> Registro { get; set; } = new();  // detalle, fila por evento
+    public int TotalEventos { get; set; }
+}
+
+/// <summary>Conteo de eventos por motivo (para la dona).</summary>
+public sealed class MotivoConteoDto
+{
+    public string Motivo { get; set; } = "";
+    public int Cantidad { get; set; }
+}
+
+/// <summary>Una fila del registro del reporte de motivos.</summary>
+public sealed class EventoMotivoDto
+{
+    public int Id { get; set; }
+    public DateTime Fecha { get; set; }
+    public string Local { get; set; } = "";
+    public string ArtCod { get; set; } = "";
+    public string Descripcion { get; set; } = "";
+    public string TipoDiferencia { get; set; } = "";  // SOBRANTE / FALTANTE
+    public string Motivo { get; set; } = "";           // "(sin motivo)" si no se clasificó
+    public bool Procesado { get; set; }
+}
+
 // ---- Reseteados (RepoReposicionArticulosReseteados) ----
 
 /// <summary>Una fila del listado de reseteados.</summary>

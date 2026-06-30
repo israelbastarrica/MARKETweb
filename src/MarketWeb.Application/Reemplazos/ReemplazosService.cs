@@ -66,10 +66,12 @@ public sealed class ReemplazosService : IReemplazosService
                    RTRIM(ISNULL(A1.ARTDES,'')) AS DescripcionArt,
                    RTRIM(ISNULL(R.ARTCODReemplazo,'')) AS ArtCodReemplazo,
                    RTRIM(ISNULL(A2.ARTDES,'')) AS DescripcionArtReemplazo,
-                   ISNULL(R.Accion,'') AS Accion
+                   ISNULL(R.Accion,'') AS Accion,
+                   RTRIM(ISNULL(MAP2.Mobiliario,'')) AS MobiliarioLocal
             FROM RepoReemplazos R
             LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART A1 ON R.ARTCOD = A1.ARTCOD
             LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART A2 ON R.ARTCODReemplazo = A2.ARTCOD
+            LEFT JOIN Mapeo MAP2 ON MAP2.ID = R.IDMapeoLocal
             WHERE R.ID = @id AND R.Eliminado = 0;
             """;
         using var cn = _db.Create();
@@ -136,25 +138,27 @@ public sealed class ReemplazosService : IReemplazosService
             ), Categorizados AS (
                 SELECT ARTCOD, ARTDES, ComboStr,
                 CASE
-                    WHEN CantOtrosLocales = 0 AND NivelMatch = 1 THEN 1 WHEN CantOtrosLocales = 0 AND NivelMatch = 2 THEN 2
-                    WHEN CantOtrosLocales = 0 AND NivelMatch = 3 THEN 3 WHEN CantOtrosLocales = 0 AND NivelMatch = 4 THEN 4
-                    WHEN CantOtrosLocales = 0 AND NivelMatch = 5 THEN 5 WHEN CantOtrosLocales = 0 AND NivelMatch = 6 THEN 11
-                    WHEN CantOtrosLocales > 0 AND NivelMatch = 1 THEN 6 WHEN CantOtrosLocales > 0 AND NivelMatch = 2 THEN 7
-                    WHEN CantOtrosLocales > 0 AND NivelMatch = 3 THEN 8 WHEN CantOtrosLocales > 0 AND NivelMatch = 4 THEN 9
-                    WHEN CantOtrosLocales > 0 AND NivelMatch = 5 THEN 10 WHEN CantOtrosLocales > 0 AND NivelMatch = 6 THEN 12
+                    -- PRIMERO: los que ya están armados en el OTRO LOCAL (homogeneizar locales) → grupo 1.x
+                    WHEN CantOtrosLocales > 0 AND NivelMatch = 1 THEN 1 WHEN CantOtrosLocales > 0 AND NivelMatch = 2 THEN 2
+                    WHEN CantOtrosLocales > 0 AND NivelMatch = 3 THEN 3 WHEN CantOtrosLocales > 0 AND NivelMatch = 4 THEN 4
+                    WHEN CantOtrosLocales > 0 AND NivelMatch = 5 THEN 5 WHEN CantOtrosLocales > 0 AND NivelMatch = 6 THEN 6
+                    -- DESPUÉS: los que están sólo en depósito → grupo 2.x
+                    WHEN CantOtrosLocales = 0 AND NivelMatch = 1 THEN 7 WHEN CantOtrosLocales = 0 AND NivelMatch = 2 THEN 8
+                    WHEN CantOtrosLocales = 0 AND NivelMatch = 3 THEN 9 WHEN CantOtrosLocales = 0 AND NivelMatch = 4 THEN 10
+                    WHEN CantOtrosLocales = 0 AND NivelMatch = 5 THEN 11 WHEN CantOtrosLocales = 0 AND NivelMatch = 6 THEN 12
                 END AS CatID
                 FROM Candidatos WHERE NivelMatch > 0
             ), Titulos AS (
                 SELECT DISTINCT CatID, '' AS ARTCOD,
                 CASE CatID
-                    WHEN 1 THEN '1 - SÓLO EN DEPÓSITO (IDEAL)' WHEN 2 THEN '1.1 - SÓLO EN DEPÓSITO (AFLOJA SUBFAMILIA)'
-                    WHEN 3 THEN '1.2 - SÓLO EN DEPÓSITO (AFLOJA FAM Y SUBFAM)' WHEN 4 THEN '1.3 - SÓLO EN DEPÓSITO (AFLOJA COMBO)'
-                    WHEN 5 THEN '1.4 - SÓLO EN DEPÓSITO (AFLOJA SUBFAM Y COMBO)'
-                    WHEN 11 THEN '3 - SÓLO EN DEPÓSITO (SÓLO COINCIDE TIPO Y CATEGORÍA)'
-                    WHEN 6 THEN '2 - EN DEPÓSITO Y OTRO LOCAL (IDEAL)' WHEN 7 THEN '2.1 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA SUBFAMILIA)'
-                    WHEN 8 THEN '2.2 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA FAM Y SUBFAM)' WHEN 9 THEN '2.3 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA COMBO)'
-                    WHEN 10 THEN '2.4 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA SUBFAM Y COMBO)'
-                    WHEN 12 THEN '4 - EN DEPÓSITO Y OTRO LOCAL (SÓLO COINCIDE TIPO Y CATEGORÍA)'
+                    WHEN 1 THEN '1 - EN DEPÓSITO Y OTRO LOCAL (IDEAL)' WHEN 2 THEN '1.1 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA SUBFAMILIA)'
+                    WHEN 3 THEN '1.2 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA FAM Y SUBFAM)' WHEN 4 THEN '1.3 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA COMBO)'
+                    WHEN 5 THEN '1.4 - EN DEPÓSITO Y OTRO LOCAL (AFLOJA SUBFAM Y COMBO)'
+                    WHEN 6 THEN '1.5 - EN DEPÓSITO Y OTRO LOCAL (SÓLO COINCIDE TIPO Y CATEGORÍA)'
+                    WHEN 7 THEN '2 - SÓLO EN DEPÓSITO (IDEAL)' WHEN 8 THEN '2.1 - SÓLO EN DEPÓSITO (AFLOJA SUBFAMILIA)'
+                    WHEN 9 THEN '2.2 - SÓLO EN DEPÓSITO (AFLOJA FAM Y SUBFAM)' WHEN 10 THEN '2.3 - SÓLO EN DEPÓSITO (AFLOJA COMBO)'
+                    WHEN 11 THEN '2.4 - SÓLO EN DEPÓSITO (AFLOJA SUBFAM Y COMBO)'
+                    WHEN 12 THEN '2.5 - SÓLO EN DEPÓSITO (SÓLO COINCIDE TIPO Y CATEGORÍA)'
                 END AS Descripcion, '' AS Combo, 0 AS Stock, 1 AS EsTitulo
                 FROM Categorizados
             ), Items AS (
@@ -212,20 +216,59 @@ public sealed class ReemplazosService : IReemplazosService
             sql, new { CodOrig = c, LocActual = idUbicacion }, commandTimeout: 120, cancellationToken: ct))).ToList();
     }
 
+    public async Task<IReadOnlyList<MesaPercheroDto>> MesasParaPercheroAsync(int idUbicacion, CancellationToken ct = default)
+    {
+        // Reemplazos de MESA con acción "PASAR A PERCHERO" (artículos A), con un flag de si ya los tomó
+        // un perchero (un B con acción "REEMPLAZADO POR MESA" cuyo ARTCODReemplazo apunta a este A).
+        const string sql = """
+            SELECT R.ID AS Id,
+                   RTRIM(ISNULL(R.ARTCOD,'')) AS ArtCod,
+                   RTRIM(ISNULL(A.ARTDES,'')) AS Descripcion,
+                   RTRIM(ISNULL(U.Descripcion,'')) AS Local,
+                   RTRIM(ISNULL(MAP2.Mobiliario,'')) AS Mueble,
+                   RTRIM(ISNULL(MAP2.Modulo,'')) AS Modulo,
+                   CAST(CASE WHEN EXISTS (
+                          SELECT 1 FROM RepoReemplazos B
+                          WHERE B.IDUbicacion = R.IDUbicacion AND B.Eliminado = 0
+                            AND RTRIM(UPPER(B.ARTCODReemplazo)) = RTRIM(UPPER(R.ARTCOD))
+                            AND UPPER(ISNULL(B.Accion,'')) = 'REEMPLAZADO POR MESA') THEN 1 ELSE 0 END AS BIT) AS Asignado,
+                   ISNULL((SELECT TOP 1 RTRIM(B.ARTCOD) FROM RepoReemplazos B
+                          WHERE B.IDUbicacion = R.IDUbicacion AND B.Eliminado = 0
+                            AND RTRIM(UPPER(B.ARTCODReemplazo)) = RTRIM(UPPER(R.ARTCOD))
+                            AND UPPER(ISNULL(B.Accion,'')) = 'REEMPLAZADO POR MESA'), '') AS AsignadoA
+            FROM RepoReemplazos R
+            LEFT JOIN Ubicaciones U ON R.IDUbicacion = U.ID
+            LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.ART A ON R.ARTCOD = A.ARTCOD
+            LEFT JOIN Mapeo MAP2 ON MAP2.ID = R.IDMapeoLocal
+            WHERE R.Eliminado = 0 AND ISNULL(R.Procesado,0) = 0
+              AND UPPER(ISNULL(R.Accion,'')) = 'PASAR A PERCHERO'
+              AND (@idu = 0 OR R.IDUbicacion = @idu)
+            ORDER BY Local, ArtCod;
+            """;
+        using var cn = _db.Create();
+        return (await cn.QueryAsync<MesaPercheroDto>(new CommandDefinition(
+            sql, new { idu = idUbicacion }, commandTimeout: 90, cancellationToken: ct))).ToList();
+    }
+
     public async Task GuardarAsync(ReemplazoSaveRequest req, string usuario, CancellationToken ct = default)
     {
         var artOrig = (req.ArtCod ?? "").Trim().ToUpperInvariant();
         var artReemp = (req.ArtCodReemplazo ?? "").Trim().ToUpperInvariant();
         var accion = (req.Accion ?? "").Trim();
         if (artOrig.Length == 0) throw new BusinessException("Debe ingresar el código del artículo a reemplazar.");
-        if (artReemp.Length == 0) throw new BusinessException("Debe ingresar el código del artículo de reemplazo.");
         if (accion.Length == 0) throw new BusinessException("Debe ingresar una acción de reemplazo.");
         if (req.IdUbicacion <= 0) throw new BusinessException("Debe seleccionar un local.");
+        // "PASAR A PERCHERO" y "DEFINIR REEMPLAZO" no llevan reemplazo todavía (el de perchero se define
+        // desde el lado del perchero, asignando 1 a 1). El resto sí exige artículo de reemplazo.
+        var sinReemplazo = accion.Equals("PASAR A PERCHERO", StringComparison.OrdinalIgnoreCase)
+                        || accion.Equals("DEFINIR REEMPLAZO", StringComparison.OrdinalIgnoreCase);
+        if (artReemp.Length == 0 && !sinReemplazo)
+            throw new BusinessException("Debe ingresar el código del artículo de reemplazo.");
 
         using var cn = _db.Create();
 
         // Alta: no duplicar un reemplazo activo (no procesado) para el mismo art reemplazo + local.
-        if (req.Id == 0)
+        if (req.Id == 0 && artReemp.Length > 0)
         {
             var existe = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT COUNT(*) FROM RepoReemplazos WHERE ARTCODReemplazo=@reemp AND IDUbicacion=@idu AND Eliminado=0 AND ISNULL(Procesado,0)=0;",

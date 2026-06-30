@@ -216,8 +216,8 @@
             if (_fTipo != "TODOS") p.Add($"tipo={Uri.EscapeDataString(_fTipo)}");
             if (_fCategoria != "TODOS") p.Add($"cat={Uri.EscapeDataString(_fCategoria)}");
             if (_fAnio != 0) p.Add($"anio={_fAnio}");
-            if (_soloVacios) p.Add("vacios=1");
-            if (_calcStock) p.Add("stock=1");
+            if (_soloVacios) p.Add("vacios=true");
+            if (_calcStock) p.Add("stock=true");
             return string.Join("&", p);
         }
     }
@@ -277,6 +277,11 @@
         {
             var dep = _ubicaciones.FirstOrDefault(u => u.Ubicacion.StartsWith("DEP", StringComparison.OrdinalIgnoreCase));
             if (dep is not null) _ubicSel = $"id:{dep.IdUbicacion}";
+        }
+        else if (string.Equals(perfil, "DISEÑO", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(perfil, "DISENO", StringComparison.OrdinalIgnoreCase))
+        {
+            _ubicSel = "TODOS";   // Diseño arranca viendo Depósito + locales
         }
     }
 

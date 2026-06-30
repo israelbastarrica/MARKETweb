@@ -81,6 +81,29 @@ public sealed class RemitosLookupService : IRemitosLookupService
                 new { Nro = nro }, cancellationToken: ct));
             eliminada = id is not null;
         }
+
+        // 1.b) Fallback de formato: el QR a veces viene "ARTCOD-SECUENCIA-TALLE" (ej. IH005.100-0000001-007)
+        //      pero en PacksBolsas la bolsa está como "X-ARTCOD-TALLE" (ej. X-IH005.100-007). Si no apareció
+        //      directo, probamos con el código reconstruido.
+        if (id is null)
+        {
+            var alt = AltNroBolsa(nro);
+            if (alt is not null)
+            {
+                id = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
+                    "SELECT TOP 1 ID FROM MARKET.dbo.PacksBolsas WHERE RTRIM(NroBolsa) = @Nro AND ISNULL(Eliminado, 0) = 0 ORDER BY ID DESC;",
+                    new { Nro = alt }, cancellationToken: ct));
+                if (id is null)
+                {
+                    id = await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
+                        "SELECT TOP 1 ID FROM MARKET.dbo.PacksBolsas WHERE RTRIM(NroBolsa) = @Nro ORDER BY ID DESC;",
+                        new { Nro = alt }, cancellationToken: ct));
+                    eliminada = id is not null;
+                }
+                if (id is not null) nro = alt;   // devolvemos el código real de la bolsa
+            }
+        }
+
         if (id is null) return null;
 
         // 2) Detalle (artículo + color + talle + cantidad) + descripción del ART. Si la bolsa estaba
@@ -98,6 +121,17 @@ public sealed class RemitosLookupService : IRemitosLookupService
         var renglones = (await cn.QueryAsync<BolsaRenglonDto>(new CommandDefinition(sqlDet, new { Id = id.Value }, cancellationToken: ct))).ToList();
 
         return new BolsaDto { NroBolsa = nro, IdPackBolsa = id.Value, Eliminada = eliminada, Renglones = renglones };
+    }
+
+    // "IH005.100-0000001-007" -> "X-IH005.100-007": prefija X- y descarta el bloque de secuencia del medio,
+    // dejando ARTCOD + TALLE como guarda PacksBolsas. Devuelve null si el código no tiene ese formato
+    // (o si la transformación quedaría igual al original).
+    private static string? AltNroBolsa(string code)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(code ?? "", @"^(.*)-(\d+)-(\d+)$");
+        if (!m.Success) return null;
+        var alt = $"X-{m.Groups[1].Value}-{m.Groups[3].Value}";
+        return string.Equals(alt, code, StringComparison.OrdinalIgnoreCase) ? null : alt;
     }
 
     // Levanta el detalle de un remito YA EXISTENTE de un local (LURO/PERALTA), identificado por

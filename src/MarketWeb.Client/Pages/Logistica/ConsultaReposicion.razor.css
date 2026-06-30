@@ -1,3 +1,12 @@
+/* Fila de REEMPLAZO (pedido/bloqueo): roja y clickeable (linkea al reemplazo). */
+.cr-m-reemplazo td {
+    background: rgba(220, 53, 69, .10);
+    color: #b02a37;
+    font-weight: 600;
+}
+html[data-theme="dark"] .cr-m-reemplazo td { background: rgba(220, 53, 69, .18); color: #ff8d8d; }
+.cr-m-reemplazo:hover td { background: rgba(220, 53, 69, .18); }
+
 /* Botón Volver (mismo formato que Consulta de Artículo) */
 .btn-volver {
     display: inline-flex; align-items: center; gap: 8px;
@@ -118,7 +127,8 @@ html[data-theme="dark"] .cr-ubi .cr-nodep td { background: #4a2020; color: #ff8a
 .cr-m-rot-huerfana { background: #f0f0f0 !important; color: #888 !important; }
 .cr-m-falla { background: #fcf7eb !important; }
 .cr-m-ajuste { background: #e8f4ff !important; }
-.cr-m-evt { background: #eee6f8 !important; color: #5a3c82 !important; font-style: italic; }
+/* Evento PROCESADO/atendido = verde; PENDIENTE (sin visar) = ámbar. Clickeable → va al evento a procesar. */
+.cr-m-evt { background: #d8f0dd !important; color: #1e7e34 !important; font-style: italic; }
 .cr-m-evt-pend { background: #ffe4c4 !important; color: #964600 !important; font-weight: 700; font-style: italic; }
 .cr-m-resumen { background: #e8e8e8 !important; font-weight: 700; }
 
@@ -129,7 +139,7 @@ html[data-theme="dark"] .cr-m-rot { background: #4a2424 !important; }
 html[data-theme="dark"] .cr-m-rot-huerfana { background: #2a2a2a !important; color: #999 !important; }
 html[data-theme="dark"] .cr-m-falla { background: #3a3424 !important; }
 html[data-theme="dark"] .cr-m-ajuste { background: #16314a !important; }
-html[data-theme="dark"] .cr-m-evt { background: #2e2440 !important; color: #c9b3e8 !important; }
+html[data-theme="dark"] .cr-m-evt { background: #14331f !important; color: #7ee2a0 !important; }
 html[data-theme="dark"] .cr-m-evt-pend { background: #4a3115 !important; color: #f0c79a !important; }
 html[data-theme="dark"] .cr-m-resumen { background: #2b2b2b !important; }
 

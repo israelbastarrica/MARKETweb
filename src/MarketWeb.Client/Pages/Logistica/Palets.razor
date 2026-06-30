@@ -233,7 +233,7 @@
             if (!string.IsNullOrWhiteSpace(_fCodArt)) p.Add($"art={Uri.EscapeDataString(_fCodArt)}");
             if (_fTipo != "TODOS") p.Add($"tipo={Uri.EscapeDataString(_fTipo)}");
             if (_fCategoria != "TODOS") p.Add($"cat={Uri.EscapeDataString(_fCategoria)}");
-            if (_fVerDesarmados) p.Add("desarm=1");
+            if (_fVerDesarmados) p.Add("desarm=true");
             p.Add($"desde={_fDesde:yyyy-MM-dd}");
             return string.Join("&", p);
         }

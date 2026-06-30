@@ -83,4 +83,17 @@ public sealed class EventosController : ControllerBase
         await _service.GuardarMotivoAsync(id, req?.IdMotivo ?? 0, ct);
         return NoContent();
     }
+
+    // ---- Reporte de motivos (Sistemas) ----
+
+    [HttpGet("motivos-reporte")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult<MotivosReporteDto>> MotivosReporte(
+        [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null,
+        [FromQuery] string local = "TODOS", CancellationToken ct = default)
+    {
+        var d = desde ?? DateTime.Today.AddDays(-30);
+        var h = hasta ?? DateTime.Today;
+        return Ok(await _service.MotivosReporteAsync(d, h, local ?? "TODOS", ct));
+    }
 }

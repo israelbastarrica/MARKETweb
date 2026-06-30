@@ -30,4 +30,7 @@ public interface IEventosService
 
     /// <summary>Asigna (o limpia con 0) el motivo normalizado del evento (EventosReposicion.IDMotivoEvento).</summary>
     Task GuardarMotivoAsync(int idEvento, int idMotivo, CancellationToken ct = default);
+
+    /// <summary>Reporte de motivos (Sistemas): dona con % por motivo + registro de eventos clasificados.</summary>
+    Task<MotivosReporteDto> MotivosReporteAsync(DateTime desde, DateTime hasta, string local, CancellationToken ct = default);
 }

@@ -1,0 +1,332 @@
+@page "/produccion/viajes/articulo/{Id:int}"
+@using MarketWeb.Shared.Produccion
+@inject ViajesApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Ficha artículo</PageTitle>
+
+<div class="market-page vj-ficha">
+    <button class="btn-volver" @onclick="Volver">
+        <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+        <span>Volver</span>
+    </button>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando ficha...</p>
+    }
+    else if (_a is null)
+    {
+        <div class="market-empty"><i class="fa-solid fa-shirt"></i><p>No se encontró el artículo.</p></div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- ===== Columna izquierda: foto + datos + costo unitario ===== -->
+            <div class="col-lg-4">
+                <div class="card vj-sec shadow-sm p-3 text-center mb-4">
+                    @if (_fotoPrincipal is not null)
+                    {
+                        <img id="vj-foto-ppal" src="@ViajesApi.FotoUrl(_fotoPrincipal)" class="vj-foto mb-2" alt="Foto" />
+                        @if (_a.Fotos.Count > 1)
+                        {
+                            <div class="vj-galeria mb-2">
+                                @foreach (var f in _a.Fotos)
+                                {
+                                    <img src="@ViajesApi.FotoUrl(f.Archivo)" @onclick="@(() => _fotoPrincipal = f.Archivo)" alt="" />
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="bg-secondary text-white py-5 rounded mb-3">Sin foto cargada</div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_a.CodigoInterno))
+                    {
+                        <div class="mb-1 d-flex justify-content-center align-items-center gap-2">
+                            <span class="badge bg-dark fs-4 px-3 py-2">🏷️ @_a.CodigoInterno</span>
+                            @if (_a.NumeroGeneral is not null) { <span class="badge bg-info text-dark fs-5 px-3 py-2">N° @_a.NumeroGeneral</span> }
+                        </div>
+                        <div class="vj-tit-lbl mt-1">Código interno · Número general</div>
+                    }
+                    <h3 class="text-primary fw-bold mb-0">@_a.CodigoProveedor</h3>
+                    <p class="text-muted small mb-2">Cód. proveedor</p>
+                    <div class="mb-2 text-start">
+                        <label class="vj-tit-lbl">🔗 Cód. Dragon (ARTCOD)</label>
+                        <div class="input-group input-group-sm">
+                            <input class="form-control fw-bold" @bind="_codigoDragon" placeholder="Sin asignar — cargalo a mano" />
+                            <button class="btn btn-success" @onclick="GuardarDragon" disabled="@_guardandoDragon" title="Guardar código Dragon">
+                                @if (_guardandoDragon) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-floppy-disk"></i> }
+                            </button>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_a.CodigoMarket))
+                        {
+                            <div class="mt-1">
+                                @if (_a.ExisteEnDragon)
+                                {
+                                    <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Existe en Dragon</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>No existe en Dragon</span>
+                                }
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_a.CodigoMarketManual))
+                        {
+                            <div class="small text-warning mt-1"><i class="fa-solid fa-pen me-1"></i>Cargado a mano (vaciá y guardá para volver a la planilla).</div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_a.CodigoMarket))
+                        {
+                            <div class="small text-muted mt-1">De la planilla.@(string.IsNullOrWhiteSpace(_a.DescripcionMarket) ? "" : " " + _a.DescripcionMarket)</div>
+                        }
+                        else
+                        {
+                            <div class="small text-muted mt-1">Sin equivalencia en la planilla.</div>
+                        }
+                        @if (_dragonMsg is not null) { <div class="small text-success mt-1">@_dragonMsg</div> }
+                    </div>
+                    <p class="text-muted fs-5">@_a.Descripcion</p>
+                    <hr />
+                    <div class="row text-start px-2">
+                        <div class="col-6 mb-3 border-end"><div class="vj-tit-lbl">Proveedor</div><div class="vj-tit-val text-truncate">@_a.Proveedor</div></div>
+                        <div class="col-6 mb-3"><div class="vj-tit-lbl">Género</div><div class="vj-tit-val">@_a.Genero</div></div>
+                        <div class="col-6 mb-2 border-end"><div class="vj-tit-lbl">Tipo</div><div class="vj-tit-val">@(string.IsNullOrWhiteSpace(_a.Tipo) ? "—" : _a.Tipo)</div></div>
+                        <div class="col-6 mb-2"><div class="vj-tit-lbl">Material</div><div class="vj-tit-val">@(string.IsNullOrWhiteSpace(_a.Material) ? "—" : _a.Material)</div></div>
+                    </div>
+                </div>
+
+                <div class="card vj-sec shadow-sm overflow-hidden">
+                    <div class="card-header bg-success text-white fw-bold">💰 Costo unitario y combo</div>
+                    <div class="card-body bg-white">
+                        <div class="row mb-3 pb-3 border-bottom">
+                            <div class="col-6">
+                                <label class="vj-tit-lbl">Cotiz. RMB</label>
+                                <input type="number" step="0.0001" id="tasa_rmb" class="form-control form-control-sm text-end fw-bold" value="@(_a.TasaRmb ?? 7.24m)" />
+                            </div>
+                            <div class="col-6">
+                                <label class="vj-tit-lbl">Dólar @(string.IsNullOrWhiteSpace(_a.TipoDolar) ? "Blue" : _a.TipoDolar)</label>
+                                <input type="number" id="tasa_ars" class="form-control form-control-sm text-end fw-bold text-success" value="@(_a.TasaArs ?? 1200m)" />
+                            </div>
+                        </div>
+                        <table class="table table-sm table-bordered text-end align-middle mb-0" style="font-size:.85rem;">
+                            <thead class="table-light"><tr><th class="text-start">Concepto</th><th>¥</th><th class="text-primary">USD</th><th class="text-success">AR$</th></tr></thead>
+                            <tbody>
+                                <tr><td class="text-start fw-bold">FOB</td><td class="fw-bold text-warning" id="unit_fob_yuan">¥ 0,00</td><td class="fw-bold text-primary" id="unit_fob_usd">U$S 0,00</td><td class="fw-bold text-success" id="unit_fob_ars">$ 0,00</td></tr>
+                                <tr><td class="text-start fw-bold">Nac. <small class="text-muted">(@(_a.PNac ?? 0)%)</small></td><td class="text-muted">—</td><td class="fw-bold" id="unit_nac_usd">+ U$S 0,00</td><td class="fw-bold" id="unit_nac_ars">+ $ 0,00</td></tr>
+                                <tr class="table-success"><td class="text-start fw-bold">TOTAL</td><td class="text-muted">—</td><td class="fw-bold text-primary" id="unit_total_usd">U$S 0,00</td><td class="fw-bold text-success" id="unit_total_ars">$ 0,00</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="combo-box" class="vj-combo combo-slider-empty">
+                        <div class="vj-combo-lbl">COMBO</div>
+                        <div id="combo-display" class="vj-combo-val">-</div>
+                        <div class="vj-combo-rail">
+                            <div class="vj-combo-track"></div>
+                            <div id="combo-marker" class="vj-combo-marker" style="left:50%; display:none;"></div>
+                            <div id="combo-current" class="vj-combo-current" style="left:50%; display:none;">-</div>
+                        </div>
+                        <div class="vj-combo-bounds"><span id="combo-min">¥ -</span><span id="combo-max">¥ -</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== Columna derecha: talles/curva, packs, volúmenes, total ===== -->
+            <div class="col-lg-8">
+                <div class="card vj-sec shadow-sm mb-4">
+                    <div class="card-header bg-dark text-white fw-bold">📏 Talles, curva y packing</div>
+                    <div class="card-body">
+                        <table class="table table-bordered text-center align-middle mb-4">
+                            <thead class="table-light"><tr><th>Talle local</th><th>Equiv. China</th><th>Cant. curva</th></tr></thead>
+                            <tbody>
+                                @for (int i = 0; i < _tLocal.Count; i++)
+                                {
+                                    <tr>
+                                        <td class="fw-bold fs-5 bg-light">@_tLocal[i]</td>
+                                        <td class="text-muted">@(_tablaMap.TryGetValue(_tLocal[i], out var eq) ? eq : "-")</td>
+                                        <td class="fw-bold text-primary fs-5">@(i < _tCurva.Count ? _tCurva[i] : "")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot class="table-light fw-bold"><tr><td colspan="2" class="text-end">Total por curva:</td><td class="text-primary fs-4">@_totalCurva</td></tr></tfoot>
+                        </table>
+                        <div id="area-colores-o-packs" class="bg-light p-3 rounded border"></div>
+                    </div>
+                </div>
+
+                <div class="card vj-sec shadow-sm">
+                    <div class="card-header bg-primary text-white fw-bold">📦 Volúmenes logísticos</div>
+                    <div class="card-body">
+                        <div class="row text-center g-0">
+                            <div class="col-md-3 border-end"><div class="vj-tit-lbl">CBM por @(string.IsNullOrWhiteSpace(_a.TipoBulto) ? "caja" : _a.TipoBulto)</div><div class="vj-tit-val text-primary">@Num(_a.CbmUnitario)</div></div>
+                            <div class="col-md-3 border-end"><div class="vj-tit-lbl">Total prendas</div><div class="vj-tit-val text-danger">@(_a.CantidadTotalPrendas ?? 0)</div></div>
+                            <div class="col-md-3 border-end"><div class="vj-tit-lbl">Total bultos</div><div class="vj-tit-val">@(_a.CajasPedidas ?? 0)</div></div>
+                            <div class="col-md-3"><div class="vj-tit-lbl">CBM total</div><div class="vj-tit-val text-primary fs-4" id="val_cbm_total">0.000</div></div>
+                        </div>
+                        <hr class="my-3" />
+                        <div class="d-flex align-items-center gap-2 mb-2 small">
+                            <span class="badge bg-danger-subtle text-danger border border-danger">📅 Entrega: <strong>@(_a.DiasEntrega is not null ? _a.DiasEntrega + " días" : "sin definir")</strong></span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_a.Observaciones))
+                        {
+                            <div class="text-start"><div class="vj-tit-lbl">📝 Observaciones</div><div class="small bg-light border rounded p-2" style="white-space:pre-wrap;">@_a.Observaciones</div></div>
+                        }
+                    </div>
+                    <div class="card-footer bg-light d-flex justify-content-between">
+                        <div><span class="fw-bold">Contenedor:</span> <span class="badge bg-dark">@(string.IsNullOrWhiteSpace(_a.Contenedor) ? "China (sin asignar)" : _a.Contenedor)</span></div>
+                        <div class="small text-muted">ID: #@_a.Id</div>
+                    </div>
+                </div>
+
+                <div class="card vj-sec shadow-sm mt-3">
+                    <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+                        <span>💰 Total del artículo</span>
+                        <small class="opacity-75">@(_a.CantidadTotalPrendas ?? 0) prendas × costo unitario</small>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-bordered text-end align-middle mb-0">
+                            <thead class="table-light"><tr><th class="text-start">Concepto</th><th>Yuanes (¥)</th><th class="text-primary">USD</th><th class="text-success">AR$</th></tr></thead>
+                            <tbody>
+                                <tr><td class="text-start fw-bold">FOB <small class="text-muted">(China sin nacionalizar)</small></td><td id="val_fob_yuan" class="fw-bold text-warning">¥ 0,00</td><td id="val_fob_usd" class="fw-bold text-primary">U$S 0,00</td><td id="val_fob_ars" class="fw-bold text-success">$ 0,00</td></tr>
+                                <tr><td class="text-start fw-bold">Nacionalización <small class="text-muted">(@(_a.PNac ?? 0)% sobre FOB)</small></td><td class="text-muted">—</td><td id="val_nac_usd" class="fw-bold">+ U$S 0,00</td><td id="val_nac_ars" class="fw-bold">+ $ 0,00</td></tr>
+                                <tr class="table-success"><td class="text-start fw-bold fs-5">TOTAL</td><td class="text-muted">—</td><td id="val_total_usd" class="fw-bold fs-5 text-primary">U$S 0,00</td><td id="val_total_ars" class="fw-bold fs-5 text-success">$ 0,00</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .btn-volver { display:inline-flex; align-items:center; gap:8px; background:#fff; border:1px solid #e6e4dd; border-radius:999px; padding:6px 16px 6px 8px; margin-bottom:.5rem; color:#555; font-weight:600; font-size:.9rem; cursor:pointer; box-shadow:0 1px 2px rgba(16,24,40,.05); transition:all .12s ease; }
+    .btn-volver .ico { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:#fff3e0; color:#e8820c; }
+    .btn-volver:hover { background:#faf9f6; color:#1f2430; transform:translateX(-2px); }
+    .vj-sec { border:none; border-radius:15px; }
+    .vj-foto { max-width:100%; height:auto; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+    .vj-tit-lbl { font-size:.75rem; text-transform:uppercase; color:#6c757d; font-weight:bold; letter-spacing:.5px; }
+    .vj-tit-val { font-size:1.1rem; font-weight:bold; color:#212529; }
+    .vj-galeria { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+    .vj-galeria img { width:56px; height:56px; object-fit:cover; border-radius:6px; border:2px solid #dee2e6; cursor:pointer; transition:.15s; }
+    .vj-galeria img:hover { border-color:#0d6efd; transform:scale(1.05); }
+    .vj-combo { background:#1f1f2e; border:2px solid #7c5cff; border-radius:0 0 15px 15px; padding:16px 18px 14px; color:#fff; text-align:center; }
+    .vj-combo-lbl { color:#a8a8b8; font-size:.75rem; letter-spacing:3px; font-weight:bold; }
+    .vj-combo-val { color:#a78bfa; font-size:2.2rem; font-weight:800; line-height:1.1; margin:4px 0 18px; }
+    .vj-combo-rail { position:relative; height:34px; margin:0 6px; }
+    .vj-combo-track { height:8px; background:linear-gradient(to right,#22c55e 0%,#eab308 50%,#ef4444 100%); border-radius:4px; }
+    .vj-combo-marker { position:absolute; top:4px; transform:translate(-50%,-50%); width:18px; height:18px; border-radius:50%; background:#fff; border:2px solid #2b2b3a; box-shadow:0 2px 6px rgba(0,0,0,.5); }
+    .vj-combo-current { position:absolute; top:18px; transform:translateX(-50%); color:#a78bfa; font-weight:700; font-size:.95rem; white-space:nowrap; }
+    .vj-combo-bounds { display:flex; justify-content:space-between; margin-top:14px; font-size:.85rem; color:#9a9aaa; padding:0 2px; }
+    .combo-slider-empty .vj-combo-rail, .combo-slider-empty .vj-combo-bounds { opacity:.35; }
+
+    /* ===== Modo oscuro: sin fondos blancos feos ===== */
+    html[data-theme="dark"] .vj-ficha .card { background: var(--mk-surface); color: var(--mk-text); }
+    html[data-theme="dark"] .vj-ficha .bg-white { background: var(--mk-surface) !important; color: var(--mk-text) !important; }
+    html[data-theme="dark"] .vj-ficha .bg-light { background: var(--mk-surface-2) !important; color: var(--mk-text) !important; }
+    html[data-theme="dark"] .vj-ficha .card-footer.bg-light { background: var(--mk-surface-2) !important; }
+    html[data-theme="dark"] .vj-ficha .table { color: var(--mk-text); --bs-table-bg: transparent; }
+    html[data-theme="dark"] .vj-ficha .table-light,
+    html[data-theme="dark"] .vj-ficha .table-light th,
+    html[data-theme="dark"] .vj-ficha .table-light td { background: var(--mk-surface-2) !important; color: var(--mk-text) !important; }
+    html[data-theme="dark"] .vj-ficha .table-bordered th,
+    html[data-theme="dark"] .vj-ficha .table-bordered td { border-color: var(--mk-border) !important; }
+    html[data-theme="dark"] .vj-ficha .table-success,
+    html[data-theme="dark"] .vj-ficha .table-success td { background: rgba(60,160,80,.22) !important; color: var(--mk-text) !important; }
+    html[data-theme="dark"] .vj-ficha .vj-tit-val { color: var(--mk-text-strong); }
+    html[data-theme="dark"] .vj-ficha .border,
+    html[data-theme="dark"] .vj-ficha .border-top,
+    html[data-theme="dark"] .vj-ficha .border-bottom,
+    html[data-theme="dark"] .vj-ficha .border-end { border-color: var(--mk-border) !important; }
+    html[data-theme="dark"] .vj-ficha .form-control { background: var(--mk-surface-2); color: var(--mk-text); border-color: var(--mk-border); }
+    html[data-theme="dark"] .vj-ficha .badge.bg-white { background: var(--mk-surface-2) !important; color: var(--mk-text) !important; border-color: var(--mk-border) !important; }
+</style>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ViajeArticuloFichaDto? _a;
+    private bool _cargando = true;
+    private string? _fotoPrincipal;
+    private string _codigoDragon = "";
+    private bool _guardandoDragon;
+    private string? _dragonMsg;
+    private IJSObjectReference? _mod;
+    private bool _render;
+
+    private List<string> _tLocal = new();
+    private List<string> _tCurva = new();
+    private Dictionary<string, string> _tablaMap = new();
+    private int _totalCurva;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _cargando = true;
+        _a = await Api.FichaAsync(Id);
+        if (_a is not null)
+        {
+            _fotoPrincipal = _a.Fotos.FirstOrDefault()?.Archivo;
+            _codigoDragon = _a.CodigoMarket;
+            _tLocal = (_a.Talles ?? "").Split('-', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToList();
+            _tCurva = (_a.CurvaTalles ?? "").Split('-').Select(s => s.Trim()).ToList();
+            _tablaMap = new();
+            foreach (var par in (_a.TablaTalles ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = par.Split('=');
+                if (kv.Length == 2 && kv[0].Trim().Length > 0) _tablaMap[kv[0].Trim()] = kv[1].Trim();
+            }
+            _totalCurva = _tCurva.Sum(s => int.TryParse(s, out var n) ? n : 0);
+            _render = true;
+        }
+        _cargando = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_render && _a is not null)
+        {
+            _render = false;
+            _mod ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/viajeficha.js");
+            await _mod.InvokeVoidAsync("init", new
+            {
+                precioYuanes = _a.PrecioYuanes ?? 0,
+                pDesc = _a.PDesc ?? 0,
+                pNac = _a.PNac ?? 0,
+                cbmUnitario = _a.CbmUnitario ?? 0,
+                cajasPedidas = _a.CajasPedidas ?? 0,
+                totalPrendas = _a.CantidadTotalPrendas ?? 0,
+                packsArmados = _a.PacksArmados ?? "",
+                packsPorCaja = _a.PacksPorCaja ?? 1,
+                colores = _a.Colores ?? ""
+            });
+        }
+    }
+
+    private async Task GuardarDragon()
+    {
+        _guardandoDragon = true; _dragonMsg = null;
+        var ok = await Api.GuardarCodigoDragonAsync(Id, _codigoDragon ?? "");
+        if (ok)
+        {
+            // Recargamos para reflejar el efectivo (manual o, si lo vació, el de la planilla).
+            _a = await Api.FichaAsync(Id);
+            _codigoDragon = _a?.CodigoMarket ?? "";
+            _dragonMsg = "Código Dragon guardado.";
+        }
+        else { _dragonMsg = "No se pudo guardar."; }
+        _guardandoDragon = false;
+    }
+
+    private void Volver() => Nav.NavigateTo(_a is not null ? $"/produccion/viajes/{_a.IdViaje}" : "/produccion/viajes");
+
+    private static string Num(decimal? v) => v is null ? "0" : v.Value.ToString("0.###");
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_mod is not null) { try { await _mod.DisposeAsync(); } catch { } }
+    }
+}

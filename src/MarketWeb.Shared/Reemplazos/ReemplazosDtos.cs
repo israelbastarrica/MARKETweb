@@ -44,6 +44,23 @@ public sealed class ReemplazoEditorDto
     public string ArtCodReemplazo { get; set; } = "";
     public string DescripcionArtReemplazo { get; set; } = "";
     public string Accion { get; set; } = "";
+    public string? MobiliarioLocal { get; set; }   // MAP2.Mobiliario: si es PERCHERO se asigna una mesa que pasa a perchero
+}
+
+/// <summary>
+/// Un reemplazo de MESA con acción "PASAR A PERCHERO" (artículo A). Alimenta el combo del perchero
+/// (asignar 1 a 1) y el cartel de los que quedan sin asignar.
+/// </summary>
+public sealed class MesaPercheroDto
+{
+    public int Id { get; set; }
+    public string ArtCod { get; set; } = "";
+    public string Descripcion { get; set; } = "";
+    public string Local { get; set; } = "";
+    public string? Mueble { get; set; }
+    public string? Modulo { get; set; }
+    public bool Asignado { get; set; }          // ya lo tomó un perchero (B con acción REEMPLAZADO POR MESA)
+    public string AsignadoA { get; set; } = ""; // ArtCod del perchero B que lo tomó
 }
 
 /// <summary>Descripción (+ combo) de un artículo de Dragonfish, para los lookups del ABM.</summary>

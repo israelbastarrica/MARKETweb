@@ -1,0 +1,476 @@
+@page "/diseno/ordenes/{Id:int}"
+@using MarketWeb.Shared.Produccion
+@inject OrdenesApi Api
+@inject MarketWeb.Client.Services.TelasApi Tel
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Orden de Pedido</PageTitle>
+
+<div class="market-page">
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <button class="btn btn-outline-secondary btn-sm" @onclick='() => Nav.NavigateTo("/diseno/ordenes")'><i class="fa-solid fa-arrow-left me-1"></i> Volver</button>
+        @if (_o is not null)
+        {
+            <h4 class="mb-0">Orden N° @_o.NroOrden</h4>
+            <span class="badge @(_o.Tipo == "IMPORTADO" ? "bg-info text-dark" : "bg-warning text-dark")">@_o.Tipo</span>
+        }
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_o is null)
+    {
+        <div class="market-empty"><i class="fa-solid fa-triangle-exclamation"></i><p>No se encontró la orden.</p></div>
+    }
+    else
+    {
+        <div class="market-card mb-3">
+            <div class="row g-3">
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Tipo</label>
+                    <select class="form-select" @bind="_o.Tipo" @bind:after="EstadoPorTipo">
+                        <option value="IMPORTADO">IMPORTADO</option>
+                        <option value="NACIONAL">NACIONAL</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small text-muted mb-1">Estado</label>
+                    <select class="form-select" @bind="_o.Estado">
+                        @foreach (var e in Estados) { <option value="@e">@e</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small text-muted mb-1">Proveedor</label>
+                    <input class="form-control" @bind="_o.ProveedorNombre" placeholder="(se completa luego desde PROV)" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Fecha de llegada</label>
+                    <input type="date" class="form-control" @bind="_o.FechaLlegada" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Etiquetador</label>
+                    <input class="form-control" @bind="_o.Etiquetador" placeholder="PROV / Telera" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Temporada</label>
+                    <select class="form-select" @bind="_o.Temporada">
+                        <option value="">—</option>
+                        @if (!string.IsNullOrEmpty(_o.Temporada) && !_combosCab.Temporadas.Contains(_o.Temporada)) { <option value="@_o.Temporada">@_o.Temporada</option> }
+                        @foreach (var v in _combosCab.Temporadas) { <option value="@v">@v</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Año</label>
+                    <input type="number" class="form-control" @bind="_o.Anio" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Material</label>
+                    <select class="form-select" @bind="_o.Material">
+                        <option value="">—</option>
+                        @if (!string.IsNullOrEmpty(_o.Material) && !_combosCab.Materiales.Contains(_o.Material)) { <option value="@_o.Material">@_o.Material</option> }
+                        @foreach (var v in _combosCab.Materiales) { <option value="@v">@v</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Familia</label>
+                    <select class="form-select" @bind="_o.Familia">
+                        <option value="">—</option>
+                        @if (!string.IsNullOrEmpty(_o.Familia) && !_combosCab.Familias.Contains(_o.Familia)) { <option value="@_o.Familia">@_o.Familia</option> }
+                        @foreach (var v in _combosCab.Familias) { <option value="@v">@v</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Subfamilia <span class="text-muted">(Grupo)</span></label>
+                    <select class="form-select" @bind="_o.Subfamilia">
+                        <option value="">—</option>
+                        @if (!string.IsNullOrEmpty(_o.Subfamilia) && !_combosCab.Subfamilias.Contains(_o.Subfamilia)) { <option value="@_o.Subfamilia">@_o.Subfamilia</option> }
+                        @foreach (var v in _combosCab.Subfamilias) { <option value="@v">@v</option> }
+                    </select>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-primary" @onclick="GuardarCabecera" disabled="@_guardando">
+                    @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } Guardar cabecera
+                </button>
+            </div>
+        </div>
+
+        <h6 class="mb-2">Renglones <span class="text-muted">(@_o.Renglones.Count)</span></h6>
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:24px"></th>
+                        <th>ARTCOD</th><th>Descripción</th><th class="text-center">Ficha</th><th>Equiv. talle</th>
+                        <th>Mobiliario</th><th class="text-end">Cant.</th><th class="text-end">Costo</th><th>Venta (combo)</th>
+                        <th class="text-center" style="width:90px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _o.Renglones)
+                    {
+                        <tr>
+                            <td><span title="@(r.ExisteEnDragon ? "Existe en Dragon" : "Falta crear")" class="dot @(r.ExisteEnDragon ? "dot-ok" : "dot-warn")"></span></td>
+                            <td class="font-monospace text-nowrap">@(string.IsNullOrWhiteSpace(r.ARTCOD) ? "—" : r.ARTCOD)</td>
+                            <td class="small" style="max-width:260px">@r.Descripcion</td>
+                            <td class="text-center">@if (r.TieneFicha) { <i class="fa-solid fa-file-lines text-success" title="Tiene ficha"></i> } else { <span class="text-muted">—</span> }</td>
+                            <td class="small">@(string.IsNullOrWhiteSpace(r.EquiTalle) ? "—" : r.EquiTalle)</td>
+                            <td><select class="form-select form-select-sm" style="min-width:110px" @bind="r.MobiliarioDestino">
+                                <option value="">—</option><option value="Mesa">Mesa</option><option value="Perchero">Perchero</option></select></td>
+                            <td><input type="number" class="form-control form-control-sm text-end" style="width:80px" @bind="r.Cantidad" /></td>
+                            <td><input type="number" class="form-control form-control-sm text-end" style="width:90px" @bind="r.CostoUnit" /></td>
+                            <td class="fw-semibold text-success">@ComboDe(r.CostoUnit)</td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Datos (machete)" @onclick="() => AbrirRenglon(r)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Colores / rollos" @onclick="() => AbrirColores(r)"><i class="fa-solid fa-palette"></i></button>
+                                <button class="btn btn-sm btn-outline-secondary me-1" title="Producción (estimado / real)" @onclick="() => AbrirProduccion(r)"><i class="fa-solid fa-table-cells"></i></button>
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Guardar renglón" @onclick="() => GuardarRenglon(r)"><i class="fa-solid fa-floppy-disk"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Quitar" @onclick="() => EliminarRenglon(r)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2">Cantidad/costo/mobiliario editables en la grilla; el lápiz abre los datos del "machete". La venta (combo) sale del costo (PreciosLista).</p>
+    }
+
+    @if (_renglonModal && _rEdit is not null)
+    {
+        <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Datos del artículo · <span class="font-monospace">@_rEdit.ARTCOD</span></h5>
+                <button type="button" class="btn-close" @onclick="() => _renglonModal = false"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label small text-muted mb-1">Talles</label><input class="form-control" @bind="_rEdit.Talles" placeholder="S M L XL" /></div>
+                    <div class="col-6"><label class="form-label small text-muted mb-1">Curva</label><input class="form-control" @bind="_rEdit.Curva" placeholder="1-1-2-2" /></div>
+                    <div class="col-6"><label class="form-label small text-muted mb-1">Armado</label>
+                        <select class="form-select" @bind="_rEdit.MobiliarioDestino"><option value="">—</option><option value="Mesa">Mesa</option><option value="Perchero">Perchero</option></select></div>
+                    <div class="col-6"><label class="form-label small text-muted mb-1">Prioridad</label>
+                        <select class="form-select" @bind="_rEdit.Prioridad"><option value="">—</option><option>Urgente</option><option>Alta</option><option>Normal</option></select></div>
+                    <div class="col-12"><label class="form-label small text-muted mb-1">Corte (origen de la tela)</label><input class="form-control" @bind="_rEdit.Corte" placeholder="Ej: Retira de lo de Lito" /></div>
+                    <div class="col-6"><label class="form-label small text-muted mb-1">Costo</label><input type="number" class="form-control" @bind="_rEdit.CostoUnit" /></div>
+                    <div class="col-6"><label class="form-label small text-muted mb-1">Venta (combo)</label><input class="form-control" value="@ComboDe(_rEdit.CostoUnit)" readonly /></div>
+                    <div class="col-12"><label class="form-label small text-muted mb-1">Fecha de entrega</label><input class="form-control" @bind="_rEdit.FechaEntregaTexto" placeholder="Fecha o 'Consultar capacidad productiva'" /></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="() => _renglonModal = false">Cancelar</button>
+                <button class="btn btn-primary" @onclick="GuardarRenglonModal">Guardar</button>
+            </div>
+        </div></div></div>
+        <div class="modal-backdrop fade show"></div>
+    }
+
+    @if (_coloresModal && _rColores is not null)
+    {
+        <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Colores / rollos · <span class="font-monospace">@_rColores.ARTCOD</span></h5>
+                <button type="button" class="btn-close" @onclick="() => _coloresModal = false"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Elegí del stock de Telas (depósito de Lito): proveedor (telera), material y color. El material viene de la cabecera si está configurado.</p>
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Depósito</label>
+                        <select class="form-select form-select-sm" @bind="_colDep"><option value="0">—</option>
+                            @foreach (var d in _telDepositos) { <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Nombre) ? d.Codigo : d.Nombre)</option> }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Proveedor (telera)</label>
+                        <select class="form-select form-select-sm" @bind="_colTelera"><option value="0">Todas</option>
+                            @foreach (var t in _telTeleras) { <option value="@t.Id">@t.Nombre</option> }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Material</label>
+                        <select class="form-select form-select-sm" @bind="_colMat"><option value="0">—</option>
+                            @foreach (var m in _telMateriales) { <option value="@m.Id">@m.Nombre</option> }
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary mb-2" @onclick="BuscarStock" disabled="@(_colDep == 0 || _colMat == 0)">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar colores en stock
+                </button>
+                @if (_buscoStock)
+                {
+                    @if (_rollosStock.Count == 0)
+                    {
+                        <p class="small text-danger">No hay rollos en stock para ese depósito/material/telera.</p>
+                    }
+                    else
+                    {
+                        <div class="small text-muted mb-1">Colores con stock (clic para agregar):</div>
+                        <div class="mb-2 d-flex flex-wrap gap-1">
+                            @foreach (var s in _rollosStock)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => AgregarColorStock(s)">
+                                    @s.ColorCod · @s.Color <span class="badge bg-secondary ms-1">@s.CantRollos</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+                <hr class="my-2" />
+                <div class="fw-semibold small mb-1">Seleccionados</div>
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>Color</th><th style="width:130px">Rollos</th><th style="width:44px"></th></tr></thead>
+                    <tbody>
+                        @foreach (var c in _coloresEdit)
+                        {
+                            <tr>
+                                <td class="text-nowrap"><span class="font-monospace">@c.ColorCod</span> @c.ColorNombre</td>
+                                <td><input type="number" class="form-control form-control-sm" @bind="c.Rollos" /></td>
+                                <td><button class="btn btn-sm btn-outline-danger" @onclick="() => _coloresEdit.Remove(c)"><i class="fa-solid fa-trash"></i></button></td>
+                            </tr>
+                        }
+                        @if (_coloresEdit.Count == 0) { <tr><td colspan="3" class="text-muted small">Buscá en stock y agregá colores.</td></tr> }
+                    </tbody>
+                    <tfoot><tr><td class="text-end fw-semibold">Total rollos:</td><td class="fw-bold">@_coloresEdit.Sum(x => x.Rollos ?? 0)</td><td></td></tr></tfoot>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="() => _coloresModal = false">Cancelar</button>
+                <button class="btn btn-primary" @onclick="GuardarColores">Guardar</button>
+            </div>
+        </div></div></div>
+        <div class="modal-backdrop fade show"></div>
+    }
+
+    @if (_prodModal && _rProd is not null)
+    {
+        <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Producción · <span class="font-monospace">@_rProd.ARTCOD</span> <span class="small text-muted ms-2">E = estimado · R = real (proveedor)</span></h5>
+                <button type="button" class="btn-close" @onclick="() => _prodModal = false"></button>
+            </div>
+            <div class="modal-body">
+                @if (_prodColoresList.Count == 0 || _prodTalles.Count == 0)
+                {
+                    <p class="text-muted small">Cargá primero <b>Colores</b> (botón paleta) y <b>Talles</b> (en el machete) para armar la grilla.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle text-center" style="min-width:620px">
+                            <thead><tr><th class="text-start">Color</th>@foreach (var t in _prodTalles) { <th>@t</th> }</tr></thead>
+                            <tbody>
+                                @foreach (var col in _prodColoresList)
+                                {
+                                    <tr>
+                                        <td class="text-start fw-semibold text-nowrap">@col.ColorCod @col.ColorNombre</td>
+                                        @foreach (var t in _prodTalles)
+                                        {
+                                            var cell = Celda(col.ColorCod, t);
+                                            <td style="min-width:78px">
+                                                <input type="number" class="form-control form-control-sm text-end mb-1" placeholder="E" @bind="cell.Estimada" />
+                                                <input type="number" class="form-control form-control-sm text-end" placeholder="R" @bind="cell.Real" />
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="() => _prodModal = false">Cancelar</button>
+                <button class="btn btn-primary" @onclick="GuardarProduccion">Guardar</button>
+            </div>
+        </div></div></div>
+        <div class="modal-backdrop fade show"></div>
+    }
+</div>
+
+<style>
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; }
+    .dot-ok { background: var(--bs-success, #1d9e75); }
+    .dot-warn { background: var(--bs-warning, #ba7517); }
+</style>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private OrdenDetalleDto? _o;
+    private bool _cargando = true, _guardando;
+    private List<ComboRangoDto> _combos = new();
+    private OrdenCabeceraCombosDto _combosCab = new();
+
+    // Precio de venta (combo) según el costo, leído de PreciosLista.
+    private string ComboDe(decimal? costo)
+    {
+        if (costo is null || costo <= 0) return "—";
+        var r = _combos.FirstOrDefault(k => costo >= k.Desde && costo <= k.Hasta);
+        return r?.Combo ?? "—";
+    }
+
+    private static readonly string[] EstadosImportado = { "Borrador", "Confirmada", "Generada en Dragon" };
+    private static readonly string[] EstadosNacional = { "Borrador", "Ficha enviada", "En producción", "Pack armado", "Generada en Dragon" };
+    private string[] Estados => _o?.Tipo == "NACIONAL" ? EstadosNacional : EstadosImportado;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try
+        {
+            _o = await Api.DetalleAsync(Id);
+            if (_combos.Count == 0) _combos = await Api.CombosAsync();
+            if (_combosCab.Temporadas.Count == 0) _combosCab = await Api.CombosCabeceraAsync();
+        }
+        catch { _o = null; }
+        finally { _cargando = false; }
+    }
+
+    private void EstadoPorTipo()
+    {
+        if (_o is null) return;
+        if (!Estados.Contains(_o.Estado)) _o.Estado = "Borrador";
+    }
+
+    private async Task GuardarCabecera()
+    {
+        if (_o is null) return;
+        _guardando = true;
+        try
+        {
+            await Api.GuardarCabeceraAsync(new OrdenSaveRequest
+            {
+                Id = _o.Id, NroOrden = _o.NroOrden, Tipo = _o.Tipo, Estado = _o.Estado,
+                ProveedorCod = _o.ProveedorCod, ProveedorNombre = _o.ProveedorNombre, IdViaje = _o.IdViaje, Moneda = _o.Moneda,
+                FechaLlegada = _o.FechaLlegada, Etiquetador = _o.Etiquetador, Temporada = _o.Temporada, Anio = _o.Anio,
+                Material = _o.Material, Familia = _o.Familia, Subfamilia = _o.Subfamilia
+            });
+            Ui.Exito("Cabecera guardada.");
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+        finally { _guardando = false; }
+    }
+
+    private bool _renglonModal;
+    private OrdenRenglonDto? _rEdit;
+    private void AbrirRenglon(OrdenRenglonDto r) { _rEdit = r; _renglonModal = true; }
+    private async Task GuardarRenglonModal()
+    {
+        if (_rEdit is not null) await GuardarRenglon(_rEdit);
+        _renglonModal = false;
+    }
+
+    // ---- Colores / rollos (B2: del stock real de Telas) ----
+    private bool _coloresModal;
+    private OrdenRenglonDto? _rColores;
+    private List<OrdenColorDto> _coloresEdit = new();
+    private List<MarketWeb.Shared.Telas.CatalogoItemDto> _telDepositos = new(), _telTeleras = new(), _telMateriales = new();
+    private int _colDep, _colTelera, _colMat;
+    private bool _buscoStock;
+    private List<MarketWeb.Shared.Telas.ColorStockDto> _rollosStock = new();
+
+    private async Task AbrirColores(OrdenRenglonDto r)
+    {
+        _rColores = r;
+        _buscoStock = false; _rollosStock = new();
+        if (_telDepositos.Count == 0) _telDepositos = await Tel.CatalogoAsync(MarketWeb.Shared.Telas.CatalogoTela.Depositos);
+        if (_telTeleras.Count == 0) _telTeleras = await Tel.CatalogoAsync(MarketWeb.Shared.Telas.CatalogoTela.Teleras);
+        if (_telMateriales.Count == 0) _telMateriales = await Tel.CatalogoAsync(MarketWeb.Shared.Telas.CatalogoTela.Materiales);
+        _coloresEdit = await Api.ColoresAsync(r.Id);
+        // Depósito por defecto = Lito; material = el de la cabecera si está configurado (matchea por nombre).
+        _colDep = _telDepositos.FirstOrDefault(d => ((d.Nombre ?? "") + " " + (d.Codigo ?? "")).Contains("lito", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
+        var matCab = _o?.Material?.Trim() ?? "";
+        _colMat = string.IsNullOrEmpty(matCab) ? 0 : (_telMateriales.FirstOrDefault(m => string.Equals(m.Nombre?.Trim(), matCab, StringComparison.OrdinalIgnoreCase))?.Id ?? 0);
+        _colTelera = 0;
+        _coloresModal = true;
+    }
+
+    private async Task BuscarStock()
+    {
+        if (_colDep == 0 || _colMat == 0) return;
+        var rollos = await Tel.RollosAsync(_colDep, _colMat, null, _colTelera == 0 ? (int?)null : _colTelera, null);
+        _rollosStock = rollos
+            .GroupBy(x => new { x.CodColor, x.Color })
+            .Select(g => new MarketWeb.Shared.Telas.ColorStockDto { ColorCod = g.Key.CodColor, Color = g.Key.Color ?? "", CantRollos = g.Count() })
+            .Where(x => !string.IsNullOrWhiteSpace(x.ColorCod))
+            .OrderBy(x => x.ColorCod).ToList();
+        _buscoStock = true;
+    }
+
+    private void AgregarColorStock(MarketWeb.Shared.Telas.ColorStockDto s)
+    {
+        if (_coloresEdit.Any(c => c.ColorCod == s.ColorCod)) return;
+        _coloresEdit.Add(new OrdenColorDto { ColorCod = s.ColorCod ?? "", ColorNombre = s.Color, Rollos = s.CantRollos });
+    }
+
+    private async Task GuardarColores()
+    {
+        if (_rColores is null) return;
+        try
+        {
+            await Api.GuardarColoresAsync(_rColores.Id, _coloresEdit.Where(x => !string.IsNullOrWhiteSpace(x.ColorCod)).ToList());
+            _coloresModal = false;
+            Ui.Exito("Colores guardados.");
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+    }
+
+    // ---- Producción color×talle (C) ----
+    private bool _prodModal;
+    private OrdenRenglonDto? _rProd;
+    private List<OrdenColorDto> _prodColoresList = new();
+    private List<string> _prodTalles = new();
+    private Dictionary<string, OrdenProduccionCeldaDto> _prodCeldas = new();
+    private async Task AbrirProduccion(OrdenRenglonDto r)
+    {
+        _rProd = r;
+        _prodColoresList = (await Api.ColoresAsync(r.Id)).Where(c => !string.IsNullOrWhiteSpace(c.ColorCod)).ToList();
+        _prodTalles = (r.Talles ?? "").Split(new[] { ' ', '-', ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()).ToList();
+        _prodCeldas = new();
+        foreach (var e in await Api.ProduccionAsync(r.Id)) _prodCeldas[$"{e.ColorCod}|{e.Talle}"] = e;
+        _prodModal = true;
+    }
+    private OrdenProduccionCeldaDto Celda(string cod, string talle)
+    {
+        var k = $"{cod}|{talle}";
+        if (!_prodCeldas.TryGetValue(k, out var c)) { c = new OrdenProduccionCeldaDto { ColorCod = cod, Talle = talle }; _prodCeldas[k] = c; }
+        return c;
+    }
+    private async Task GuardarProduccion()
+    {
+        if (_rProd is null) return;
+        try
+        {
+            await Api.GuardarProduccionAsync(_rProd.Id, _prodCeldas.Values.ToList());
+            _prodModal = false;
+            Ui.Exito("Producción guardada.");
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+    }
+
+    private async Task GuardarRenglon(OrdenRenglonDto r)
+    {
+        try
+        {
+            await Api.GuardarRenglonAsync(new OrdenRenglonSaveRequest
+            {
+                Id = r.Id, IdOrden = Id, MobiliarioDestino = r.MobiliarioDestino,
+                Cantidad = r.Cantidad, CostoUnit = r.CostoUnit, PrecioVenta = r.PrecioVenta,
+                Corte = r.Corte, Prioridad = r.Prioridad, Talles = r.Talles, Curva = r.Curva, FechaEntregaTexto = r.FechaEntregaTexto
+            });
+            Ui.Exito($"Renglón {r.ARTCOD} guardado.");
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+    }
+
+    private async Task EliminarRenglon(OrdenRenglonDto r)
+    {
+        if (!await Ui.ConfirmAsync($"¿Quitar el renglón {r.ARTCOD}?", "Quitar renglón", "Quitar", "Cancelar", peligro: true)) return;
+        if (await Api.EliminarRenglonAsync(r.Id)) { _o!.Renglones.Remove(r); StateHasChanged(); }
+    }
+}

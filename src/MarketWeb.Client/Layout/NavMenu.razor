@@ -24,14 +24,41 @@
                 <div class="market-submenu">
                     @foreach (var item in modulo.Items)
                     {
-                        <NavLink class="market-link" href="@item.Href">
-                            <i class="@item.Icono ico"></i>
-                            <span>@item.Etiqueta</span>
-                            @if (!item.Implementado)
-                            {
-                                <span class="market-wip" title="Pendiente de migrar"></span>
-                            }
-                        </NavLink>
+                        @if (item.Sub is null)
+                        {
+                            <NavLink class="market-link" href="@item.Href">
+                                <i class="@item.Icono ico"></i>
+                                <span>@item.Etiqueta</span>
+                                @if (!item.Implementado)
+                                {
+                                    <span class="market-wip" title="Pendiente de migrar"></span>
+                                }
+                            </NavLink>
+                        }
+                        else
+                        {
+                            var subKey = modulo.Titulo + "/" + item.Etiqueta;
+                            <div class="market-subgroup @(_subsAbiertos.Contains(subKey) ? "open" : "")">
+                                <button type="button" class="market-subgroup-header" @onclick="() => ToggleSub(subKey)">
+                                    <i class="@item.Icono ico"></i>
+                                    <span>@item.Etiqueta</span>
+                                    <i class="fa-solid fa-chevron-down market-caret-sub"></i>
+                                </button>
+                                <div class="market-subsubmenu">
+                                    @foreach (var sub in item.Sub)
+                                    {
+                                        <NavLink class="market-link" href="@sub.Href">
+                                            <i class="@sub.Icono ico"></i>
+                                            <span>@sub.Etiqueta</span>
+                                            @if (!sub.Implementado)
+                                            {
+                                                <span class="market-wip" title="Pendiente de migrar"></span>
+                                            }
+                                        </NavLink>
+                                    }
+                                </div>
+                            </div>
+                        }
                     }
                 </div>
             </div>
@@ -63,6 +90,21 @@
     </div>
 </div>
 
+<style>
+    .market-subgroup-header {
+        display: flex; align-items: center; gap: .6rem; width: 100%;
+        background: none; border: 0; cursor: pointer; color: inherit; font: inherit; text-align: left;
+        padding: .55rem .9rem; border-radius: 6px;
+    }
+    .market-subgroup-header:hover { background: rgba(128,128,128,.16); }
+    .market-subgroup-header .ico { width: 1.15rem; text-align: center; opacity: .85; }
+    .market-caret-sub { margin-left: auto; font-size: .62rem; opacity: .55; transition: transform .15s ease; }
+    .market-subgroup.open > .market-subgroup-header .market-caret-sub { transform: rotate(180deg); }
+    .market-subsubmenu { display: none; }
+    .market-subgroup.open > .market-subsubmenu { display: block; }
+    .market-subsubmenu .market-link { padding-left: 2.4rem; }
+</style>
+
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     [Inject] private IJSRuntime JS { get; set; } = default!;
@@ -71,8 +113,18 @@
     private string _perfil = "";
     private string _tema = "light";
 
+    private readonly HashSet<string> _subsAbiertos = new();
+
     private void Toggle(string titulo)
         => _abierto = _abierto == titulo ? null : titulo;
+
+    private void ToggleSub(string key)
+    {
+        if (!_subsAbiertos.Remove(key)) _subsAbiertos.Add(key);
+    }
+
+    // Hojas (links navegables) de un módulo, aplanando los subgrupos.
+    private static IEnumerable<Item> Hojas(Modulo m) => m.Items.SelectMany(i => i.Sub ?? new[] { i });
 
     protected override async Task OnInitializedAsync()
     {
@@ -105,8 +157,8 @@
         ["LURO"] = new[] { "Locales" },
         ["PERALTA"] = new[] { "Locales" },
         ["LOGISTICA"] = new[] { "Configuración", "Logística" },
-        ["DISEÑO"] = new[] { "Diseño", "Producción", "Informes" },
-        ["DISENO"] = new[] { "Diseño", "Producción", "Informes" },
+        ["DISEÑO"] = new[] { "Producción", "Informes" },
+        ["DISENO"] = new[] { "Producción", "Informes" },
         ["ADMINISTRACION"] = new[] { "Administración", "Producción" },
     };
 
@@ -126,8 +178,14 @@
     private void AbrirModuloDeRutaActual()
     {
         var ruta = "/" + Nav.ToBaseRelativePath(Nav.Uri);
-        var modulo = Modulos.FirstOrDefault(m => m.Items.Any(i => ruta.StartsWith(i.Href, StringComparison.OrdinalIgnoreCase)));
-        if (modulo is not null) _abierto = modulo.Titulo;
+        bool Coincide(Item i) => !string.IsNullOrEmpty(i.Href) && ruta.StartsWith(i.Href, StringComparison.OrdinalIgnoreCase);
+        var modulo = Modulos.FirstOrDefault(m => Hojas(m).Any(Coincide));
+        if (modulo is null) return;
+        _abierto = modulo.Titulo;
+        // Abrir también el subgrupo que contenga la ruta actual.
+        foreach (var item in modulo.Items.Where(i => i.Sub is not null))
+            if (item.Sub!.Any(Coincide))
+                _subsAbiertos.Add(modulo.Titulo + "/" + item.Etiqueta);
     }
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
@@ -149,7 +207,7 @@
     private static string Perfil(System.Security.Claims.ClaimsPrincipal user)
         => user.FindFirst("perfil")?.Value ?? "Sin perfil";
 
-    private sealed record Item(string Etiqueta, string Icono, string Href, bool Implementado = false);
+    private sealed record Item(string Etiqueta, string Icono, string Href, bool Implementado = false, Item[]? Sub = null);
     private sealed record Modulo(string Titulo, string Icono, Item[] Items);
 
     // Espejo del menú de frmPrincipal (íconos heredados del desktop). RRHH queda afuera.
@@ -189,25 +247,22 @@
             new Item("Reporte Artículos", "fa-solid fa-shirt", "/logistica/reporte-articulos", Implementado: true),
             new Item("Mapeo", "fa-solid fa-map", "/logistica/mapeo", Implementado: true),
             new Item("Mapa", "fa-solid fa-cube", "/logistica/mapa", Implementado: true),
-            new Item("Reposición", "fa-solid fa-clipboard-check", "/logistica/reposicion", Implementado: true),
-            new Item("Consulta Reposición", "fa-solid fa-magnifying-glass-chart", "/logistica/consulta-reposicion", Implementado: true),
-            new Item("Eventos", "fa-solid fa-triangle-exclamation", "/logistica/eventos", Implementado: true),
-            new Item("Reseteados", "fa-solid fa-rotate-left", "/logistica/reseteados", Implementado: true),
-            new Item("Control de Remitos", "fa-solid fa-truck-ramp-box", "/logistica/control-remitos", Implementado: true),
-            new Item("Despachos", "fa-solid fa-qrcode", "/logistica/despachos", Implementado: true),
             new Item("Insumos", "fa-solid fa-boxes-stacked", "/insumos/pedidos", Implementado: true),
-            new Item("Reemplazos", "fa-solid fa-retweet", "/logistica/reemplazos", Implementado: true),
-            new Item("Remito Impresión", "fa-solid fa-print", "/logistica/remito-impresion", Implementado: true),
-            new Item("Remito Nuevo", "fa-solid fa-file-circle-plus", "/logistica/remito-nuevo", Implementado: true),
-        }),
-        new("Diseño", "fa-solid fa-shirt", new[]
-        {
-            new Item("Órdenes de Pedido", "fa-solid fa-bag-shopping", "/wip/diseno/ordenes-pedido"),
-            new Item("Artículos", "fa-solid fa-shirt", "/wip/diseno/articulos"),
-            new Item("Catálogos", "fa-solid fa-book-open", "/wip/diseno/catalogos"),
-            new Item("Config Canva", "fa-solid fa-table-list", "/wip/diseno/config-canva"),
-            new Item("Config Imágenes", "fa-solid fa-image-portrait", "/diseno/config-imagenes", Implementado: true),
-            new Item("Mapa", "fa-solid fa-location-dot", "/wip/diseno/mapa"),
+            new Item("Reposición", "fa-solid fa-clipboard-check", "", Implementado: true, Sub: new[]
+            {
+                new Item("Reposición", "fa-solid fa-clipboard-check", "/logistica/reposicion", Implementado: true),
+                new Item("Consulta Reposición", "fa-solid fa-magnifying-glass-chart", "/logistica/consulta-reposicion", Implementado: true),
+                new Item("Eventos", "fa-solid fa-triangle-exclamation", "/logistica/eventos", Implementado: true),
+                new Item("Reseteados", "fa-solid fa-rotate-left", "/logistica/reseteados", Implementado: true),
+                new Item("Reemplazos", "fa-solid fa-retweet", "/logistica/reemplazos", Implementado: true),
+            }),
+            new Item("Remitos", "fa-solid fa-truck-ramp-box", "", Implementado: true, Sub: new[]
+            {
+                new Item("Control de Remitos", "fa-solid fa-truck-ramp-box", "/logistica/control-remitos", Implementado: true),
+                new Item("Despachos", "fa-solid fa-qrcode", "/logistica/despachos", Implementado: true),
+                new Item("Remito Impresión", "fa-solid fa-print", "/logistica/remito-impresion", Implementado: true),
+                new Item("Remito Nuevo", "fa-solid fa-file-circle-plus", "/logistica/remito-nuevo", Implementado: true),
+            }),
         }),
         new("Informes", "fa-solid fa-chart-line", new[]
         {
@@ -217,16 +272,25 @@
         }),
         new("Producción", "fa-solid fa-boxes-stacked", new[]
         {
+            new Item("Órdenes de Pedido", "fa-solid fa-bag-shopping", "/diseno/ordenes", Implementado: true),
+            new Item("Viajes", "fa-solid fa-plane-departure", "/produccion/viajes", Implementado: true),
             new Item("Packs", "fa-solid fa-boxes-stacked", "/produccion/packs", Implementado: true),
             new Item("Telas", "fa-solid fa-scroll", "/produccion/telas", Implementado: true),
             new Item("Órdenes Textiles", "fa-solid fa-clipboard-list", "/wip/produccion/ordenes-textiles"),
-            new Item("Impresión Etiquetas", "fa-solid fa-tags", "/wip/produccion/etiquetas"),
+            new Item("Artículos", "fa-solid fa-shirt", "/wip/diseno/articulos"),
+            new Item("Catálogos", "fa-solid fa-book-open", "/wip/diseno/catalogos"),
             new Item("Reporte Artículos", "fa-solid fa-shirt", "/produccion/reporte-articulos", Implementado: true),
             new Item("Importado", "fa-solid fa-file-import", "/wip/produccion/importado"),
+            new Item("Impresión Etiquetas", "fa-solid fa-tags", "/wip/produccion/etiquetas"),
+            new Item("Config Canva", "fa-solid fa-table-list", "/wip/diseno/config-canva"),
+            new Item("Config Imágenes", "fa-solid fa-image-portrait", "/diseno/config-imagenes", Implementado: true),
+            new Item("Mapeo", "fa-solid fa-map", "/logistica/mapeo", Implementado: true),
+            new Item("Mapa", "fa-solid fa-location-dot", "/wip/diseno/mapa"),
         }),
         new("Sistemas", "fa-solid fa-laptop-code", new[]
         {
-            new Item("Tareas programadas", "fa-solid fa-clock", "/sistemas/tareas", Implementado: true),
+            new Item("Tareas y Servicios", "fa-solid fa-clock", "/sistemas/tareas", Implementado: true),
+            new Item("Motivos de Reposición", "fa-solid fa-chart-pie", "/sistemas/motivos-reposicion", Implementado: true),
             new Item("Proyectos", "fa-solid fa-diagram-project", "/wip/sistemas/proyectos"),
             new Item("Config Programas", "fa-solid fa-laptop-code", "/wip/sistemas/programas"),
             new Item("Config Áreas", "fa-solid fa-diagram-predecessor", "/wip/sistemas/areas"),

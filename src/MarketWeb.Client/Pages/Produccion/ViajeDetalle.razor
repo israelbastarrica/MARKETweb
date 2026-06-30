@@ -1,0 +1,433 @@
+@page "/produccion/viajes/{Id:int}"
+@using MarketWeb.Shared.Produccion
+@inject ViajesApi Api
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Viaje</PageTitle>
+
+<div class="market-page">
+    <button class="btn-volver" @onclick='() => Nav.NavigateTo("/produccion/viajes")'>
+        <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+        <span>Volver</span>
+    </button>
+
+    <PageHeader Modulo="Producción"
+                Titulo="@(_viaje is null ? "Viaje" : (string.IsNullOrWhiteSpace(_viaje.Nombre) ? $"Viaje #{Id}" : _viaje.Nombre))"
+                Icono="fa-solid fa-plane-departure" Compartible="false" />
+
+    @if (_viaje is not null)
+    {
+        <div class="text-muted small mb-3" style="margin-top:-.6rem">
+            <span class="badge @(_viaje.Estado == "CERRADO" ? "bg-secondary" : "bg-success") me-2">@_viaje.Estado</span>
+            <span class="me-1">@MarketWeb.Client.Services.Banderas.Emoji(_viaje.Pais)</span>@(_viaje.Pais ?? "—")
+            @if (_viaje.Fecha is not null) { <span class="ms-2"><i class="fa-solid fa-calendar me-1"></i>@_viaje.Fecha.Value.ToString("dd/MM/yyyy")</span> }
+        </div>
+    }
+
+    <ul class="nav nav-pills gap-2 mb-3">
+        <li class="nav-item"><button class="nav-link @(_tab == 0 ? "active" : "")" @onclick="() => _tab = 0">Artículos (@_articulos.Count)</button></li>
+        <li class="nav-item"><button class="nav-link @(_tab == 1 ? "active" : "")" @onclick="() => _tab = 1">Proveedores (@_proveedores.Count)</button></li>
+        <li class="nav-item"><button class="nav-link @(_tab == 2 ? "active" : "")" @onclick="() => _tab = 2">@UniPlural (@_contenedores.Count)</button></li>
+    </ul>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_tab == 0)
+    {
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <input class="form-control" style="max-width:340px" placeholder="🔍 Buscar en la lista..." @bind="_buscar" @bind:event="oninput" />
+            <button class="btn btn-primary" @onclick="AbrirNuevoArt"><i class="fa-solid fa-plus me-1"></i> Nuevo artículo</button>
+        </div>
+
+        @if (ArticulosFiltrados.Count == 0)
+        {
+            <div class="market-empty"><i class="fa-solid fa-shirt"></i><p>Sin artículos.</p></div>
+        }
+        else
+        {
+            @foreach (var grupo in ArticulosFiltrados.GroupBy(a => a.Proveedor))
+            {
+                var arts = grupo.ToList();
+                var bultos = arts.Sum(a => a.CajasPedidas ?? 0);
+                var prendas = arts.Sum(a => a.CantidadTotalPrendas ?? 0);
+                var totUsd = arts.Sum(a => (a.CostoUsdUnit ?? 0) * (a.CantidadTotalPrendas ?? 0));
+                var totArs = arts.Sum(a => (a.CostoArsUnit ?? 0) * (a.CantidadTotalPrendas ?? 0));
+                <div class="market-card mb-4 vj-prov">
+                    <div class="vj-prov-head">🏭 <strong>@(string.IsNullOrWhiteSpace(grupo.Key) ? "Sin proveedor" : grupo.Key)</strong></div>
+                    <div class="table-responsive">
+                        <table class="market-table align-middle text-center mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:48px"></th><th>N°</th><th>Cód. interno</th><th>Cód. prov.</th><th>Cód. Dragon</th>
+                                    <th class="text-start">Descripción</th><th>Género</th><th>@UniSingular</th>
+                                    <th class="text-end">Bultos</th><th class="text-end">Prendas</th><th class="text-end">Costo unit.</th><th class="text-center" style="width:80px"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in arts)
+                                {
+                                    <tr class="vj-art" @onclick="() => AbrirFicha(a.Id)">
+                                        <td>@Thumb(a.FotoPrincipal)</td>
+                                        <td>@if (a.NumeroGeneral is not null) { <span class="badge bg-info text-dark">@a.NumeroGeneral</span> }</td>
+                                        <td><span class="badge bg-dark">@(string.IsNullOrWhiteSpace(a.CodigoInterno) ? "-" : a.CodigoInterno)</span></td>
+                                        <td class="fw-semibold text-primary">@a.CodigoProveedor</td>
+                                        <td>
+                                            @if (!string.IsNullOrWhiteSpace(a.CodigoMarket))
+                                            {
+                                                <div><span class="badge bg-light text-dark border">@a.CodigoMarket</span></div>
+                                                @if (a.ExisteEnDragon)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success-emphasis"><i class="fa-solid fa-check me-1"></i>En Dragon</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger-subtle text-danger-emphasis"><i class="fa-solid fa-xmark me-1"></i>No está</span>
+                                                }
+                                            }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                        <td class="text-start">@a.Descripcion</td>
+                                        <td><span class="badge bg-secondary">@a.Genero</span></td>
+                                        <td>@(string.IsNullOrWhiteSpace(a.Contenedor) ? "—" : a.Contenedor)</td>
+                                        <td class="text-end fw-bold">@(a.CajasPedidas ?? 0)</td>
+                                        <td class="text-end fw-bold text-danger">@(a.CantidadTotalPrendas ?? 0)</td>
+                                        <td class="text-end">
+                                            <div class="fw-bold text-success">$ @Num(a.CostoArsUnit)</div>
+                                            <div class="small text-muted">U$D @Num(a.CostoUsdUnit)</div>
+                                        </td>
+                                        <td class="text-center text-nowrap" @onclick:stopPropagation="true">
+                                            <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => AbrirEditarArt(a.Id)"><i class="fa-solid fa-pen"></i></button>
+                                            <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarArt(a)"><i class="fa-solid fa-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot class="vj-prov-foot">
+                                <tr>
+                                    <td colspan="8" class="text-end text-uppercase small fw-bold">Totales (@arts.Count mod.):</td>
+                                    <td class="text-end fw-bold">@bultos</td>
+                                    <td class="text-end fw-bold">@prendas</td>
+                                    <td class="text-end">
+                                        <div class="fw-bold text-success">$ @Num(totArs)</div>
+                                        <div class="small text-muted">U$D @Num(totUsd)</div>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+    }
+    else if (_tab == 1)
+    {
+        <div class="mb-2"><button class="btn btn-primary btn-sm" @onclick="AbrirNuevoProv"><i class="fa-solid fa-plus me-1"></i> Nuevo proveedor</button></div>
+        @if (_proveedores.Count == 0) { <div class="market-empty"><i class="fa-solid fa-industry"></i><p>Sin proveedores. Creá uno con "Nuevo proveedor".</p></div> }
+        else
+        {
+            <div class="market-card table-responsive">
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr><th style="width:56px">Foto</th><th>Código</th><th>Nombre</th><th>Ciudad</th><th>País</th><th>Contacto</th><th class="text-end">Días entrega</th><th class="text-end">Artículos</th><th class="text-center" style="width:96px">Acciones</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _proveedores)
+                        {
+                            <tr>
+                                <td>@Thumb(p.FotoPrincipal)</td>
+                                <td class="fw-semibold">@p.Codigo</td>
+                                <td>@p.Nombre</td>
+                                <td>@p.Ciudad</td>
+                                <td>@p.Pais</td>
+                                <td class="small">@p.Celular @(string.IsNullOrWhiteSpace(p.Email) ? "" : $"· {p.Email}")</td>
+                                <td class="text-end">@p.DiasEntrega</td>
+                                <td class="text-end">@p.CantArticulos</td>
+                                <td class="text-center text-nowrap">
+                                    <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => AbrirEditarProv(p.Id)"><i class="fa-solid fa-pen"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarProv(p)"><i class="fa-solid fa-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="mb-2"><button class="btn btn-primary btn-sm" @onclick="AbrirNuevoCont"><i class="fa-solid fa-plus me-1"></i> Nuevo @UniSingular.ToLower()</button></div>
+        @if (_contenedores.Count == 0) { <div class="market-empty"><i class="fa-solid fa-box"></i><p>Sin @UniPlural.ToLower(). Creá uno con "Nuevo @UniSingular.ToLower()".</p></div> }
+        else
+        {
+            <div class="market-card table-responsive">
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr><th>@UniSingular</th><th>Tipo</th><th class="text-end">CBM usado</th><th class="text-end">CBM máx</th><th class="text-end">Ocupación</th><th class="text-end">Artículos</th><th class="text-center" style="width:96px">Acciones</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _contenedores)
+                        {
+                            var pct = c.CapacidadMaxCbm is > 0 ? (double)(c.CbmUsado / c.CapacidadMaxCbm.Value * 100) : 0;
+                            <tr>
+                                <td class="fw-semibold">@c.NombreContenedor</td>
+                                <td>@c.Tipo</td>
+                                <td class="text-end">@Num(c.CbmUsado)</td>
+                                <td class="text-end">@Num(c.CapacidadMaxCbm)</td>
+                                <td class="text-end @(pct > 100 ? "text-danger fw-bold" : "")">@(c.CapacidadMaxCbm is > 0 ? pct.ToString("0") + "%" : "—")</td>
+                                <td class="text-end">@c.CantArticulos</td>
+                                <td class="text-center text-nowrap">
+                                    <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => AbrirEditarCont(c.Id)"><i class="fa-solid fa-pen"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarCont(c)"><i class="fa-solid fa-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@if (_modalProv)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">@(_prov.Id == 0 ? "Nuevo proveedor" : "Editar proveedor")</h5>
+            <button type="button" class="btn-close" @onclick="() => _modalProv = false"></button>
+        </div>
+        <div class="modal-body">
+            <div class="row g-2">
+                <div class="col-md-8"><label class="form-label small text-muted mb-1">Nombre</label><input class="form-control" @bind="_prov.Nombre" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Código</label><input class="form-control" @bind="_prov.Codigo" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">Ciudad</label><input class="form-control" @bind="_prov.Ciudad" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">País</label><input class="form-control" @bind="_prov.Pais" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">Celular</label><input class="form-control" @bind="_prov.Celular" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">Email</label><input class="form-control" @bind="_prov.Email" /></div>
+                <div class="col-md-8"><label class="form-label small text-muted mb-1">Broker</label><input class="form-control" @bind="_prov.Broker" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Días entrega</label><input type="number" class="form-control" @bind="_prov.DiasEntrega" /></div>
+                <div class="col-12"><label class="form-label small text-muted mb-1">Observaciones</label><textarea class="form-control" rows="2" @bind="_prov.Observaciones"></textarea></div>
+            </div>
+            <div class="form-text mt-2">Fotos y costos por servicio del proveedor se cargan en una etapa siguiente.</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" @onclick="() => _modalProv = false">Cancelar</button>
+            <button class="btn btn-primary" @onclick="GuardarProv" disabled="@_guardandoAbm">Guardar</button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_modalCont)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">@(_cont.Id == 0 ? $"Nuevo {UniSingular.ToLower()}" : $"Editar {UniSingular.ToLower()}")</h5>
+            <button type="button" class="btn-close" @onclick="() => _modalCont = false"></button>
+        </div>
+        <div class="modal-body">
+            <div class="mb-2"><label class="form-label small text-muted mb-1">Nombre / identificador</label><input class="form-control" @bind="_cont.NombreContenedor" placeholder="Ej: Contenedor 1" /></div>
+            <div class="row g-2">
+                <div class="col-7"><label class="form-label small text-muted mb-1">Tipo</label><input class="form-control" @bind="_cont.Tipo" placeholder="Ej: grande" /></div>
+                <div class="col-5"><label class="form-label small text-muted mb-1">CBM máx</label><input type="number" step="0.1" class="form-control" @bind="_cont.CapacidadMaxCbm" /></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" @onclick="() => _modalCont = false">Cancelar</button>
+            <button class="btn btn-primary" @onclick="GuardarCont" disabled="@_guardandoAbm">Guardar</button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_modalArt)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">@(_art.Id == 0 ? "Nuevo artículo" : "Editar artículo")</h5>
+            <button type="button" class="btn-close" @onclick="() => _modalArt = false"></button>
+        </div>
+        <div class="modal-body">
+            <div class="row g-2">
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">Proveedor</label>
+                    <select class="form-select" @bind="_art.IdProveedor"><option value="0">— Elegí —</option>@foreach (var pr in _proveedores) { <option value="@pr.Id">@pr.Nombre</option> }</select></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">@UniSingular</label>
+                    <select class="form-select" @bind="_art.IdContenedor"><option value="0">— Sin asignar —</option>@foreach (var co in _contenedores) { <option value="@co.Id">@co.NombreContenedor</option> }</select></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Cód. interno</label><input class="form-control" @bind="_art.CodigoInterno" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Cód. proveedor</label><input class="form-control" @bind="_art.CodigoProveedor" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">N° general</label><input type="number" class="form-control" @bind="_art.NumeroGeneral" /></div>
+                <div class="col-12"><label class="form-label small text-muted mb-1">Descripción</label><input class="form-control" @bind="_art.Descripcion" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Género</label><input class="form-control" @bind="_art.Genero" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Tipo</label><input class="form-control" @bind="_art.Tipo" /></div>
+                <div class="col-md-4"><label class="form-label small text-muted mb-1">Material</label><input class="form-control" @bind="_art.Material" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">Talles (separá con -)</label><input class="form-control" @bind="_art.Talles" placeholder="S-M-L-XL" /></div>
+                <div class="col-md-6"><label class="form-label small text-muted mb-1">Colores (separá con ,)</label><input class="form-control" @bind="_art.Colores" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Cajas</label><input type="number" class="form-control" @bind="_art.CajasPedidas" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Packs/caja</label><input type="number" class="form-control" @bind="_art.PacksPorCaja" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Prendas/pack</label><input type="number" class="form-control" @bind="_art.PrendasPorPack" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Total prendas</label><input type="number" class="form-control" @bind="_art.CantidadTotalPrendas" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Precio (@(_viaje?.Moneda))</label><input type="number" step="0.0001" class="form-control" @bind="_art.PrecioYuanes" /></div>
+                <div class="col-md-2"><label class="form-label small text-muted mb-1">% desc</label><input type="number" step="0.01" class="form-control" @bind="_art.PDesc" /></div>
+                <div class="col-md-2"><label class="form-label small text-muted mb-1">% nac</label><input type="number" step="0.01" class="form-control" @bind="_art.PNac" /></div>
+                <div class="col-md-2"><label class="form-label small text-muted mb-1">Cotiz→USD</label><input type="number" step="0.0001" class="form-control" @bind="_art.TasaRmb" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Dólar (AR$)</label><input type="number" class="form-control" @bind="_art.TasaArs" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">CBM @UniSingular.ToLower()</label><input type="number" step="0.0001" class="form-control" @bind="_art.CbmCaja" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">MOQ unid.</label><input type="number" class="form-control" @bind="_art.MoqUnidades" /></div>
+                <div class="col-md-3"><label class="form-label small text-muted mb-1">Días entrega</label><input type="number" class="form-control" @bind="_art.DiasEntrega" /></div>
+                <div class="col-12"><label class="form-label small text-muted mb-1">Observaciones</label><textarea class="form-control" rows="2" @bind="_art.Observaciones"></textarea></div>
+            </div>
+            <div class="form-text mt-2">Curva de talles, colores/packs armados, costos por servicio y fotos se cargan en la ficha (próxima etapa).</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" @onclick="() => _modalArt = false">Cancelar</button>
+            <button class="btn btn-primary" @onclick="GuardarArt" disabled="@_guardandoAbm">Guardar</button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .btn-volver { display:inline-flex; align-items:center; gap:8px; background:#fff; border:1px solid #e6e4dd; border-radius:999px; padding:6px 16px 6px 8px; margin-bottom:.5rem; color:#555; font-weight:600; font-size:.9rem; cursor:pointer; box-shadow:0 1px 2px rgba(16,24,40,.05); transition:all .12s ease; }
+    .btn-volver .ico { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:#fff3e0; color:#e8820c; }
+    .btn-volver:hover { background:#faf9f6; color:#1f2430; transform:translateX(-2px); }
+    .viaje-thumb { width:44px; height:44px; object-fit:cover; border-radius:6px; border:1px solid var(--mk-border); }
+    .vj-prov { overflow:hidden; }
+    .vj-prov-head { background:#2b2f36; color:#fff; padding:.7rem 1rem; font-size:1.05rem; }
+    .vj-prov-head strong { color:#ffc107; }
+    .vj-prov-foot td { background:#2b2f36; color:#fff; }
+    .vj-art { cursor:pointer; }
+    .vj-art:hover td { background: var(--mk-row-hover); }
+</style>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ViajeDto? _viaje;
+    private List<ViajeArticuloDto> _articulos = new();
+    private List<ViajeProveedorDto> _proveedores = new();
+    private List<ViajeContenedorDto> _contenedores = new();
+    private int _tab;
+    private bool _cargando = true;
+    private string _buscar = "";
+
+    private List<ViajeArticuloDto> ArticulosFiltrados
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_buscar)) return _articulos;
+            var q = _buscar.Trim().ToLowerInvariant();
+            return _articulos.Where(a =>
+                (a.CodigoInterno + " " + a.CodigoProveedor + " " + a.Descripcion + " " + a.Genero + " " +
+                 a.Proveedor + " " + a.Contenedor).ToLowerInvariant().Contains(q)).ToList();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _cargando = true;
+        try
+        {
+            _viaje = await Api.ViajeAsync(Id);
+            _articulos = await Api.ArticulosAsync(Id);
+            _proveedores = await Api.ProveedoresAsync(Id);
+            _contenedores = await Api.ContenedoresAsync(Id);
+        }
+        catch { }
+        finally { _cargando = false; }
+    }
+
+    private void AbrirFicha(int idArticulo) => Nav.NavigateTo($"/produccion/viajes/articulo/{idArticulo}");
+
+    private RenderFragment Thumb(string archivo) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(archivo)) return;
+        var url = ViajesApi.FotoUrl(archivo);
+        builder.OpenElement(0, "img");
+        builder.AddAttribute(1, "src", url);
+        builder.AddAttribute(2, "class", "viaje-thumb");
+        builder.AddAttribute(3, "loading", "lazy");
+        builder.CloseElement();
+    };
+
+    // ---- ABM proveedores / contenedores ----
+    private bool _modalProv, _modalCont, _guardandoAbm;
+    private ProveedorEditorDto _prov = new();
+    private ContenedorEditorDto _cont = new();
+
+    private void AbrirNuevoProv() { _prov = new ProveedorEditorDto(); _modalProv = true; }
+    private async Task AbrirEditarProv(int id) { _prov = await Api.ProveedorAsync(id) ?? new ProveedorEditorDto { Id = id }; _modalProv = true; }
+    private async Task GuardarProv()
+    {
+        if (string.IsNullOrWhiteSpace(_prov.Nombre)) { Ui.Error("El nombre es obligatorio."); return; }
+        _guardandoAbm = true;
+        try { await Api.GuardarProveedorAsync(_prov); _modalProv = false; _proveedores = await Api.ProveedoresAsync(Id); }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+        finally { _guardandoAbm = false; }
+    }
+    private async Task EliminarProv(ViajeProveedorDto p)
+    {
+        if (p.CantArticulos > 0) { Ui.Error($"No se puede eliminar: tiene {p.CantArticulos} artículo(s) en este viaje."); return; }
+        if (!await Ui.ConfirmAsync($"¿Eliminar el proveedor \"{p.Nombre}\"?", "Eliminar proveedor", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarProveedorAsync(p.Id);
+        _proveedores = await Api.ProveedoresAsync(Id);
+    }
+
+    private void AbrirNuevoCont() { _cont = new ContenedorEditorDto { IdViaje = Id }; _modalCont = true; }
+    private async Task AbrirEditarCont(int id) { _cont = await Api.ContenedorAsync(id) ?? new ContenedorEditorDto { Id = id, IdViaje = Id }; _modalCont = true; }
+    private async Task GuardarCont()
+    {
+        if (string.IsNullOrWhiteSpace(_cont.NombreContenedor)) { Ui.Error("El nombre es obligatorio."); return; }
+        _guardandoAbm = true;
+        try
+        {
+            await Api.GuardarContenedorAsync(new ContenedorSaveRequest { Id = _cont.Id, IdViaje = Id, NombreContenedor = _cont.NombreContenedor, Tipo = _cont.Tipo, CapacidadMaxCbm = _cont.CapacidadMaxCbm });
+            _modalCont = false; _contenedores = await Api.ContenedoresAsync(Id);
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+        finally { _guardandoAbm = false; }
+    }
+    private async Task EliminarCont(ViajeContenedorDto c)
+    {
+        if (c.CantArticulos > 0) { Ui.Error($"No se puede eliminar: tiene {c.CantArticulos} artículo(s) asignado(s)."); return; }
+        if (!await Ui.ConfirmAsync($"¿Eliminar el contenedor \"{c.NombreContenedor}\"?", "Eliminar contenedor", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarContenedorAsync(c.Id);
+        _contenedores = await Api.ContenedoresAsync(Id);
+    }
+
+    // ---- ABM artículo (datos) ----
+    private bool _modalArt;
+    private ArticuloEditorDto _art = new();
+
+    private void AbrirNuevoArt() { _art = new ArticuloEditorDto { IdViaje = Id }; _modalArt = true; }
+    private async Task AbrirEditarArt(int id) { _art = await Api.ArticuloEditorAsync(id) ?? new ArticuloEditorDto { Id = id, IdViaje = Id }; _modalArt = true; }
+    private async Task GuardarArt()
+    {
+        if (string.IsNullOrWhiteSpace(_art.Descripcion) && string.IsNullOrWhiteSpace(_art.CodigoProveedor))
+        { Ui.Error("Cargá al menos código de proveedor o descripción."); return; }
+        _guardandoAbm = true;
+        try
+        {
+            _art.IdViaje = Id;
+            await Api.GuardarArticuloAsync(_art);
+            _modalArt = false;
+            _articulos = await Api.ArticulosAsync(Id);
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+        finally { _guardandoAbm = false; }
+    }
+    private async Task EliminarArt(ViajeArticuloDto a)
+    {
+        if (!await Ui.ConfirmAsync($"¿Eliminar el artículo {a.CodigoInterno} ({a.Descripcion})?", "Eliminar artículo", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarArticuloAsync(a.Id);
+        _articulos = await Api.ArticulosAsync(Id);
+    }
+
+    // Nombre de la unidad de carga del viaje (Contenedor / Camión).
+    private string UniSingular => string.IsNullOrWhiteSpace(_viaje?.UnidadTransporte) ? "Contenedor" : _viaje!.UnidadTransporte;
+    private string UniPlural => UniSingular switch { "Camión" => "Camiones", "Contenedor" => "Contenedores", var x => x + "s" };
+
+    private static string Num(decimal? v) => v is null ? "0,00" : v.Value.ToString("N2");
+}

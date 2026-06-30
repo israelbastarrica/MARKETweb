@@ -139,7 +139,7 @@
 
     private string CompartirQuery =>
         $"desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}&local={Uri.EscapeDataString(_local)}&agr={Uri.EscapeDataString(_agrupamiento)}"
-        + (_agruparLocal ? "&sub=1" : "");
+        + (_agruparLocal ? "&sub=true" : "");
 
     protected override async Task OnInitializedAsync()
     {

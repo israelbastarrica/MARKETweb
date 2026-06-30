@@ -17,6 +17,8 @@ builder.Services.AddOpenApi();
 
 // Programador de tareas in-app (reposición nocturna, etc.).
 builder.Services.AddHostedService<MarketWeb.Api.Services.TareasScheduler>();
+// Auto-import (una sola vez) del viaje desde el .db de ViajePedidos.
+builder.Services.AddHostedService<MarketWeb.Api.Services.ViajesAutoImport>();
 
 // Cliente de la API Dragonfish (crear remito de insumos CENTRAL→local).
 builder.Services.AddHttpClient<MarketWeb.Application.Dragonfish.IDragonfishService, MarketWeb.Application.Dragonfish.DragonfishService>(

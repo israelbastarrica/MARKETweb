@@ -59,25 +59,15 @@
     }
     #search-count { color: rgba(255,255,255,0.55); font-size: 12px; min-width: 70px; }
 
-    #tour-panel {
-      position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
-      display: none; align-items: center; gap: 10px;
-      background: rgba(10,10,30,0.92); padding: 9px 18px;
-      border-radius: 24px; border: 1px solid rgba(0,220,255,0.35); z-index: 10; color: white;
+    /* Toggle Modo libre */
+    #modo-libre {
+      position: fixed; top: 16px; left: 16px; z-index: 10;
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(10,10,30,0.88); padding: 8px 14px;
+      border-radius: 24px; border: 1px solid rgba(255,255,255,0.15);
+      color: #cdd2dc; font-size: 13px; cursor: pointer; user-select: none;
     }
-    #tour-nombre { color: #00e5ff; font-weight: bold; min-width: 160px; text-align: center; font-size: 42px; letter-spacing: 1px; }
-    #tour-counter { color: rgba(255,255,255,0.5); font-size: 12px; min-width: 55px; text-align: center; }
-    .tbtn {
-      background: none; border: none; cursor: pointer;
-      color: #00e5ff; font-size: 20px; line-height: 1; padding: 0 4px;
-    }
-    .tbtn:disabled { color: rgba(0,220,255,0.25); cursor: default; }
-    #btn-tour-vacios {
-      position: fixed; bottom: 16px; right: 16px;
-      background: rgba(10,10,30,0.85); border: 1px solid rgba(255,100,80,0.5);
-      color: #ff6b6b; font-size: 12px; padding: 6px 12px;
-      border-radius: 16px; cursor: pointer;
-    }
+    #modo-libre input { cursor: pointer; }
 
     #instrucciones {
       position: fixed; bottom: 16px; left: 16px;
@@ -96,6 +86,11 @@
 
 <canvas id="canvas"></canvas>
 
+<label id="modo-libre">
+  <input type="checkbox" id="chk-libre" onchange="setModoLibre(this.checked)" />
+  Modo libre (WASD)
+</label>
+
 <div id="busqueda">
   <input id="search-input" type="text" placeholder="Buscar artículo (código o descripción)..."
     onkeydown="if(event.key==='Enter') buscarArticulo()" />
@@ -104,15 +99,6 @@
   <span id="search-count"></span>
 </div>
 <div id="loading">Cargando modelo...</div>
-
-<div id="tour-panel">
-  <button class="tbtn" id="tbtn-prev" onclick="tourAnterior()">◀</button>
-  <span id="tour-nombre"></span>
-  <span id="tour-counter"></span>
-  <button class="tbtn" id="tbtn-next" onclick="tourSiguiente()">▶</button>
-  <button class="tbtn" onclick="cerrarTour()" style="color:#888;font-size:16px;margin-left:6px">✕</button>
-</div>
-<button id="btn-tour-vacios" onclick="iniciarTourVacios()">&#9654; Tour vacíos</button>
 
 <div id="panel">
   <div id="panel-header">
@@ -124,11 +110,7 @@
 
 <div id="highlight-label"></div>
 
-<div id="instrucciones">
-  W/A/S/D + mouse: moverse<br>
-  Click en modulo (verde/rojo): ver articulos<br>
-  Shift: bajar | Espacio: subir
-</div>
+<div id="instrucciones"></div>
 
 <script src="/lib/babylon/babylon.js"></script>
 <script src="/lib/babylon/babylonjs.loaders.min.js"></script>
@@ -136,30 +118,52 @@
   const canvas = document.getElementById('canvas');
   const engine = new BABYLON.Engine(canvas, true);
   const MODULE_REGEX = /^([A-Z]\d{2}|101-\d{2})-\d+$/;
-  // Pasillos cuyo aisle "normal" está bloqueado (ej K-L con columnas):
-  // la cámara va al lado OPUESTO en vez del lado enfrentado habitual
-  const AISLES_BLOQUEADOS = new Set(['L', 'X']); // L→M (K-L columnas), X→W (X-Y back-to-back, Y-Z facing pair)
+
+  let modoLibre = false;
+  let camTop, camLibre;
+  let _minY = 0, _maxY = 20;
+
+  const INSTR_TOP = "Vista desde arriba · rueda: zoom · arrastrar: girar/desplazar<br>Tildá <b>Modo libre</b> para caminar por el depósito";
+  const INSTR_LIBRE = "W/A/S/D: moverse · Mouse: mirar<br>Espacio: subir · Shift/Ctrl: bajar · Click en módulo: ver artículos";
+
+  function actualizarInstrucciones() {
+    document.getElementById('instrucciones').innerHTML = modoLibre ? INSTR_LIBRE : INSTR_TOP;
+  }
 
   const createScene = () => {
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0.08, 0.08, 0.15, 1);
     scene.setRenderingAutoClearDepthStencil(2, false);
 
-    const camera = new BABYLON.UniversalCamera('cam', new BABYLON.Vector3(0, 2, -10), scene);
-    camera.setTarget(BABYLON.Vector3.Zero());
-    camera.attachControl(canvas, true);
-    camera.speed = 0.3;
-    camera.minZ = 0.1;
-    camera.keysUp    = [87];
-    camera.keysDown  = [83];
-    camera.keysLeft  = [65];
-    camera.keysRight = [68];
-    camera.keysUpward   = [];
-    camera.keysDownward = [];
-    camera.checkCollisions = false;
+    // --- Cámara CENITAL (por defecto): mira desde arriba, con leve inclinación para dar volumen ---
+    camTop = new BABYLON.ArcRotateCamera('camTop', -Math.PI / 2, 0.16, 60, BABYLON.Vector3.Zero(), scene);
+    camTop.minZ = 0.1;
+    camTop.lowerBetaLimit = 0.02;     // casi perpendicular (desde arriba)
+    camTop.upperBetaLimit = 1.15;     // permite inclinar un poco si quiere
+    camTop.lowerRadiusLimit = 5;
+    camTop.wheelDeltaPercentage = 0.02;
+    camTop.panningSensibility = 30;   // desplazamiento con botón derecho
+    camTop.allowUpsideDown = false;
+
+    // --- Cámara LIBRE: primera persona, WASD + espacio/shift/ctrl ---
+    camLibre = new BABYLON.UniversalCamera('camLibre', new BABYLON.Vector3(0, 2, -10), scene);
+    camLibre.minZ = 0.1;
+    camLibre.speed = 0.35;
+    camLibre.angularSensibility = 4000;
+    camLibre.keysUp = [87];           // W
+    camLibre.keysDown = [83];         // S
+    camLibre.keysLeft = [65];         // A
+    camLibre.keysRight = [68];        // D
+    camLibre.keysUpward = [32];       // Espacio: subir
+    camLibre.keysDownward = [16, 17]; // Shift o Ctrl: bajar
+    camLibre.checkCollisions = false;
+
+    scene.activeCamera = camTop;
+    camTop.attachControl(canvas, true);
 
     const light = new BABYLON.HemisphericLight('luz', new BABYLON.Vector3(0, 1, 0), scene);
-    light.intensity = 1.2;
+    light.intensity = 0.95;
+    light.specular = new BABYLON.Color3(0, 0, 0);   // sin reflejo especular: evita que las cajas se "quemen" en blanco mirando desde arriba
 
     BABYLON.SceneLoader.ImportMesh('', '/mapa3d/modelo/', 'deposito.glb', scene, (meshes) => {
       document.getElementById('loading').style.display = 'none';
@@ -167,36 +171,19 @@
       meshes.forEach(m => {
         m.isPickable = false;
         m.renderingGroupId = 2;
-        m.checkCollisions = true;
       });
 
       const bounds = scene.getWorldExtends();
-      _maxY  = bounds.max.y;
-      _walkY = bounds.min.y + 1.7;
-      const piso = BABYLON.MeshBuilder.CreateGround('piso', {
-        width:  (bounds.max.x - bounds.min.x) + 10,
-        height: (bounds.max.z - bounds.min.z) + 10
-      }, scene);
-      piso.position.x = (bounds.max.x + bounds.min.x) / 2;
-      piso.position.y = bounds.min.y + 0.001;
-      piso.position.z = (bounds.max.z + bounds.min.z) / 2;
-      piso.isPickable = false;
-      piso.checkCollisions = true;
-      const pisoMat = new BABYLON.StandardMaterial('piso_mat', scene);
-      pisoMat.diffuseColor  = new BABYLON.Color3(0.60, 0.60, 0.58);
-      pisoMat.specularColor = new BABYLON.Color3(0.40, 0.40, 0.40);
-      pisoMat.specularPower = 200;
-      piso.material = pisoMat;
-
+      _minY = bounds.min.y;
+      _maxY = bounds.max.y;
       const center = BABYLON.Vector3.Center(bounds.min, bounds.max);
-      camera.position = new BABYLON.Vector3(-13.2, bounds.min.y + 1.7, -14.8);
-      camera.setTarget(new BABYLON.Vector3(-13.2, bounds.min.y + 1.7, center.z));
 
-      // Y siempre fijo en 1.7 — sin excepciones salvo durante flyTo/walkTo activo
-      const WALK_Y = bounds.min.y + 1.7;
-      scene.onBeforeRenderObservable.add(() => {
-        if (!_flyObs) scene.activeCamera.position.y = WALK_Y;
-      });
+      // El piso y el encuadre cenital se arman en cargarEstadoModulos, ajustados al área REAL
+      // de los racks (no al bounding del .glb, que incluye paredes/espacio vacío).
+
+      // Posición inicial de la cámara libre (entrada del depósito, a la altura de la vista)
+      camLibre.position = new BABYLON.Vector3(center.x, bounds.min.y + 1.7, bounds.min.z - 4);
+      camLibre.setTarget(new BABYLON.Vector3(center.x, bounds.min.y + 1.7, center.z));
 
       cargarEstadoModulos(scene);
     });
@@ -223,6 +210,19 @@
     return scene;
   };
 
+  // Cambia entre vista cenital y modo libre.
+  function setModoLibre(on) {
+    modoLibre = !!on;
+    const chk = document.getElementById('chk-libre');
+    if (chk) chk.checked = modoLibre;
+    scene.activeCamera.detachControl(canvas);
+    scene.activeCamera = modoLibre ? camLibre : camTop;
+    scene.activeCamera.attachControl(canvas, true);
+    canvas.focus();
+    actualizarInstrucciones();
+    pintarResaltados();   // el marcador cambia según el modo
+  }
+
   async function cargarEstadoModulos(scene) {
     try {
       const SCALE = 0.0254;
@@ -237,6 +237,7 @@
       const estado = {};
       modulosDB.forEach(m => estado[m.Modulo.trim()] = m.CantidadArticulos);
 
+      let bxMinX = Infinity, bxMaxX = -Infinity, bxMinZ = Infinity, bxMaxZ = -Infinity;
       csvText.trim().split('\n').slice(1).forEach(line => {
         const [nombre, cx, cy, cz, sx, sy, sz] = line.split(',');
         const n = nombre.trim();
@@ -252,18 +253,19 @@
         box.position.y =  parseFloat(cz) * SCALE;
         box.position.z = -parseFloat(cy) * SCALE;
         box.renderingGroupId = 1;
-        box.checkCollisions = true;
-        box._halfX = parseFloat(sx) * SCALE / 2;
-        box._halfZ = parseFloat(sy) * SCALE / 2;
+
+        const hx = parseFloat(sx) * SCALE / 2, hz = parseFloat(sy) * SCALE / 2;
+        bxMinX = Math.min(bxMinX, box.position.x - hx); bxMaxX = Math.max(bxMaxX, box.position.x + hx);
+        bxMinZ = Math.min(bxMinZ, box.position.z - hz); bxMaxZ = Math.max(bxMaxZ, box.position.z + hz);
 
         const tieneStock = (estado[n] || 0) > 0;
         box._tieneStock = tieneStock;
-        const color3 = tieneStock
-          ? new BABYLON.Color3(0.1, 0.8, 0.2)
-          : new BABYLON.Color3(0.85, 0.12, 0.08);
 
         const mat = new BABYLON.StandardMaterial('mat_' + n, scene);
-        mat.diffuseColor = color3;
+        mat.diffuseColor = tieneStock
+          ? new BABYLON.Color3(0.1, 0.8, 0.2)
+          : new BABYLON.Color3(0.85, 0.12, 0.08);
+        mat.specularColor = new BABYLON.Color3(0, 0, 0);
         mat.zOffset = -8;
         box.material = mat;
 
@@ -271,7 +273,29 @@
         box.edgesWidth = 5.0;
         box.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
       });
-      aplicarResaltarPendiente();
+
+      // Piso y encuadre cenital ajustados al área REAL de los racks (con un margen, no al .glb entero).
+      if (isFinite(bxMinX)) {
+        const MARG = 6;
+        const cx = (bxMinX + bxMaxX) / 2, cz = (bxMinZ + bxMaxZ) / 2;
+        const w = (bxMaxX - bxMinX) + MARG * 2, h = (bxMaxZ - bxMinZ) + MARG * 2;
+        const piso = BABYLON.MeshBuilder.CreateGround('piso', { width: w, height: h }, scene);
+        piso.position.set(cx, _minY + 0.001, cz);
+        piso.isPickable = false;
+        const pisoMat = new BABYLON.StandardMaterial('piso_mat', scene);
+        pisoMat.diffuseColor  = new BABYLON.Color3(0.48, 0.48, 0.47);
+        pisoMat.specularColor = new BABYLON.Color3(0, 0, 0);
+        piso.material = pisoMat;
+
+        // OJO: setTarget recalcula alpha/beta según la posición actual → fijamos los ángulos DESPUÉS.
+        camTop.setTarget(new BABYLON.Vector3(cx, _minY, cz));
+        camTop.alpha = Math.PI / 2;              // rotado 180° respecto del default
+        camTop.beta = 0.12;                      // bien desde arriba (casi perpendicular)
+        camTop.radius = Math.max(w, h) * 1.2;    // alejado: entra todo el depósito
+        camTop.upperRadiusLimit = camTop.radius * 2.5;
+      }
+
+      pintarResaltados();
     } catch(e) {
       console.error('Error cargando módulos:', e);
     }
@@ -299,7 +323,9 @@
         <div class="producto">
           <div>${p.ARTDES}</div>
           <div class="artcod">
-            ${p.ARTCOD} &nbsp;|&nbsp; ${p.MARCA || ''}
+            <a href="/consulta-articulo?codigo=${encodeURIComponent(p.ARTCOD)}&ref=1" target="_top"
+               style="color:#4fc3f7;text-decoration:none;font-weight:bold" title="Ver ficha del artículo (Volver regresa al mapa)">${p.ARTCOD} ↗</a>
+            &nbsp;|&nbsp; ${p.MARCA || ''}
             ${p.NroPalet ? `<span class="palet-badge">Palet ${p.NroPalet}</span>` : ''}
           </div>
         </div>
@@ -309,35 +335,29 @@
     }
   }
 
+  // ---- Resaltado ----
+  // Cenital: marca la posición DESDE ARRIBA con un beam vertical (fácil de ubicar a vista de pájaro).
+  // Modo libre: marca la posición EXACTA recoloreando la caja del módulo.
+  let _resaltadosNombres = [];
   let meshesResaltados = [];
+  let _beams = [];
 
-  async function buscarArticulo() {
-    const q = document.getElementById('search-input').value.trim();
-    if (!q) return;
-
-    limpiarHighlights();
-
-    const res = await fetch('/api/mapa/buscar?q=' + encodeURIComponent(q));
-    const modulos = await res.json();
-
-    const count = document.getElementById('search-count');
-    document.getElementById('btn-limpiar').style.display = 'inline';
-
-    if (!modulos.length) { count.textContent = 'Sin resultados'; return; }
-    count.textContent = modulos.length + ' módulo' + (modulos.length !== 1 ? 's' : '');
-
-    resaltarModulos(modulos);
+  function resaltarModulos(nombres) {
+    _resaltadosNombres = nombres || [];
+    pintarResaltados();
   }
 
-  // Resalta en amarillo una lista de módulos (nombres de mesh). Reusado por la búsqueda y por el reporte.
-  function resaltarModulos(nombres) {
+  function pintarResaltados() {
     limpiarHighlights();
-    (nombres || []).forEach(nombre => {
+    _resaltadosNombres.forEach(nombre => {
       const mesh = scene.getMeshByName(nombre);
       if (!mesh) return;
+
+      // Siempre recolorea la caja (visible tanto desde arriba como en modo libre).
       const hlMat = new BABYLON.StandardMaterial('hl_' + nombre, scene);
-      hlMat.diffuseColor  = new BABYLON.Color3(1.0, 0.85, 0.0);
-      hlMat.emissiveColor = new BABYLON.Color3(0.3, 0.25, 0.0);
+      hlMat.diffuseColor  = new BABYLON.Color3(1.0, 0.82, 0.0);
+      hlMat.emissiveColor = new BABYLON.Color3(0, 0, 0);   // sin glow: marca plana, sólo la caja (no se "funde" en columna)
+      hlMat.specularColor = new BABYLON.Color3(0, 0, 0);
       hlMat.zOffset = -8;
       mesh.material = hlMat;
       mesh.edgesColor = new BABYLON.Color4(1.0, 0.55, 0.0, 1.0);
@@ -351,15 +371,33 @@
       mat.diffuseColor = mesh._tieneStock
         ? new BABYLON.Color3(0.1, 0.8, 0.2)
         : new BABYLON.Color3(0.85, 0.12, 0.08);
+      mat.specularColor = new BABYLON.Color3(0, 0, 0);
       mat.zOffset = -8;
       mesh.material = mat;
       mesh.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
     });
     meshesResaltados = [];
+    _beams.forEach(b => b.dispose());
+    _beams = [];
+  }
+
+  async function buscarArticulo() {
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) return;
+
+    const res = await fetch('/api/mapa/buscar?q=' + encodeURIComponent(q));
+    const modulos = await res.json();
+
+    const count = document.getElementById('search-count');
+    document.getElementById('btn-limpiar').style.display = 'inline';
+
+    if (!modulos.length) { count.textContent = 'Sin resultados'; resaltarModulos([]); return; }
+    count.textContent = modulos.length + ' módulo' + (modulos.length !== 1 ? 's' : '');
+    resaltarModulos(modulos);
   }
 
   function limpiarBusqueda() {
-    limpiarHighlights();
+    resaltarModulos([]);
     document.getElementById('search-input').value = '';
     document.getElementById('search-count').textContent = '';
     document.getElementById('btn-limpiar').style.display = 'none';
@@ -369,325 +407,15 @@
     document.getElementById('panel').style.display = 'none';
   }
 
-  // --- Fly-to suave con easing cúbico ---
-  let _flyObs = null;
-  let _maxY = 20;
-  let _walkY = 1.7;
-
-  function flyTo(pos, lookAt, ms = 1100, onComplete = null) {
-    const cam = scene.activeCamera;
-    if (_flyObs) { scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null; }
-    const p0 = cam.position.clone(); p0.y = _walkY;
-    const t0 = cam.getTarget().clone();
-    const t1 = performance.now();
-    const ease = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3) / 2;
-    _flyObs = scene.onBeforeRenderObservable.add(() => {
-      const f = Math.min((performance.now() - t1) / ms, 1);
-      const ef = ease(f);
-      cam.position = BABYLON.Vector3.Lerp(p0, pos, ef);
-      cam.position.y = _walkY;
-      cam.setTarget(BABYLON.Vector3.Lerp(t0, lookAt, ef));
-      if (f >= 1) {
-        scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null;
-        if (onComplete) onComplete();
-      }
-    });
-  }
-
-  // Recorre una lista de waypoints [{pos, lookAt}] con un único observer
-  function flyToPath(waypoints, onComplete) {
-    if (!waypoints.length) { if (onComplete) onComplete(); return; }
-    const cam = scene.activeCamera;
-    if (_flyObs) { scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null; }
-    const ease = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3) / 2;
-    let wi = 0, segT = performance.now(), segMs = 400;
-    let p0 = cam.position.clone(); p0.y = _walkY;
-    let t0 = cam.getTarget().clone();
-    const nextSeg = () => {
-      p0 = cam.position.clone(); p0.y = _walkY;
-      t0 = cam.getTarget().clone();
-      segT = performance.now();
-      const d = BABYLON.Vector3.Distance(p0, waypoints[wi].pos);
-      segMs = Math.max(400, d * 160);
-    };
-    nextSeg();
-    _flyObs = scene.onBeforeRenderObservable.add(() => {
-      const f = Math.min((performance.now() - segT) / segMs, 1);
-      const ef = ease(f);
-      cam.position = BABYLON.Vector3.Lerp(p0, waypoints[wi].pos, ef);
-      cam.position.y = _walkY;
-      cam.setTarget(BABYLON.Vector3.Lerp(t0, waypoints[wi].lookAt, ef));
-      if (f >= 1) {
-        wi++;
-        if (wi >= waypoints.length) {
-          scene.onBeforeRenderObservable.remove(_flyObs); _flyObs = null;
-          if (onComplete) onComplete();
-        } else { nextSeg(); }
-      }
-    });
-  }
-
-  // --- Tour de ubicaciones vacías ---
-  let tourModulos = [], tourIdx = -1, tourMeshActual = null, tourTimer = null, tourActivo = false;
-
-  function restaurarModulo(mesh) {
-    const mat = new BABYLON.StandardMaterial('mat_' + mesh.name, scene);
-    mat.diffuseColor = mesh._tieneStock
-      ? new BABYLON.Color3(0.1, 0.8, 0.2)
-      : new BABYLON.Color3(0.85, 0.12, 0.08);
-    mat.zOffset = -8;
-    mesh.material = mat;
-    mesh.edgesColor = new BABYLON.Color4(0.0, 0.0, 0.0, 1.0);
-  }
-
-  async function iniciarTourVacios() {
-    cerrarTour();
-    try {
-      const res = await fetch('/api/mapa/vacios');
-      const nombresVacios = await res.json();
-      tourModulos = nombresVacios
-        .map(nombre => scene.getMeshByName(nombre))
-        .filter(Boolean)
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    } catch(e) {
-      console.error('Error al cargar vacíos:', e);
-      return;
-    }
-    if (!tourModulos.length) return;
-    tourActivo = true;
-    document.getElementById('tour-panel').style.display = 'flex';
-    irATour(0);
-  }
-
-  function irATour(idx) {
-    if (tourMeshActual) restaurarModulo(tourMeshActual);
-    tourIdx = idx;
-    const mesh = tourModulos[idx];
-    tourMeshActual = mesh;
-
-    const mat = new BABYLON.StandardMaterial('tour_' + mesh.name, scene);
-    mat.diffuseColor  = new BABYLON.Color3(0.0, 0.85, 1.0);
-    mat.emissiveColor = new BABYLON.Color3(0.0, 0.2,  0.3);
-    mat.zOffset = -8;
-    mesh.material = mat;
-    mesh.edgesColor = new BABYLON.Color4(0.0, 1.0, 1.0, 1.0);
-
-    document.getElementById('tour-nombre').textContent  = mesh.name;
-    document.getElementById('tour-counter').textContent = `${idx + 1} / ${tourModulos.length}`;
-    document.getElementById('tbtn-prev').disabled = idx === 0;
-    document.getElementById('tbtn-next').disabled = false;
-
-    const t = mesh.position.clone();
-    const bounds = scene.getWorldExtends();
-
-    // Todas las posiciones a Y=1.7 — cabecera del pasillo, corrido al lateral libre
-    const isNumeric = /^\d/.test(mesh.name);
-    const pasilloKey = isNumeric
-      ? mesh.name.match(/^\d+/)?.[0]        // "101" de "101-01-3"
-      : mesh.name.match(/^[A-Za-z]+/)?.[0]; // "A"   de "A01-3"
-    let camPos, usaEjeX;
-    {
-      const pMeshes = scene.meshes.filter(m => {
-        if (!MODULE_REGEX.test(m.name)) return false;
-        return isNumeric
-          ? m.name.startsWith(pasilloKey + '-')
-          : m.name.match(/^[A-Za-z]+/)?.[0] === pasilloKey;
-      });
-
-      const xs = pMeshes.map(m => m.position.x);
-      const zs = pMeshes.map(m => m.position.z);
-      const xRange = Math.max(...xs) - Math.min(...xs);
-      const zRange = Math.max(...zs) - Math.min(...zs);
-
-      const MARGIN  = 2;
-      const LATERAL = 8;
-
-      // Pasillos numéricos (101) son perpendiculares al eje dominante
-      usaEjeX = isNumeric ? zRange > xRange : xRange > zRange;
-
-      // Detecta hacia qué lado stepear buscando el gap real entre racks vecinos
-      const otrosMeshes = scene.meshes.filter(m => {
-        if (!MODULE_REGEX.test(m.name)) return false;
-        return isNumeric
-          ? !m.name.startsWith(pasilloKey + '-')
-          : m.name.match(/^[A-Za-z]+/)?.[0] !== pasilloKey;
-      });
-
-      function gapOffset(ourCoord, neighborCoords, maxStep) {
-        const izq = neighborCoords.filter(c => c < ourCoord);
-        const der = neighborCoords.filter(c => c > ourCoord);
-        const nearL = izq.length ? Math.max(...izq) : -Infinity;
-        const nearR = der.length ? Math.min(...der) :  Infinity;
-        const gapL  = ourCoord - nearL;
-        const gapR  = nearR - ourCoord;
-        if (!izq.length) return +Math.min(maxStep, gapR * 0.82);  // borde izq → ir a la derecha
-        if (!der.length) return -Math.min(maxStep, gapL * 0.82);  // borde der → ir a la izquierda
-        return gapR >= gapL                                         // al medio: gap más ancho = pasillo enfrentado
-          ? +Math.min(maxStep, gapR * 0.82)
-          : -Math.min(maxStep, gapL * 0.82);
-      }
-
-      const cx = (bounds.max.x + bounds.min.x) / 2;
-      const cz = (bounds.max.z + bounds.min.z) / 2;
-
-      if (usaEjeX) {
-        const minX = Math.min(...xs), maxX = Math.max(...xs);
-        const mid  = (minX + maxX) / 2;
-        const endX = isNumeric
-          ? (cx > t.x ? maxX + MARGIN : minX - MARGIN)
-          : (t.x >= mid ? maxX + MARGIN : minX - MARGIN);
-
-        let deltaZ;
-        if (isNumeric) {
-          // 101: posicionarse entre los dos pasillos de letras que lo flanquean en Z
-          const allLZ = otrosMeshes.map(m => m.position.z);
-          const z101  = (Math.min(...zs) + Math.max(...zs)) / 2;
-          const lZs   = allLZ.filter(z => z < z101);
-          const rZs   = allLZ.filter(z => z > z101);
-          const nL    = lZs.length ? Math.max(...lZs) : bounds.min.z;
-          const nR    = rZs.length ? Math.min(...rZs) : bounds.max.z;
-          deltaZ = ((nL + nR) / 2) - t.z;
-        } else {
-          const vecinosLetras = otrosMeshes.filter(m => !/^\d/.test(m.name));
-          deltaZ = gapOffset(t.z, vecinosLetras.map(m => m.position.z), LATERAL);
-        }
-        const finalX = isNumeric ? endX : t.x;
-        camPos = new BABYLON.Vector3(finalX, 1.7, t.z + deltaZ);
-      } else {
-        const minZ = Math.min(...zs), maxZ = Math.max(...zs);
-        const mid  = (minZ + maxZ) / 2;
-        const endZ = isNumeric
-          ? (cz > t.z ? maxZ + MARGIN : minZ - MARGIN)
-          : (t.z >= mid ? maxZ + MARGIN : minZ - MARGIN);
-
-        let deltaX;
-        if (isNumeric) {
-          // 101: posicionarse entre los dos pasillos de letras que lo flanquean en X
-          const allLX = otrosMeshes.map(m => m.position.x);
-          const x101  = (Math.min(...xs) + Math.max(...xs)) / 2;
-          const lXs   = allLX.filter(x => x < x101);
-          const rXs   = allLX.filter(x => x > x101);
-          const nL    = lXs.length ? Math.max(...lXs) : bounds.min.x;
-          const nR    = rXs.length ? Math.min(...rXs) : bounds.max.x;
-          deltaX = ((nL + nR) / 2) - t.x;
-        } else {
-          const vecinosLetras = otrosMeshes.filter(m => !/^\d/.test(m.name));
-          deltaX = gapOffset(t.x, vecinosLetras.map(m => m.position.x), LATERAL);
-        }
-        const finalZ = isNumeric ? endZ : t.z;
-        camPos = new BABYLON.Vector3(t.x + deltaX, 1.7, finalZ);
-      }
-
-      // Pasillo con aisle bloqueado (K-L con columnas): invertir lado para ir al opuesto
-      // K va al lado I-J (anterior), L va al lado M-N (posterior)
-      if (!isNumeric && AISLES_BLOQUEADOS.has(pasilloKey)) {
-        if (!usaEjeX) { camPos.x = t.x - (camPos.x - t.x); }
-        else           { camPos.z = t.z - (camPos.z - t.z); }
-      }
-
-      // No cruzar las paredes del depósito
-      const PAD = 0.5;
-      camPos.x = Math.max(bounds.min.x + PAD, Math.min(bounds.max.x - PAD, camPos.x));
-      camPos.z = Math.max(bounds.min.z + PAD, Math.min(bounds.max.z - PAD, camPos.z));
-    }
-
-    clearTimeout(tourTimer);
-    const onDone = () => {
-      if (tourActivo) tourTimer = setTimeout(() => irATour((idx + 1) % tourModulos.length), 5000);
-    };
-
-    const bnd2 = scene.getWorldExtends();
-    const cur  = scene.activeCamera.position.clone();
-    const wp3  = new BABYLON.Vector3(camPos.x, _walkY, camPos.z);
-
-    const path = [];
-
-    // Detectar si la cámara cruza algún rack de letra para ir al destino.
-    // Para pares ENFRENTADOS (A→B misma aisle): cur.x y camPos.x están a AMBOS LADOS del aisle
-    // pero ningún rack cae ENTRE ellos → no cruza rack → ruta directa.
-    // Para cambio de aisle (B→C): el rack de B y el de C están entre cur.x y camPos.x → cruza.
-    const lMs = scene.meshes.filter(m => MODULE_REGEX.test(m.name) && !/^\d/.test(m.name));
-    let crossAisle = false;
-    if (!isNumeric) {
-      if (!usaEjeX) {
-        const lo = Math.min(cur.x, camPos.x), hi = Math.max(cur.x, camPos.x);
-        crossAisle = lMs.some(m => m.position.x > lo && m.position.x < hi);
-      } else {
-        const lo = Math.min(cur.z, camPos.z), hi = Math.max(cur.z, camPos.z);
-        crossAisle = lMs.some(m => m.position.z > lo && m.position.z < hi);
-      }
-    }
-
-    // lookAt horizontal para waypoints de tránsito: evita que la cámara
-    // viaje mirando para arriba cuando el módulo anterior estaba en altura
-    const tFlat = new BABYLON.Vector3(t.x, _walkY, t.z);
-
-    if (idx === 0) {
-      // Primer paso desde home (oficina, x=-13.2): ir LEFT primero al K-L aisle (x=-20),
-      // que está fuera de la oficina y libre de racks en z=-14.8. Luego FORWARD a camPos.z.
-      const EXIT_X = -20;
-      const p0 = new BABYLON.Vector3(EXIT_X, _walkY, cur.z);
-      const p1 = new BABYLON.Vector3(EXIT_X, _walkY, camPos.z);
-      if (Math.abs(cur.x - EXIT_X) > 0.5) path.push({ pos: p0, lookAt: tFlat });
-      if (Math.abs(cur.z - camPos.z) > 0.5) path.push({ pos: p1, lookAt: tFlat });
-    } else if (crossAisle && !usaEjeX) {
-      // Letras en Z, gap en X → cambio de aisle → ir por cabecera del pasillo DESTINO
-      // (B05 matchea con C01 → corrZ = extremo del pasillo destino, no el global)
-      const destZs  = scene.meshes
-        .filter(m => MODULE_REGEX.test(m.name) && m.name.match(/^[A-Za-z]+/)?.[0] === pasilloKey)
-        .map(m => m.position.z);
-      const corrZraw = Math.max(...destZs) + 1;
-      const corrZ    = Math.max(bnd2.min.z + 0.5, Math.min(bnd2.max.z - 0.5, corrZraw));
-      const p1 = new BABYLON.Vector3(cur.x,    _walkY, corrZ);
-      const p2 = new BABYLON.Vector3(camPos.x, _walkY, corrZ);
-      if (Math.abs(cur.z - corrZ) > 0.5) path.push({ pos: p1, lookAt: tFlat });
-      path.push({ pos: p2, lookAt: tFlat });
-    } else if (crossAisle && usaEjeX) {
-      // Letras en X, gap en Z → cambio de aisle → ir por cabecera del pasillo DESTINO
-      const destXs  = scene.meshes
-        .filter(m => MODULE_REGEX.test(m.name) && m.name.match(/^[A-Za-z]+/)?.[0] === pasilloKey)
-        .map(m => m.position.x);
-      const corrXraw = Math.max(...destXs) + 1;
-      const corrX    = Math.max(bnd2.min.x + 0.5, Math.min(bnd2.max.x - 0.5, corrXraw));
-      const p1 = new BABYLON.Vector3(corrX, _walkY, cur.z);
-      const p2 = new BABYLON.Vector3(corrX, _walkY, camPos.z);
-      if (Math.abs(cur.x - corrX) > 0.5) path.push({ pos: p1, lookAt: tFlat });
-      path.push({ pos: p2, lookAt: tFlat });
-    } else {
-      // Mismo aisle (incl. pares enfrentados A↔B) o 101: primero X, luego Z
-      const pX = new BABYLON.Vector3(camPos.x, _walkY, cur.z);
-      if (Math.abs(cur.x - camPos.x) > 0.5) path.push({ pos: pX, lookAt: tFlat });
-    }
-    path.push({ pos: wp3, lookAt: t });
-
-    flyToPath(path, onDone);
-  }
-
-  function tourSiguiente() { if (tourModulos.length) irATour((tourIdx + 1) % tourModulos.length); }
-  function tourAnterior()  { if (tourIdx > 0) irATour(tourIdx - 1); }
-
-  function cerrarTour() {
-    clearTimeout(tourTimer);
-    tourTimer = null;
-    if (tourMeshActual) restaurarModulo(tourMeshActual);
-    tourMeshActual = null; tourModulos = []; tourIdx = -1;
-    tourActivo = false;
-    document.getElementById('tour-panel').style.display = 'none';
-  }
-
   const scene = createScene();
   engine.runRenderLoop(() => scene.render());
   window.addEventListener('resize', () => engine.resize());
+  actualizarInstrucciones();
 
   // ---- Resaltado pedido desde el reporte (página Blazor) por postMessage ----
-  let _resaltarPendiente = null;
-  function aplicarResaltarPendiente() {
-    if (_resaltarPendiente === null || typeof scene === 'undefined' || !scene) return;
-    resaltarModulos(_resaltarPendiente);
-  }
   window.addEventListener('message', (e) => {
     const d = e.data;
-    if (d && d.tipo === 'resaltar') { _resaltarPendiente = d.modulos || []; aplicarResaltarPendiente(); }
+    if (d && d.tipo === 'resaltar') resaltarModulos(d.modulos || []);
   });
 </script>
 </body>

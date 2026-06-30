@@ -56,6 +56,7 @@ public sealed class ExplicarMovimientoDto
     public string? RemitoCodigo { get; set; }
     // Base Dragonfish donde vive ese remito (CENTRAL/CCENTRAL/LURO/PERALTA) → el modal elige la base correcta.
     public string RemitoBase { get; set; } = "";
+    public int ReemplazoId { get; set; }      // si Origen='REEMPLAZO' y el Remito trae "#N" (id del registro de reemplazo)
 }
 
 /// <summary>Pedido de reseteo de un artículo DESDE un remito (re-ancla a la fecha/hora de ese remito).</summary>

@@ -1,0 +1,228 @@
+@page "/sistemas/motivos-reposicion"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "Admin")]
+@using MarketWeb.Shared.Reposicion
+@using MarketWeb.Client.Components
+@inject EventosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageHeader Modulo="Sistemas" Titulo="Motivos de Reposición" Icono="fa-solid fa-chart-pie"
+            CompartirQuery="@CompartirQuery" />
+
+<p class="text-muted small mb-3">
+    Qué motivo tiene cada problema de reposición, para decidir si hay que mejorar un proceso humano o el SP.
+    Solo cuenta eventos <strong>procesados</strong> y con un <strong>motivo real</strong> asignado; excluye los <strong>repetidos</strong> (motivo "Ya procesado") y los sin clasificar.
+    El detalle enlaza a la consulta del artículo para analizar la situación.
+</p>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label small mb-0">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="_desde" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-0">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="_hasta" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-0">Local</label>
+                <input type="text" class="form-control form-control-sm" style="width:140px" placeholder="TODOS" @bind="_local" />
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary btn-sm" @onclick="Buscar" disabled="@_cargando">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_cargando)
+{
+    <div class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando…</div>
+}
+else if (_rep is not null)
+{
+    @if (_rep.TotalEventos == 0)
+    {
+        <div class="alert alert-info">No hay eventos en el período.</div>
+    }
+    else
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">Distribución por motivo <span class="text-muted">(@_rep.TotalEventos eventos)</span></h6>
+                        <div style="position:relative;height:300px"><canvas id="mr-dona"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">Motivos</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr><th colspan="2">Motivo</th><th class="text-end">Cant.</th><th class="text-end">%</th></tr>
+                                </thead>
+                                <tbody>
+                                    @{ var _i = 0; }
+                                    @foreach (var r in _rep.Resumen)
+                                    {
+                                        <tr>
+                                            <td style="width:18px">
+                                                <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:@Color(_i)"></span>
+                                            </td>
+                                            <td>@r.Motivo</td>
+                                            <td class="text-end">@r.Cantidad</td>
+                                            <td class="text-end">@Pct(r.Cantidad)%</td>
+                                        </tr>
+                                        _i++;
+                                    }
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-bold border-top">
+                                        <td colspan="2">Total</td>
+                                        <td class="text-end">@_rep.TotalEventos</td>
+                                        <td class="text-end">100%</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Registro</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th><th>Local</th><th>Artículo</th><th>Descripción</th>
+                                <th>Tipo</th><th>Motivo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var e in _rep.Registro)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@e.Fecha.ToString("dd/MM/yy HH:mm")</td>
+                                    <td>@e.Local</td>
+                                    <td class="text-nowrap">
+                                        @if (EsLocalRepo(e.Local))
+                                        {
+                                            <a href="@ConsultaUrl(e)" title="Ver consulta de reposición">
+                                                @e.ArtCod <i class="fa-solid fa-up-right-from-square ms-1 small"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <ArticuloLink Codigo="@e.ArtCod" Local="@e.Local" Badge="false" />
+                                        }
+                                    </td>
+                                    <td>@e.Descripcion</td>
+                                    <td>
+                                        <span class="fw-semibold @(e.TipoDiferencia == "SOBRANTE" ? "text-success" : "text-danger")">@e.TipoDiferencia</span>
+                                    </td>
+                                    <td>
+                                        @if (e.Motivo == "(sin motivo)")
+                                        {
+                                            <span class="text-muted fst-italic">@e.Motivo</span>
+                                        }
+                                        else
+                                        {
+                                            @e.Motivo
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "local")] public string? LocalQ { get; set; }
+
+    private DateTime _desde = DateTime.Today.AddDays(-30);
+    private DateTime _hasta = DateTime.Today;
+    private string _local = "TODOS";
+    private bool _cargando;
+    private MotivosReporteDto? _rep;
+
+    private IJSObjectReference? _mod;
+    private bool _render;   // pedir render de la dona en el próximo OnAfterRender
+
+    private string CompartirQuery =>
+        $"desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}&local={Uri.EscapeDataString(string.IsNullOrWhiteSpace(_local) ? "TODOS" : _local)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
+        if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
+        if (!string.IsNullOrWhiteSpace(LocalQ)) _local = LocalQ!;
+        await Buscar();
+    }
+
+    private async Task Buscar()
+    {
+        _cargando = true;
+        StateHasChanged();
+        var local = string.IsNullOrWhiteSpace(_local) ? "TODOS" : _local.Trim();
+        _rep = await Api.MotivosReporteAsync(_desde, _hasta, local);
+        _cargando = false;
+        _render = _rep.TotalEventos > 0;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_render && _rep is not null)
+        {
+            _render = false;
+            _mod ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/donutchart.js");
+            var labels = _rep.Resumen.Select(r => r.Motivo).ToArray();
+            var values = _rep.Resumen.Select(r => r.Cantidad).ToArray();
+            await _mod.InvokeVoidAsync("render", "mr-dona", labels, values);
+        }
+    }
+
+    private string Pct(int n) => _rep is null || _rep.TotalEventos == 0 ? "0" : (n * 100.0 / _rep.TotalEventos).ToString("0.0");
+
+    // Misma paleta (y mismo orden) que /js/donutchart.js, para que el cuadradito de la tabla matchee la porción.
+    private static readonly string[] Paleta =
+        { "#e8820c", "#3ca050", "#2f6fb0", "#b02a37", "#7a4fb5", "#0f9b8e",
+          "#c9a227", "#d2602e", "#5a6b7b", "#9d4d8c", "#4b8b3b", "#806040" };
+    private static string Color(int i) => Paleta[i % Paleta.Length];
+
+    private static bool EsLocalRepo(string local)
+        => string.Equals(local, "LURO", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(local, "PERALTA", StringComparison.OrdinalIgnoreCase);
+
+    private string ConsultaUrl(EventoMotivoDto e)
+    {
+        var volver = Uri.EscapeDataString($"/sistemas/motivos-reposicion?{CompartirQuery}");
+        return $"/logistica/consulta-reposicion?local={Uri.EscapeDataString(e.Local)}&art={Uri.EscapeDataString(e.ArtCod)}&ref={volver}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_mod is not null)
+        {
+            try { await _mod.InvokeVoidAsync("destroy"); await _mod.DisposeAsync(); } catch { }
+        }
+    }
+}

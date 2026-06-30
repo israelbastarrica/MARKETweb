@@ -33,6 +33,9 @@ public sealed class ReemplazosApi
     public async Task<List<ReemplazoCandidatoDto>> CandidatosPercheroAsync(int idUbicacion, string cod)
         => await _http.GetFromJsonAsync<List<ReemplazoCandidatoDto>>($"api/reemplazos/candidatos-perchero?idUbicacion={idUbicacion}&cod={Uri.EscapeDataString(cod)}") ?? new();
 
+    public async Task<List<MesaPercheroDto>> MesasParaPercheroAsync(int idUbicacion)
+        => await _http.GetFromJsonAsync<List<MesaPercheroDto>>($"api/reemplazos/mesas-perchero?idUbicacion={idUbicacion}") ?? new();
+
     public async Task<(bool Ok, string? Error)> GuardarAsync(ReemplazoSaveRequest req)
     {
         var resp = await _http.PostAsJsonAsync("api/reemplazos/guardar", req);

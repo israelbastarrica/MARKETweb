@@ -25,6 +25,9 @@ public interface IReemplazosService
     /// <summary>Variante "PASAR A PERCHERO": candidatos que ya están en Perchero del local.</summary>
     Task<IReadOnlyList<ReemplazoCandidatoDto>> BuscarCandidatosPercheroAsync(int idUbicacion, string artCod, CancellationToken ct = default);
 
+    /// <summary>Reemplazos de mesa con acción "PASAR A PERCHERO" (con flag de si ya los tomó un perchero). idUbicacion 0 = TODOS.</summary>
+    Task<IReadOnlyList<MesaPercheroDto>> MesasParaPercheroAsync(int idUbicacion, CancellationToken ct = default);
+
     /// <summary>Alta/modificación: resuelve IDMapeoLocal/Logistica y valida duplicados.</summary>
     Task GuardarAsync(ReemplazoSaveRequest req, string usuario, CancellationToken ct = default);
 

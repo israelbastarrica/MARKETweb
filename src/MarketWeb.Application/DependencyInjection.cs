@@ -11,6 +11,7 @@ using MarketWeb.Application.Mapa;
 using MarketWeb.Application.Mapeo;
 using MarketWeb.Application.Packs;
 using MarketWeb.Application.Palets;
+using MarketWeb.Application.Produccion;
 using MarketWeb.Application.Reemplazos;
 using MarketWeb.Application.RemitoImpresion;
 using MarketWeb.Application.Informes;
@@ -52,6 +53,8 @@ public static class DependencyInjection
         services.AddScoped<IPaletsService, PaletsService>();
         services.AddScoped<IPacksService, PacksService>();
         services.AddScoped<ITelasService, TelasService>();
+        services.AddScoped<IViajesService, ViajesService>();
+        services.AddScoped<IOrdenesService, OrdenesService>();
         services.AddSingleton<EstancadosCache>();
         services.AddSingleton<BackgroundCache<List<MarketWeb.Shared.LogisticaDashboard.ArticuloUbicacionesDto>>>();
         services.AddSingleton(new BackgroundCache<MarketWeb.Application.LogisticaDashboard.ReposFast> { Ttl = TimeSpan.FromSeconds(60) });

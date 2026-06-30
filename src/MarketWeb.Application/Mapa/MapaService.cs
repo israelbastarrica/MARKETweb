@@ -149,32 +149,32 @@ public sealed class MapaService : IMapaService
             });
         }
 
-        // Resaltado del 3D: de las Posiciones ("Pasillo|Fila") a los nombres de módulo (mesh) de esa fila.
-        var claves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var fila in lista)
-            if (!string.IsNullOrWhiteSpace(fila.Posiciones))
-                foreach (var tok in fila.Posiciones.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                    claves.Add(tok);
+        // Resaltado del 3D: módulos EXACTOS (con su altura/posición) donde están los artículos que
+        // matchearon. El SP devuelve las posiciones a nivel Pasillo|Fila (sin altura), por eso antes
+        // se pintaba toda la columna; acá vamos directo a Mapeo por ARTCOD para marcar solo las cajas reales.
+        var codigos = lista.Select(f => f.Codigo)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        var modulos = new List<string>();
-        if (claves.Count > 0)
+        var set = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (codigos.Count > 0)
         {
-            var mapeo = await cn.QueryAsync(new CommandDefinition(
-                "SELECT RTRIM(Modulo) AS Modulo, RTRIM(Pasillo) AS Pasillo, Fila FROM MARKET.dbo.Mapeo WHERE IDUbicacion = 1 AND Eliminado = 0",
-                cancellationToken: ct));
-            var set = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var m in mapeo)
+            const string sqlMod = @"
+                SELECT DISTINCT RTRIM(M.Modulo) AS Modulo
+                FROM MARKET.dbo.Mapeo M WITH(NOLOCK)
+                INNER JOIN MARKET.dbo.MapeoRegistro R WITH(NOLOCK) ON R.IDMapeo = M.ID
+                WHERE M.IDUbicacion = 1 AND ISNULL(M.Eliminado,0) = 0 AND ISNULL(R.Eliminado,0) = 0
+                  AND RTRIM(ISNULL(M.Modulo,'')) <> '' AND RTRIM(R.ARTCOD) IN @cods";
+            for (int i = 0; i < codigos.Count; i += 1000)
             {
-                var dd = (IDictionary<string, object>)m;
-                var clave = (dd["Pasillo"]?.ToString()?.Trim() ?? "") + "|" + (dd["Fila"]?.ToString()?.Trim() ?? "");
-                if (claves.Contains(clave))
-                {
-                    var mod = dd["Modulo"]?.ToString()?.Trim();
-                    if (!string.IsNullOrEmpty(mod)) set.Add(mod);
-                }
+                var chunk = codigos.Skip(i).Take(1000).ToArray();
+                var mods = await cn.QueryAsync<string>(new CommandDefinition(sqlMod, new { cods = chunk }, commandTimeout: 60, cancellationToken: ct));
+                foreach (var x in mods) if (!string.IsNullOrWhiteSpace(x)) set.Add(x.Trim());
             }
-            modulos = set.ToList();
         }
+        var modulos = set.ToList();
 
         return new MapaReporteResultado { Filas = lista, Modulos = modulos };
     }

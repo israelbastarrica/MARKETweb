@@ -1,0 +1,71 @@
+@page "/produccion/viajes/equivalencias"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "Admin")]
+@using MarketWeb.Shared.Produccion
+@inject ViajesApi Api
+@inject NavigationManager Nav
+
+<PageTitle>Equivalencias Dragon</PageTitle>
+
+<div class="market-page">
+    <button class="btn-volver" @onclick='() => Nav.NavigateTo("/produccion/viajes")'>
+        <span class="ico"><i class="fa-solid fa-arrow-left"></i></span><span>Volver</span>
+    </button>
+    <PageHeader Modulo="Producción" Titulo="Equivalencias código Dragon" Icono="fa-solid fa-right-left" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Mapeo <strong>código de proveedor → código MARKET (Dragon)</strong>. Es el puente para el alta en Dragon y las Órdenes.
+        Pegá las columnas de la planilla "Importado": <code>código proveedor</code> · <code>código MARKET</code> · <code>descripción</code> (separadas por TAB, una por línea).
+    </p>
+
+    <div class="alert alert-info d-flex align-items-center">
+        <i class="fa-solid fa-database me-2"></i>
+        <div>Equivalencias cargadas hoy: <strong>@_total</strong></div>
+    </div>
+
+    <div class="mb-2">
+        <textarea class="form-control" rows="12" style="font-family:monospace;font-size:.85rem"
+                  placeholder="B23	INA054.080	REMERA M/C ...&#10;A10	INE005.095	CAMPERA ..." @bind="_texto"></textarea>
+    </div>
+    <button class="btn btn-primary" @onclick="Importar" disabled="@_importando">
+        @if (_importando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+        else { <i class="fa-solid fa-file-import me-1"></i> }
+        Importar equivalencias
+    </button>
+
+    @if (_flash is not null)
+    {
+        <div class="alert @(_flashOk ? "alert-success" : "alert-danger") mt-3">@_flash</div>
+    }
+</div>
+
+<style>
+    .btn-volver { display:inline-flex; align-items:center; gap:8px; background:#fff; border:1px solid #e6e4dd; border-radius:999px; padding:6px 16px 6px 8px; margin-bottom:.5rem; color:#555; font-weight:600; font-size:.9rem; cursor:pointer; }
+    .btn-volver .ico { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:#fff3e0; color:#e8820c; }
+</style>
+
+@code {
+    private string _texto = "";
+    private int _total;
+    private bool _importando;
+    private string? _flash;
+    private bool _flashOk;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _total = await Api.ContarCodigosMarketAsync(); } catch { _total = 0; }
+    }
+
+    private async Task Importar()
+    {
+        if (string.IsNullOrWhiteSpace(_texto)) { _flashOk = false; _flash = "Pegá las filas primero."; return; }
+        _importando = true; _flash = null;
+        try
+        {
+            var r = await Api.ImportarCodigosMarketAsync(_texto);
+            if (r is null) { _flashOk = false; _flash = "No se pudo importar."; }
+            else { _flashOk = r.Ok; _flash = r.Mensaje; _total = r.Total; if (r.Ok) _texto = ""; }
+        }
+        catch (Exception ex) { _flashOk = false; _flash = "Error: " + ex.Message; }
+        finally { _importando = false; }
+    }
+}

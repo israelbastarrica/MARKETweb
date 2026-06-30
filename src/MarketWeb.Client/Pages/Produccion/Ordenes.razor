@@ -1,0 +1,154 @@
+@page "/diseno/ordenes"
+@using MarketWeb.Shared.Produccion
+@using Microsoft.AspNetCore.Components.Authorization
+@inject OrdenesApi Api
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Órdenes de Pedido</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Diseño" Titulo="Órdenes de Pedido" Icono="fa-solid fa-bag-shopping" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Fase 1 — esqueleto. Se importa una orden de cada tipo (Nacional / Importado) desde lo viejo (Asana) + planilla,
+        para pulir el ABM antes de migrar todo. Todavía no genera nada en Dragon.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+        <AuthorizeView Policy="Admin">
+            <button class="btn btn-outline-primary" @onclick="Importar" disabled="@_importando">
+                @if (_importando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } else { <i class="fa-solid fa-file-import me-1"></i> }
+                Importar muestra
+            </button>
+            <div class="input-group" style="width:auto">
+                <span class="input-group-text">Orden N°</span>
+                <input type="number" class="form-control" style="width:110px" @bind="_nroImportar" placeholder="Ej: 4538" />
+                <button class="btn btn-outline-primary" @onclick="ImportarUna" disabled="@(_importando || _nroImportar is null)">
+                    <i class="fa-solid fa-file-import me-1"></i> Importar
+                </button>
+            </div>
+        </AuthorizeView>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_ordenes.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-bag-shopping"></i>
+            <p>No hay órdenes importadas todavía.</p>
+            @if (!string.IsNullOrEmpty(_msg)) { <p class="small text-muted mb-0">@_msg</p> }
+            else { <p class="small text-muted mb-0">Si sos ADMIN, se importa una orden de cada tipo al abrir la pantalla.</p> }
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>N° orden</th><th>Tipo</th><th>Estado</th><th>Proveedor</th><th>Temp./Año</th>
+                        <th>Llegada</th><th class="text-end">Renglones</th><th class="text-center" style="width:90px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in _ordenes)
+                    {
+                        <tr class="ord-row" @onclick="() => Abrir(o.Id)">
+                            <td class="fw-semibold">@o.NroOrden</td>
+                            <td><span class="badge @(o.Tipo == "IMPORTADO" ? "bg-info text-dark" : "bg-warning text-dark")">@o.Tipo</span></td>
+                            <td><span class="badge bg-secondary">@o.Estado</span></td>
+                            <td>@(string.IsNullOrWhiteSpace(o.ProveedorNombre) ? "—" : o.ProveedorNombre)</td>
+                            <td class="small">@(string.IsNullOrWhiteSpace(o.Temporada) ? "" : o.Temporada)@(o.Anio.HasValue ? $" · {o.Anio}" : "")</td>
+                            <td class="small">@(o.FechaLlegada?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            <td class="text-end fw-bold">@o.CantRenglones</td>
+                            <td class="text-center text-nowrap" @onclick:stopPropagation="true">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Abrir" @onclick="() => Abrir(o.Id)"><i class="fa-solid fa-pen"></i></button>
+                                <AuthorizeView Policy="Admin">
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(o)"><i class="fa-solid fa-trash"></i></button>
+                                </AuthorizeView>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .ord-row { cursor: pointer; }
+    .ord-row:hover td { background: var(--mk-row-hover); }
+</style>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<OrdenDto> _ordenes = new();
+    private bool _cargando = true, _importando;
+    private string? _msg;
+    private int? _nroImportar;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Cargar();
+        if (_ordenes.Count == 0 && await EsAdminAsync())
+            await Importar();
+    }
+
+    private async Task<bool> EsAdminAsync()
+    {
+        if (AuthState is null) return false;
+        var s = await AuthState;
+        return string.Equals(s.User.FindFirst("perfil")?.Value, "ADMIN", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _ordenes = await Api.ListarAsync(); }
+        catch { _ordenes = new(); }
+        finally { _cargando = false; }
+    }
+
+    private async Task Importar()
+    {
+        _importando = true; StateHasChanged();
+        try
+        {
+            var r = await Api.ImportarMuestraAsync();
+            _msg = r is null ? "No se pudo importar (sin permisos o error del servidor)." : r.Mensaje;
+        }
+        catch (Exception ex) { _msg = "Error: " + ex.Message; }
+        finally { _importando = false; }
+        await Cargar();
+    }
+
+    private async Task ImportarUna()
+    {
+        if (_nroImportar is null) return;
+        _importando = true; StateHasChanged();
+        try
+        {
+            var r = await Api.ImportarOrdenAsync(_nroImportar.Value);
+            if (r is null) Ui.Error("No se pudo importar (sin permisos o error del servidor).");
+            else if (!r.Ok) Ui.Error(r.Mensaje);
+            else Ui.Exito(r.Mensaje);
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _importando = false; }
+        await Cargar();
+    }
+
+    private void Abrir(int id) => Nav.NavigateTo($"/diseno/ordenes/{id}");
+
+    private async Task Eliminar(OrdenDto o)
+    {
+        if (!await Ui.ConfirmAsync($"¿Eliminar la orden N° {o.NroOrden} ({o.Tipo})? Se da de baja (no borra físico).", "Eliminar orden", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarOrdenAsync(o.Id);
+        await Cargar();
+    }
+}

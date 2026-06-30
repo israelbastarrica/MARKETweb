@@ -39,4 +39,11 @@ public sealed class EventosApi
 
     public async Task<bool> GuardarMotivoAsync(int id, int idMotivo)
         => (await _http.PostAsJsonAsync($"api/eventos/{id}/motivo", new { idMotivo })).IsSuccessStatusCode;
+
+    // ---- Reporte de motivos (Sistemas) ----
+    public async Task<MotivosReporteDto> MotivosReporteAsync(DateTime desde, DateTime hasta, string local)
+    {
+        var url = $"api/eventos/motivos-reporte?desde={desde:yyyy-MM-dd}&hasta={hasta:yyyy-MM-dd}&local={Uri.EscapeDataString(local)}";
+        return await _http.GetFromJsonAsync<MotivosReporteDto>(url) ?? new();
+    }
 }

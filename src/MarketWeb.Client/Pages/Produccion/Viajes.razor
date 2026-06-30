@@ -1,0 +1,237 @@
+@page "/produccion/viajes"
+@using MarketWeb.Shared.Produccion
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ViajesApi Api
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Viajes</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Producción" Titulo="Viajes" Icono="fa-solid fa-plane-departure" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Viajes de compra importados desde la app offline (ViajePedidos). Base del módulo de Producción:
+        proveedores, contenedores y artículos para Órdenes, etiquetas y alta en Dragon.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+        <button class="btn btn-primary" @onclick="AbrirNuevoViaje"><i class="fa-solid fa-plus me-1"></i> Nuevo viaje</button>
+        <AuthorizeView Policy="Admin">
+            <button class="btn btn-outline-dark" @onclick='() => Nav.NavigateTo("/produccion/viajes/equivalencias")'>
+                <i class="fa-solid fa-right-left me-1"></i> Equivalencias Dragon
+            </button>
+        </AuthorizeView>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_importando)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <p>Importando el viaje desde el .db…</p>
+        </div>
+    }
+    else if (_viajes.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-plane-departure"></i>
+            <p>No hay viajes importados todavía.</p>
+            @if (!string.IsNullOrEmpty(_msgImport))
+            {
+                <p class="text-danger small mb-0">@_msgImport</p>
+            }
+            else
+            {
+                <p class="small text-muted mb-0">Se importa solo al abrir esta pantalla (o al reiniciar la app). Si no aparece, revisá la ruta <code>Viajes:DbPath</code> en el servidor.</p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Viaje</th><th>Fecha</th><th>País</th><th>Estado</th>
+                        <th class="text-end">Artículos</th><th class="text-end">Proveedores</th><th class="text-end">Contenedores</th>
+                        <th>Importado</th><th class="text-center" style="width:96px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in _viajes)
+                    {
+                        <tr class="vj-row" @onclick="() => Abrir(v.Id)">
+                            <td class="fw-semibold">@(string.IsNullOrWhiteSpace(v.Nombre) ? $"Viaje #{v.Id}" : v.Nombre)</td>
+                            <td>@(v.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            <td><span class="me-1">@MarketWeb.Client.Services.Banderas.Emoji(v.Pais)</span>@(string.IsNullOrWhiteSpace(v.Pais) ? "—" : v.Pais)</td>
+                            <td><span class="badge @(v.Estado == "CERRADO" ? "bg-secondary" : "bg-success")">@v.Estado</span></td>
+                            <td class="text-end fw-bold">@v.CantArticulos</td>
+                            <td class="text-end">@v.CantProveedores</td>
+                            <td class="text-end">@v.CantContenedores</td>
+                            <td class="small text-muted">@(v.FechaImportacion?.ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                            <td class="text-center text-nowrap" @onclick:stopPropagation="true">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Editar" @onclick="() => AbrirEditarViaje(v)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarViaje(v)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">@(_eId == 0 ? "Nuevo viaje" : "Editar viaje")</h5>
+            <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+        </div>
+        <div class="modal-body">
+            <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Nombre</label>
+                <input class="form-control" @bind="_eNombre" placeholder="Ej: Viaje Chile 2027" />
+            </div>
+            <div class="row g-2">
+                <div class="col-7">
+                    <label class="form-label small text-muted mb-1">País</label>
+                    <input class="form-control" @bind="_ePais" placeholder="Ej: Chile" />
+                </div>
+                <div class="col-5">
+                    <label class="form-label small text-muted mb-1">Fecha</label>
+                    <input type="date" class="form-control" @bind="_eFecha" />
+                </div>
+            </div>
+            <div class="row g-2 mt-0">
+                <div class="col-4">
+                    <label class="form-label small text-muted mb-1">Estado</label>
+                    <select class="form-select" @bind="_eEstado">
+                        <option value="ABIERTO">ABIERTO</option>
+                        <option value="CERRADO">CERRADO</option>
+                    </select>
+                </div>
+                <div class="col-3">
+                    <label class="form-label small text-muted mb-1">Moneda</label>
+                    <select class="form-select" @bind="_eMoneda">
+                        <option value="USD">USD</option>
+                        <option value="RMB">RMB (¥)</option>
+                        <option value="CLP">CLP</option>
+                        <option value="ARS">ARS</option>
+                        <option value="EUR">EUR</option>
+                        <option value="BRL">BRL</option>
+                    </select>
+                </div>
+                <div class="col-5">
+                    <label class="form-label small text-muted mb-1">Transporte</label>
+                    <select class="form-select" @bind="_eUnidad">
+                        <option value="Contenedor">Contenedor</option>
+                        <option value="Camión">Camión</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-text mt-2">El CBM se maneja igual; "Transporte" solo cambia el nombre de la unidad de carga (barco = Contenedor, ej. Chile = Camión).</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+            <button class="btn btn-primary" @onclick="GuardarViaje" disabled="@_guardando">
+                @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } Guardar
+            </button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .vj-row { cursor: pointer; }
+    .vj-row:hover td { background: var(--mk-row-hover); }
+</style>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<ViajeDto> _viajes = new();
+    private bool _cargando = true, _importando;
+    private string? _msgImport;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Cargar();
+        // Sin botón: si no hay viajes y sos ADMIN, se importa solo al abrir la pantalla.
+        if (_viajes.Count == 0 && await EsAdminAsync())
+        {
+            _importando = true; StateHasChanged();
+            try
+            {
+                var r = await Api.ImportarAsync();
+                _msgImport = r is null ? "No se pudo importar (sin permisos o error del servidor)." : r.Mensaje;
+            }
+            catch (Exception ex) { _msgImport = "Error: " + ex.Message; }
+            finally { _importando = false; }
+            await Cargar();
+        }
+    }
+
+    private async Task<bool> EsAdminAsync()
+    {
+        if (AuthState is null) return false;
+        var s = await AuthState;
+        return string.Equals(s.User.FindFirst("perfil")?.Value, "ADMIN", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _viajes = await Api.ListarAsync(); }
+        catch { _viajes = new(); }
+        finally { _cargando = false; }
+    }
+
+    private void Abrir(int id) => Nav.NavigateTo($"/produccion/viajes/{id}");
+
+    // ---- ABM viaje ----
+    private bool _modal, _guardando;
+    private int _eId;
+    private string _eNombre = "", _ePais = "", _eEstado = "ABIERTO", _eMoneda = "USD", _eUnidad = "Contenedor";
+    private DateTime? _eFecha;
+
+    private void AbrirNuevoViaje()
+    {
+        _eId = 0; _eNombre = ""; _ePais = ""; _eEstado = "ABIERTO"; _eFecha = DateTime.Today;
+        _eMoneda = "USD"; _eUnidad = "Contenedor";   // moneda por defecto NO yuan
+        _modal = true;
+    }
+
+    private void AbrirEditarViaje(ViajeDto v)
+    {
+        _eId = v.Id; _eNombre = v.Nombre; _ePais = v.Pais; _eEstado = string.IsNullOrWhiteSpace(v.Estado) ? "ABIERTO" : v.Estado; _eFecha = v.Fecha;
+        _eMoneda = string.IsNullOrWhiteSpace(v.Moneda) ? "USD" : v.Moneda;
+        _eUnidad = string.IsNullOrWhiteSpace(v.UnidadTransporte) ? "Contenedor" : v.UnidadTransporte;
+        _modal = true;
+    }
+
+    private async Task GuardarViaje()
+    {
+        if (string.IsNullOrWhiteSpace(_eNombre)) { Ui.Error("El nombre es obligatorio."); return; }
+        _guardando = true;
+        try
+        {
+            await Api.GuardarViajeAsync(new ViajeSaveRequest { Id = _eId, Nombre = _eNombre, Pais = _ePais, Estado = _eEstado, Fecha = _eFecha, Moneda = _eMoneda, UnidadTransporte = _eUnidad });
+            _modal = false;
+            await Cargar();
+        }
+        catch (Exception ex) { Ui.Error("No se pudo guardar: " + ex.Message); }
+        finally { _guardando = false; }
+    }
+
+    private async Task EliminarViaje(ViajeDto v)
+    {
+        if (!await Ui.ConfirmAsync($"¿Eliminar el viaje \"{v.Nombre}\"? Se da de baja (no borra físico).", "Eliminar viaje", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarViajeAsync(v.Id);
+        await Cargar();
+    }
+}

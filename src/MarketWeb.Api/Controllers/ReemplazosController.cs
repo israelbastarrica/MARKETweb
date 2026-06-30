@@ -52,6 +52,11 @@ public sealed class ReemplazosController : ControllerBase
         [FromQuery] int idUbicacion, [FromQuery] string cod, CancellationToken ct)
         => Ok(await _service.BuscarCandidatosPercheroAsync(idUbicacion, cod ?? "", ct));
 
+    [HttpGet("mesas-perchero")]
+    public async Task<ActionResult<IReadOnlyList<MesaPercheroDto>>> MesasPerchero(
+        [FromQuery] int idUbicacion = 0, CancellationToken ct = default)
+        => Ok(await _service.MesasParaPercheroAsync(idUbicacion, ct));
+
     [HttpPost("guardar")]
     public async Task<IActionResult> Guardar([FromBody] ReemplazoSaveRequest req, CancellationToken ct)
     {

@@ -183,7 +183,7 @@
             var p = new List<string>();
             if (!string.IsNullOrWhiteSpace(_nroPedido)) p.Add($"pedido={Uri.EscapeDataString(_nroPedido)}");
             if (!string.IsNullOrWhiteSpace(_codArt)) p.Add($"art={Uri.EscapeDataString(_codArt)}");
-            if (_verDesarmados) p.Add("desarm=1");
+            if (_verDesarmados) p.Add("desarm=true");
             return string.Join("&", p);
         }
     }

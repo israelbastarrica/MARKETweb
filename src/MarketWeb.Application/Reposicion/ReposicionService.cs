@@ -401,6 +401,12 @@ public sealed class ReposicionService : IReposicionService
                     var m = System.Text.RegularExpressions.Regex.Match(remito, @"EVT\s*#(\d+)");
                     if (m.Success && int.TryParse(m.Groups[1].Value, out var evtId)) mov.EventoId = evtId;
                 }
+                // Filas de REEMPLAZO: el Remito trae "#N" (id del registro) → para linkear al reemplazo exacto.
+                if (string.Equals(mov.Origen, "REEMPLAZO", StringComparison.OrdinalIgnoreCase))
+                {
+                    var mr = System.Text.RegularExpressions.Regex.Match(remito, @"#(\d+)");
+                    if (mr.Success && int.TryParse(mr.Groups[1].Value, out var rid)) mov.ReemplazoId = rid;
+                }
                 dto.Movimientos.Add(mov);
             }
             dto.SaldoCuadra = !dto.Resumen.HayDatos || saldo == pendiente;

@@ -112,7 +112,7 @@
                     <tbody>
                         @foreach (var m in _d.Movimientos)
                         {
-                            <tr class="@MovClase(m)" @onclick="() => AbrirEvento(m)" style="@(m.EventoId > 0 ? "cursor:pointer" : "")">
+                            <tr class="@MovClase(m)" @onclick="() => OnMovClick(m)" style="@((m.EventoId > 0 || EsReemplazo(m)) ? "cursor:pointer" : "")">
                                 <td class="small">@(m.Fecha?.ToString("dd/MM/yyyy") ?? "")</td>
                                 <td class="small">@m.Hora</td>
                                 <td class="small">
@@ -132,6 +132,7 @@
                                 <td class="small">
                                     @m.Tipo
                                     @if (m.EventoId > 0) { <i class="fa-solid fa-image ms-1 text-muted" title="Ver detalle/foto del evento"></i> }
+                                    @if (EsReemplazo(m)) { <i class="fa-solid fa-up-right-from-square ms-1" title="Ver el reemplazo y la acción que se tomó"></i> }
                                     @if (m.Orden == 1)
                                     {
                                         <button class="btn btn-sm btn-outline-secondary cr-reset-btn" @onclick:stopPropagation="true" @onclick="() => AbrirReset(m)" title="Resetear este artículo desde este remito">
@@ -293,7 +294,7 @@
     // Estado de la pantalla para el botón Compartir del header (local + artículo + historia completa).
     private string? CompartirQuery => string.IsNullOrWhiteSpace(_artCod)
         ? null
-        : $"local={Uri.EscapeDataString(_local)}&art={Uri.EscapeDataString(_artCod.Trim())}" + (_historiaCompleta ? "&hist=1" : "");
+        : $"local={Uri.EscapeDataString(_local)}&art={Uri.EscapeDataString(_artCod.Trim())}" + (_historiaCompleta ? "&hist=true" : "");
 
     private async Task Buscar()
     {
@@ -305,11 +306,48 @@
         State.Save(StateKey, new Snap { Local = _local, ArtCod = _artCod, HistoriaCompleta = _historiaCompleta, D = _d, Busco = _busco }, 0);
     }
 
+    // Clic en una fila de movimiento: evento → modal de evento; reemplazo → va a Reemplazos del artículo.
+    private async Task OnMovClick(ExplicarMovimientoDto m)
+    {
+        if (EsReemplazo(m)) { AbrirReemplazo(m); return; }
+        if (m.EventoId > 0) { IrAEvento(m.EventoId); return; }
+        await Task.CompletedTask;
+    }
+
+    // Va a la pantalla de Eventos con ESE evento abierto (ahí se procesa). El "Volver" regresa acá;
+    // al volver, la consulta se re-procesa y el renglón ya aparece con el color de "procesado".
+    private void IrAEvento(int eventoId)
+    {
+        if (_d is null) return;
+        Nav.NavigateTo($"/logistica/eventos?abrir={eventoId}&ref={Uri.EscapeDataString(VolverAcaUrl())}");
+    }
+
+    // URL para volver a ESTA consulta, preservando el ref propio (ej. el reporte de Eventos) para no
+    // romper la cadena: reporte → consulta → evento → procesar → consulta → (Volver) → reporte.
+    private string VolverAcaUrl()
+    {
+        var url = $"/logistica/consulta-reposicion?local={Uri.EscapeDataString(_local)}&art={Uri.EscapeDataString(_d!.ArtCod)}";
+        if (!string.IsNullOrWhiteSpace(Ref)) url += $"&ref={Uri.EscapeDataString(Ref)}";
+        return url;
+    }
+
     private async Task AbrirEvento(ExplicarMovimientoDto m)
     {
         if (m.EventoId <= 0) return;
         _evt = await EventosApi.DetalleAsync(m.EventoId);
         if (_evt is not null) _modalEvt = true;
+    }
+
+    // Lleva a Reemplazos abriendo el registro EXACTO (#id de la fila); ahí se ve la Acción tomada.
+    // Si la fila no trae id, cae al filtro por artículo. Con "Volver" que regresa a esta consulta.
+    private void AbrirReemplazo(ExplicarMovimientoDto m)
+    {
+        if (_d is null || string.IsNullOrEmpty(_d.ArtCod)) return;
+        var volver = Uri.EscapeDataString(VolverAcaUrl());
+        var destino = m.ReemplazoId > 0
+            ? $"/logistica/reemplazos?abrir={m.ReemplazoId}&todos=true&ref={volver}"
+            : $"/logistica/reemplazos?art={Uri.EscapeDataString(_d.ArtCod)}&todos=true&ref={volver}";
+        Nav.NavigateTo(destino);
     }
 
     private int PacksReset(ExplicarMovimientoDto m)
@@ -389,17 +427,25 @@
         return string.Join(" · ", p) + "   →   PENDIENTE: " + r.Pendiente;
     }
 
-    private static string MovClase(ExplicarMovimientoDto m) => m.Orden switch
+    // Fila de REEMPLAZO (pedido/bloqueo): Origen='REEMPLAZO'. Se pinta de rojo y linkea al reemplazo.
+    private static bool EsReemplazo(ExplicarMovimientoDto m)
+        => string.Equals(m.Origen?.Trim(), "REEMPLAZO", StringComparison.OrdinalIgnoreCase);
+
+    private static string MovClase(ExplicarMovimientoDto m)
     {
-        0 => "cr-m-ancla",
+        if (EsReemplazo(m)) return "cr-m-reemplazo";
+        return m.Orden switch
+        {
+            0 => "cr-m-ancla",
         1 => m.Tipo.Contains("Refuerzo dia", StringComparison.OrdinalIgnoreCase) ? "cr-m-refuerzo" : "cr-m-noche",
         2 => m.SaldoDelta == 0 ? "cr-m-rot-huerfana" : "cr-m-rot",
         3 => "cr-m-falla",
         5 => "cr-m-ajuste",
         6 => m.Tipo.Contains("[sin visar]", StringComparison.OrdinalIgnoreCase) ? "cr-m-evt-pend" : "cr-m-evt",
-        8 or 9 => "cr-m-resumen",
-        _ => ""
-    };
+            8 or 9 => "cr-m-resumen",
+            _ => ""
+        };
+    }
 
     private static string SaldoClase(ExplicarMovimientoDto m, int cantPack)
     {

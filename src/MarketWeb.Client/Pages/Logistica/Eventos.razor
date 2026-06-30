@@ -5,10 +5,18 @@
 @inject ReposicionApi RepoApi
 @inject PageStateService State
 @inject UiService Ui
+@inject NavigationManager Nav
 
 <PageTitle>Eventos reposición</PageTitle>
 
 <div class="market-page">
+    @if (!string.IsNullOrWhiteSpace(Ref))
+    {
+        <button class="btn-volver" @onclick="Volver">
+            <span class="ico"><i class="fa-solid fa-arrow-left"></i></span>
+            <span>Volver</span>
+        </button>
+    }
     <PageHeader Modulo="Logística" Titulo="Eventos" Icono="fa-solid fa-triangle-exclamation" CompartirQuery="@CompartirQuery" />
     <p class="text-muted market-hint" style="margin-top:-.6rem">
         Sobrantes y faltantes que cargan los locales en piso. Doble clic / botón para ver el detalle, foto y marcarlo como procesado.
@@ -32,18 +40,41 @@
             <label class="form-label small text-muted mb-1">Hasta</label>
             <input type="date" class="form-control" @bind="_hasta" />
         </div>
+        <div>
+            <label class="form-label small text-muted mb-1">Código artículo</label>
+            <input class="form-control" style="width:150px" @bind="_artFiltro" @bind:event="oninput" placeholder="Ej: IH097" />
+        </div>
         <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" id="chkTodos" @bind="_verTodos" />
+            <input class="form-check-input" type="checkbox" id="chkTodos" @bind="_verTodos" @bind:after="Cargar" />
             <label class="form-check-label small" for="chkTodos">Ver todos (incluye procesados)</label>
         </div>
         <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-magnifying-glass me-1"></i> Buscar</button>
     </div>
 
+    @if (!_cargando && ItemsFiltrados.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2">
+                <i class="fa-solid fa-clock me-1"></i> Sin procesar: <strong>@Pendientes</strong>
+            </span>
+            <span class="badge rounded-pill bg-success-subtle text-success-emphasis border border-success-subtle px-3 py-2">
+                <i class="fa-solid fa-check me-1"></i> Procesados: <strong>@Procesados</strong>
+            </span>
+            <span class="badge rounded-pill bg-light text-muted border px-3 py-2">
+                Total: <strong>@ItemsFiltrados.Count</strong>
+            </span>
+            @if (!_verTodos)
+            {
+                <span class="small text-muted align-self-center">(marcá "Ver todos" para incluir los ya procesados)</span>
+            }
+        </div>
+    }
+
     @if (_cargando)
     {
         <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
     }
-    else if (_items.Count == 0)
+    else if (ItemsFiltrados.Count == 0)
     {
         <div class="market-empty"><i class="fa-solid fa-triangle-exclamation"></i><p>No hay eventos para el filtro.</p></div>
     }
@@ -59,7 +90,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var ev in _items)
+                    @foreach (var ev in ItemsFiltrados)
                     {
                         <tr class="@(ev.Estado != "PENDIENTE" ? "ev-cerrado" : "")" @ondblclick="() => AbrirDetalle(ev.Id)">
                             <td class="small">@ev.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
@@ -99,9 +130,9 @@
             </table>
         </div>
         <p class="text-muted small">
-            @_items.Count evento@(_items.Count == 1 ? "" : "s") ·
-            @_items.Count(e => e.TipoDiferencia == "SOBRANTE") sobrante(s) ·
-            @_items.Count(e => e.TipoDiferencia == "FALTANTE") faltante(s)
+            @ItemsFiltrados.Count evento@(ItemsFiltrados.Count == 1 ? "" : "s") ·
+            @ItemsFiltrados.Count(e => e.TipoDiferencia == "SOBRANTE") sobrante(s) ·
+            @ItemsFiltrados.Count(e => e.TipoDiferencia == "FALTANTE") faltante(s)
         </p>
     }
 </div>
@@ -168,11 +199,12 @@
                                 <select class="form-select form-select-sm" style="min-width:200px" @bind="_accion" @bind:after="GuardarAccion">
                                     <option value="">— sin decidir —</option>
                                     <option value="RESETEAR VENTA">RESETEAR VENTA</option>
+                                    <option value="REPONER Y RESETEAR VENTA">REPONER Y RESETEAR VENTA</option>
                                     <option value="ENVIAR REFUERZO">ENVIAR REFUERZO</option>
                                     <option value="ESPERAR VENTA">ESPERAR VENTA</option>
                                 </select>
                             </div>
-                            @if (_accion == "RESETEAR VENTA")
+                            @if (EsAccionReset)
                             {
                                 <div class="flex-grow-1" style="min-width:160px">
                                     <label class="form-label small text-muted mb-1">Comentario (opcional)</label>
@@ -184,7 +216,7 @@
                                 </button>
                             }
                         </div>
-                        @if (_accion == "RESETEAR VENTA")
+                        @if (EsAccionReset)
                         {
                             <div class="form-text">Re-ancla el artículo al último remito y pone el pendiente en cero. FALTANTE suma packs, SOBRANTE los resta.</div>
                         }
@@ -256,6 +288,10 @@
     private bool _verTodos;
 
     private List<EventoDto> _items = new();
+    private string _artFiltro = "";
+    private List<EventoDto> ItemsFiltrados => string.IsNullOrWhiteSpace(_artFiltro)
+        ? _items
+        : _items.Where(e => (e.ArtCod ?? "").Contains(_artFiltro.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
     private bool _cargando = true;
 
     private bool _modal, _accionando;
@@ -276,13 +312,17 @@
     [Parameter, SupplyParameterFromQuery(Name = "desde")] public string? DesdeQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "hasta")] public string? HastaQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "todos")] public bool? TodosQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "abrir")] public int? AbrirId { get; set; }   // abre ese evento al entrar (desde la consulta)
+    [Parameter, SupplyParameterFromQuery(Name = "ref")] public string? Ref { get; set; }      // de dónde se llegó (Volver)
 
     private string CompartirQuery =>
-        $"local={Uri.EscapeDataString(_local)}&desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}" + (_verTodos ? "&todos=1" : "");
+        $"local={Uri.EscapeDataString(_local)}&desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}" + (_verTodos ? "&todos=true" : "");
+
+    private void Volver() => Nav.NavigateTo(Ref!);
 
     protected override async Task OnInitializedAsync()
     {
-        var hayQuery = LocalQ != null || DesdeQ != null || HastaQ != null || TodosQ.HasValue;
+        var hayQuery = LocalQ != null || DesdeQ != null || HastaQ != null || TodosQ.HasValue || AbrirId.HasValue;
 
         if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
@@ -295,8 +335,13 @@
             if (DateTime.TryParse(DesdeQ, out var d)) _desde = d;
             if (DateTime.TryParse(HastaQ, out var h)) _hasta = h;
             if (TodosQ.HasValue) _verTodos = TodosQ.Value;
+            // Si vino con ?abrir=, mostramos todos para que el evento aparezca en la grilla aunque ya esté procesado.
+            if (AbrirId.HasValue) _verTodos = true;
         }
         await Cargar();
+
+        // Deep-link a un evento puntual (desde la Consulta de Reposición): abre su ficha para procesarlo.
+        if (AbrirId is int aid && aid > 0) await AbrirDetalle(aid);
     }
 
     public void Dispose()
@@ -360,6 +405,14 @@
         finally { _guardandoMotivo = false; }
     }
 
+    // Contadores del reporte (sobre lo cargado): con "Ver todos" reflejan el total real del filtro.
+    private int Pendientes => ItemsFiltrados.Count(e => e.Estado == "PENDIENTE");
+    private int Procesados => ItemsFiltrados.Count(e => e.Estado != "PENDIENTE");
+
+    // Solo RESETEAR VENTA dispara el reset manual al instante. En REPONER Y RESETEAR VENTA
+    // el reset lo resuelve el SP cuando entra el remito de reposición (reset por remito posterior).
+    private bool EsAccionReset => _accion == "RESETEAR VENTA";
+
     private async Task GuardarAccion()
     {
         if (_det is null) return;
@@ -383,8 +436,15 @@
     {
         if (_det is null) return;
         _accionando = true;
-        if (await Api.MarcarProcesadoAsync(_det.Id)) _det.Procesado = true;
+        var ok = await Api.MarcarProcesadoAsync(_det.Id);
         _accionando = false;
+        if (ok)
+        {
+            _det.Procesado = true;
+            // Si se llegó desde la Consulta de Reposición (?ref=), volvemos a ESA consulta para seguir
+            // procesando los eventos del MISMO artículo (no al reporte, que mezcla artículos y hace perder el hilo).
+            if (!string.IsNullOrWhiteSpace(Ref)) { Nav.NavigateTo(Ref); return; }
+        }
         await Cargar();
     }
 

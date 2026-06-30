@@ -200,10 +200,24 @@ public sealed class EventosService : IEventosService
     {
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
+        await EnsureAccionAnchoAsync(cn, ct);   // "REPONER Y RESETEAR VENTA" (24) no entra en NVARCHAR(20)
         await using var cmd = new SqlCommand(
             "UPDATE MARKET.dbo.EventosReposicion SET Accion = NULLIF(@a, '') WHERE ID = @ID", cn);
         cmd.Parameters.Add("@ID", SqlDbType.Int).Value = id;
-        cmd.Parameters.Add("@a", SqlDbType.NVarChar, 20).Value = (accion ?? "").Trim();
+        cmd.Parameters.Add("@a", SqlDbType.NVarChar, 50).Value = (accion ?? "").Trim();
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // Ensancha EventosReposicion.Accion a NVARCHAR(50) si está más angosta. Idempotente y barato.
+    private static async Task EnsureAccionAnchoAsync(SqlConnection cn, CancellationToken ct)
+    {
+        const string ddl = @"
+IF COL_LENGTH('MARKET.dbo.EventosReposicion','Accion') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID('MARKET.dbo.EventosReposicion')
+                 AND name = 'Accion' AND max_length < 100)
+    ALTER TABLE MARKET.dbo.EventosReposicion ALTER COLUMN Accion NVARCHAR(50) NULL;";
+        await using var cmd = new SqlCommand(ddl, cn);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -268,6 +282,64 @@ SELECT @id;";
         cmd.Parameters.Add("@aud", SqlDbType.NVarChar, 200).Value = $"Alta web {usuario}".Trim();
         var id = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
         return new MotivoEventoDto { Id = id, Nombre = n };
+    }
+
+    public async Task<MotivosReporteDto> MotivosReporteAsync(DateTime desde, DateTime hasta, string local, CancellationToken ct = default)
+    {
+        var filtraLocal = !string.IsNullOrWhiteSpace(local) && local != "TODOS";
+
+        await using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await EnsureMotivosSchemaAsync(cn, ct);   // tabla/columna pueden no existir en una base virgen
+
+        var sql =
+            "SELECT ER.ID, RTRIM(ER.Local) AS Local, ER.FechaEvento, " +
+            "       RTRIM(ISNULL(ER.ARTCOD,'')) AS ARTCOD, ER.DescripcionArt, " +
+            "       RTRIM(ER.TipoDiferencia) AS TipoDiferencia, ER.Procesado, " +
+            "       RTRIM(ISNULL(MO.Nombre, N'(sin motivo)')) AS Motivo " +
+            "FROM MARKET.dbo.EventosReposicion ER " +
+            "LEFT JOIN MARKET.dbo.MotivosEvento MO ON MO.ID = ER.IDMotivoEvento " +
+            "WHERE ER.FechaEvento >= @Desde AND ER.FechaEvento < DATEADD(DAY, 1, @Hasta) " +
+            "  AND ISNULL(ER.Eliminado, 0) = 0 " +
+            "  AND ISNULL(ER.Procesado, 0) = 1 " +                                   // solo procesados
+            "  AND ER.IDMotivoEvento IS NOT NULL " +                                 // con un motivo real (sin '(sin motivo)')
+            "  AND UPPER(RTRIM(ISNULL(MO.Nombre, ''))) NOT LIKE N'%YA PROCESAD%' ";  // sin los repetidos (filler), tolera variantes
+        if (filtraLocal) sql += "  AND UPPER(RTRIM(ER.Local)) = UPPER(@Local) ";
+        sql += "ORDER BY ER.FechaEvento DESC";
+
+        await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 60 };
+        cmd.Parameters.Add("@Desde", SqlDbType.Date).Value = desde.Date;
+        cmd.Parameters.Add("@Hasta", SqlDbType.Date).Value = hasta.Date;
+        if (filtraLocal) cmd.Parameters.Add("@Local", SqlDbType.VarChar, 20).Value = local;
+
+        var registro = new List<EventoMotivoDto>();
+        await using (var rdr = await cmd.ExecuteReaderAsync(ct))
+        {
+            while (await rdr.ReadAsync(ct))
+            {
+                registro.Add(new EventoMotivoDto
+                {
+                    Id = Convert.ToInt32(rdr["ID"]),
+                    Fecha = Convert.ToDateTime(rdr["FechaEvento"]),
+                    Local = Str(rdr, "Local"),
+                    ArtCod = Str(rdr, "ARTCOD"),
+                    Descripcion = Str(rdr, "DescripcionArt"),
+                    TipoDiferencia = Str(rdr, "TipoDiferencia"),
+                    Motivo = Str(rdr, "Motivo"),
+                    Procesado = Convert.ToInt32(rdr["Procesado"]) == 1
+                });
+            }
+        }
+
+        // Resumen para la dona: por motivo, de mayor a menor.
+        var resumen = registro
+            .GroupBy(e => e.Motivo)
+            .Select(g => new MotivoConteoDto { Motivo = g.Key, Cantidad = g.Count() })
+            .OrderByDescending(r => r.Cantidad)
+            .ThenBy(r => r.Motivo)
+            .ToList();
+
+        return new MotivosReporteDto { Resumen = resumen, Registro = registro, TotalEventos = registro.Count };
     }
 
     public async Task GuardarMotivoAsync(int idEvento, int idMotivo, CancellationToken ct = default)

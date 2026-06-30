@@ -33,6 +33,9 @@ builder.Services.AddScoped<MapeoApi>();
 builder.Services.AddScoped<ConfigImagenesApi>();
 builder.Services.AddScoped<PacksApi>();
 builder.Services.AddScoped<TelasApi>();
+builder.Services.AddScoped<ViajesApi>();
+builder.Services.AddScoped<OrdenesApi>();
+builder.Services.AddScoped<ServidorApi>();
 builder.Services.AddScoped<DespachosApi>();
 builder.Services.AddScoped<RemitoImpresionApi>();
 builder.Services.AddScoped<PaletsApi>();
@@ -54,7 +57,12 @@ builder.Services.AddSingleton<UiService>();
 builder.Services.AddSingleton<LayoutState>();
 
 // --- Autenticación (estado en el cliente; identidad real en cookie del server) ---
-builder.Services.AddAuthorizationCore();
+builder.Services.AddAuthorizationCore(options =>
+{
+    // Mismas policies que el API (el server igual revalida): habilitan AuthorizeView/[Authorize] en el cliente.
+    options.AddPolicy("Aprobado", p => p.RequireClaim("estado", "ok"));
+    options.AddPolicy("Admin", p => p.RequireClaim("estado", "ok").RequireClaim("perfil", "ADMIN"));
+});
 builder.Services.AddScoped<AuthenticationStateProvider, HostAuthStateProvider>();
 builder.Services.AddScoped<AuthApi>();
 
