@@ -1,0 +1,8 @@
+/* Coloreado de filas (igual que el reporte VB):
+   rosa = no existe en Dragon y sin ficha; amarillo = no existe en Dragon pero con ficha. */
+::deep tr.tbl-danger > td {
+    background: #f8d7da;
+}
+::deep tr.tbl-warn > td {
+    background: #fff3cd;
+}

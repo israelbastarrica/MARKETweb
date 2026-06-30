@@ -1,0 +1,315 @@
+@page "/diseno/ordenes-pedido"
+@inject PedidosOrdenesApi Api
+@inject UiService Ui
+
+<PageTitle>Órdenes de Pedido</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Diseño" Titulo="Órdenes de Pedido" Icono="fa-solid fa-bag-shopping" />
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <button class="btn btn-primary" @onclick="AbrirAlta"><i class="fa-solid fa-plus me-1"></i> Agregar orden</button>
+    </div>
+
+    @* ===== Filtros ===== *@
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">N° Orden</label>
+                <input type="number" class="form-control form-control-sm" @bind="_fNro" @bind:event="oninput" @onkeyup="OnKey" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Cód. Artículo</label>
+                <input class="form-control form-control-sm" @bind="_fCod" @bind:event="oninput" @onkeyup="OnKey" placeholder="003.XXXX" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Tipo</label>
+                <select class="form-select form-select-sm" @bind="_fTipo">
+                    <option value="">TODOS</option>
+                    @foreach (var t in TipoOrden.Todos) { <option value="@t">@t</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Estado</label>
+                <select class="form-select form-select-sm" @bind="_fEstado">
+                    <option value="">TODOS</option>
+                    @foreach (var e in _estados) { <option value="@e">@e</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Proveedor</label>
+                <select class="form-select form-select-sm" @bind="_fProv">
+                    <option value="">TODOS</option>
+                    @foreach (var p in _proveedores) { <option value="@p.Codigo">@p.Codigo - @p.Nombre</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Ficha</label>
+                <select class="form-select form-select-sm" @bind="_fFicha">
+                    <option value="">TODOS</option><option value="SI">Con ficha</option><option value="NO">Sin ficha</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">En Dragon</label>
+                <select class="form-select form-select-sm" @bind="_fDragon">
+                    <option value="">TODOS</option><option value="SI">Existe</option><option value="NO">No existe</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-1">Finalizada</label>
+                <select class="form-select form-select-sm" @bind="_fFin">
+                    <option value="">TODOS</option><option value="SI">Sí</option><option value="NO">No</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2 d-flex gap-2">
+                <button class="btn btn-primary btn-sm flex-grow-1" @onclick="Buscar"><i class="fa-solid fa-magnifying-glass me-1"></i>Buscar</button>
+                <button class="btn btn-outline-secondary btn-sm" title="Limpiar" @onclick="Limpiar"><i class="fa-solid fa-eraser"></i></button>
+            </div>
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_lista.Count == 0)
+    {
+        <div class="market-empty"><i class="fa-solid fa-bag-shopping"></i><p>@(_busco ? "No se encontraron órdenes con esos filtros." : "Tocá Buscar para ver las órdenes.")</p></div>
+    }
+    else
+    {
+        <p class="text-muted small mb-2">@_lista.Count orden(es).</p>
+        <div class="market-card table-responsive" style="max-height:70vh;overflow:auto">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-end">N° Orden</th><th>Tipo</th><th>Cód. Art.</th><th>Descripción</th>
+                        <th class="text-center">Ficha</th><th>Estado</th><th class="text-center">Fin.</th><th>Equi. Talle</th>
+                        <th class="text-center" style="width:90px">Acc.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in _lista)
+                    {
+                        <tr class="@FilaClase(o)">
+                            <td class="text-end">@o.NroOrden</td>
+                            <td>@o.Tipo</td>
+                            <td>@o.CodArt</td>
+                            <td>@o.Descripcion</td>
+                            <td class="text-center">@o.Ficha</td>
+                            <td>@o.Estado</td>
+                            <td class="text-center">@o.Finalizada</td>
+                            <td>@o.EquiTalle</td>
+                            <td class="text-center text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Modificar" @onclick="() => AbrirModificacion(o.Id)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(o)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* ===== Modal alta/modif ===== *@
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <EditForm Model="_editado" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_esAlta ? "Nueva orden de pedido" : "Modificar orden de pedido")</h5>
+                        <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
+                        <div class="row g-3">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">N° Orden</label>
+                                <InputNumber class="form-control" @bind-Value="_editado.NroOrden" />
+                                <ValidationMessage For="() => _editado.NroOrden" />
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label">Cód. Artículo</label>
+                                <InputText class="form-control" @bind-Value="_editado.ArtCod" @onblur="ResolverArticulo" />
+                                <ValidationMessage For="() => _editado.ArtCod" />
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <label class="form-label">Tipo</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.Tipo">
+                                    @foreach (var t in TipoOrden.Todos) { <option value="@t">@t</option> }
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="alert @(_artInfo.ExisteEnDragon ? "alert-success" : "alert-warning") py-2 mb-0">
+                                    @if (_resolviendo)
+                                    {
+                                        <span><i class="fa-solid fa-spinner fa-spin me-1"></i>Buscando en Dragon...</span>
+                                    }
+                                    else if (_artInfo.ExisteEnDragon)
+                                    {
+                                        <span><i class="fa-solid fa-check me-1"></i><strong>@_artInfo.Descripcion</strong></span>
+                                        @if (!string.IsNullOrEmpty(_artInfo.Proveedor)) { <span class="ms-2 text-muted">· Prov: @_artInfo.CodProveedor - @_artInfo.Proveedor</span> }
+                                    }
+                                    else
+                                    {
+                                        <span><i class="fa-solid fa-triangle-exclamation me-1"></i>No existe en Dragon — cargá una descripción alternativa.</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-7">
+                                <label class="form-label">Descripción alternativa @(_artInfo.ExisteEnDragon ? "(opcional)" : "")</label>
+                                <InputText class="form-control" @bind-Value="_editado.DescripcionALT" disabled="@_artInfo.ExisteEnDragon" />
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <label class="form-label">Equivalencia de talles</label>
+                                <InputSelect class="form-select" @bind-Value="_editado.IdEquiTalle">
+                                    <option value="">— (ninguna) —</option>
+                                    @foreach (var eq in _equivalencias) { <option value="@eq.Id">@eq.Descripcion</option> }
+                                </InputSelect>
+                            </div>
+                            @if (!_esAlta && _tieneFicha)
+                            {
+                                <div class="col-12"><small class="text-muted"><i class="fa-solid fa-paperclip me-1"></i>Esta orden tiene una ficha técnica cargada (la carga/edición de fichas viene en la próxima fase).</small></div>
+                            }
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="() => _modal = false">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@_guardando">
+                            @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } Guardar
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    // Filtros
+    private int? _fNro;
+    private string _fCod = "", _fTipo = "", _fEstado = "", _fProv = "", _fFicha = "", _fDragon = "", _fFin = "";
+
+    private List<PedidoOrdenListaDto> _lista = new();
+    private List<string> _estados = new();
+    private List<EquivalenciaTalleDto> _equivalencias = new();
+    private List<ProveedorOrdenDto> _proveedores = new();
+    private bool _cargando, _busco;
+
+    // ABM
+    private bool _modal, _esAlta, _guardando, _resolviendo, _tieneFicha;
+    private int _idEditado;
+    private string? _errorModal;
+    private PedidoOrdenSaveRequest _editado = new();
+    private ArticuloDragonDto _artInfo = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _estados = await Api.EstadosAsync();
+        _equivalencias = await Api.EquivalenciasTallesAsync();
+        _proveedores = await Api.ProveedoresAsync();
+        await Buscar();
+    }
+
+    private PedidoOrdenFiltro Filtro() => new()
+    {
+        NroOrden = _fNro,
+        CodArt = string.IsNullOrWhiteSpace(_fCod) ? null : _fCod,
+        Tipo = string.IsNullOrWhiteSpace(_fTipo) ? null : _fTipo,
+        Estado = string.IsNullOrWhiteSpace(_fEstado) ? null : _fEstado,
+        Ficha = string.IsNullOrWhiteSpace(_fFicha) ? null : _fFicha,
+        ArtDragon = string.IsNullOrWhiteSpace(_fDragon) ? null : _fDragon,
+        CodProveedor = string.IsNullOrWhiteSpace(_fProv) ? null : _fProv,
+        Finalizada = string.IsNullOrWhiteSpace(_fFin) ? null : _fFin,
+    };
+
+    private async Task Buscar()
+    {
+        _cargando = true;
+        try { _lista = await Api.ListarAsync(Filtro()); _busco = true; }
+        finally { _cargando = false; }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Buscar(); }
+
+    private async Task Limpiar()
+    {
+        _fNro = null; _fCod = _fTipo = _fEstado = _fProv = _fFicha = _fDragon = _fFin = "";
+        await Buscar();
+    }
+
+    private static string FilaClase(PedidoOrdenListaDto o)
+    {
+        if (o.Descripcion == "NO EXISTE EN DRAGON")
+            return o.Ficha == "SI" ? "tbl-warn" : "tbl-danger";
+        return "";
+    }
+
+    private void AbrirAlta()
+    {
+        _esAlta = true;
+        _idEditado = 0;
+        _editado = new PedidoOrdenSaveRequest { Tipo = TipoOrden.Nacional };
+        _artInfo = new ArticuloDragonDto { ExisteEnDragon = false };
+        _tieneFicha = false;
+        _errorModal = null;
+        _modal = true;
+    }
+
+    private async Task AbrirModificacion(int id)
+    {
+        var o = await Api.ObtenerAsync(id);
+        if (o is null) { Ui.Error("No se encontró la orden."); return; }
+        _esAlta = false;
+        _idEditado = id;
+        _editado = new PedidoOrdenSaveRequest
+        {
+            NroOrden = o.NroOrden,
+            ArtCod = o.ArtCod ?? "",
+            Tipo = string.IsNullOrWhiteSpace(o.Tipo) ? TipoOrden.Nacional : o.Tipo,
+            DescripcionALT = o.DescripcionALT,
+            IdEquiTalle = o.IdEquiTalle,
+        };
+        _tieneFicha = o.TieneFicha;
+        _errorModal = null;
+        _modal = true;
+        await ResolverArticulo();
+    }
+
+    private async Task ResolverArticulo()
+    {
+        if (string.IsNullOrWhiteSpace(_editado.ArtCod)) { _artInfo = new ArticuloDragonDto(); return; }
+        _resolviendo = true;
+        try { _artInfo = await Api.ResolverArticuloAsync(_editado.ArtCod); }
+        finally { _resolviendo = false; }
+    }
+
+    private async Task Guardar()
+    {
+        _errorModal = null;
+        _guardando = true;
+        var res = _esAlta ? await Api.CrearAsync(_editado) : await Api.ModificarAsync(_idEditado, _editado);
+        _guardando = false;
+        if (!res.Ok) { _errorModal = res.Error; return; }
+        _modal = false;
+        Ui.Exito(_esAlta ? "Orden agregada." : "Orden modificada.");
+        await Buscar();
+    }
+
+    private async Task Eliminar(PedidoOrdenListaDto o)
+    {
+        var ok = await Ui.ConfirmAsync($"¿Eliminar la orden N° {o.NroOrden} ({o.CodArt})?", "Eliminar orden", "Eliminar", "Cancelar", peligro: true);
+        if (!ok) return;
+        var (okDel, err) = await Api.EliminarAsync(o.Id);
+        if (!okDel) { Ui.Error(err ?? "No se pudo eliminar."); return; }
+        Ui.Exito("Orden eliminada.");
+        await Buscar();
+    }
+}
