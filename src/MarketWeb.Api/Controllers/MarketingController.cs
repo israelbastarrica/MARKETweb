@@ -13,6 +13,10 @@ public sealed class MarketingController : ControllerBase
     private readonly IMarketingService _service;
     public MarketingController(IMarketingService service) => _service = service;
 
+    [HttpGet("dashboard")]
+    public async Task<ActionResult<MktDashboardDto>> Dashboard(CancellationToken ct)
+        => Ok(await _service.DashboardAsync(ct));
+
     [HttpGet("perfiles")]
     public async Task<ActionResult<IReadOnlyList<MktPerfilDto>>> Perfiles(CancellationToken ct)
         => Ok(await _service.PerfilesAsync(ct));

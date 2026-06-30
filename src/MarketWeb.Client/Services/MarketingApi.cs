@@ -9,6 +9,9 @@ public sealed class MarketingApi
     private readonly HttpClient _http;
     public MarketingApi(HttpClient http) => _http = http;
 
+    public async Task<MktDashboardDto> DashboardAsync()
+        => await _http.GetFromJsonAsync<MktDashboardDto>("api/marketing/dashboard") ?? new();
+
     public async Task<List<MktPerfilDto>> PerfilesAsync()
         => await _http.GetFromJsonAsync<List<MktPerfilDto>>("api/marketing/perfiles") ?? new();
 

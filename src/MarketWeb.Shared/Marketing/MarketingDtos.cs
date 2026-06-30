@@ -9,6 +9,30 @@ public sealed class MktPerfilDto
     public DateTime? FechaHora { get; set; }
 }
 
+/// <summary>Un punto de una serie temporal (para el gráfico de tendencia).</summary>
+public sealed class MktSeriePuntoDto
+{
+    public DateTime Fecha { get; set; }
+    public long Valor { get; set; }
+}
+
+/// <summary>KPIs + tendencia + contenido destacado para el Dashboard de Marketing (insights de cuenta).</summary>
+public sealed class MktDashboardDto
+{
+    public DateTime? Hasta { get; set; }
+    public int? VisualizacionesIG { get; set; }       // IG views (período)
+    public int? Alcance { get; set; }                 // IG reach del período (seguidores + no)
+    public int? AlcanceSeguidores { get; set; }
+    public int? AlcanceNoSeguidores { get; set; }
+    public int? Interacciones { get; set; }           // IG total_interactions
+    public int? CuentasAlcanzadas { get; set; }       // IG accounts_engaged
+    public int? FbInteracciones { get; set; }         // FB page_post_engagements (suma del período)
+    public int? FbSeguidoresNuevos { get; set; }      // FB page_daily_follows (suma)
+    public int? FbDejaronSeguir { get; set; }         // FB page_daily_unfollows (suma)
+    public List<MktSeriePuntoDto> AlcanceSerie { get; set; } = new();   // alcance IG por día (tendencia)
+    public List<MktPublicacionDto> Destacados { get; set; } = new();    // top publicaciones por alcance
+}
+
 /// <summary>Una publicación con sus últimas métricas (catálogo + snapshot más reciente).</summary>
 public sealed class MktPublicacionDto
 {
