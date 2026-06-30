@@ -207,6 +207,20 @@
             </div>
         </div>
 
+        <div id="admin-view-7" class="view-panel view-admin hidden">
+            <h2 class="view-title">🗺️ VENDIDOS HOY <span style="color: var(--peralta-color);">SIN MAPEAR</span> <span style="font-size:1.1vw; color:var(--text-muted);">— se venden pero no están en el mapeo del local (no entran a la reposición)</span></h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="card table-container">
+                    <h2 style="color: var(--luro-color); text-align: center; margin-top: 0;">LURO <span id="nomap-luro-count" style="font-size:1.2vw; color: var(--text-muted);"></span></h2>
+                    <table><thead><tr><th style="width: 22%;">Código</th><th style="width: 58%;">Descripción</th><th style="width: 20%; text-align: center;">Unidades</th></tr></thead><tbody id="tbody-nomap-luro"></tbody></table>
+                </div>
+                <div class="card table-container">
+                    <h2 style="color: var(--peralta-color); text-align: center; margin-top: 0;">PERALTA <span id="nomap-peralta-count" style="font-size:1.2vw; color: var(--text-muted);"></span></h2>
+                    <table><thead><tr><th style="width: 22%;">Código</th><th style="width: 58%;">Descripción</th><th style="width: 20%; text-align: center;">Unidades</th></tr></thead><tbody id="tbody-nomap-peralta"></tbody></table>
+                </div>
+            </div>
+        </div>
+
         <div id="cajero-view-0" class="view-panel view-cajero hidden">
             <div class="cajero-layout">
                 <div class="card kpi-card kpi-card-cajero" id="cajero-kpi-border">
@@ -231,6 +245,14 @@
                 <div class="card local-panel" id="fichadas-cajero-panel">
                     <div id="fichadas-cajero"></div>
                 </div>
+            </div>
+        </div>
+
+        <div id="cajero-view-3" class="view-panel view-cajero hidden">
+            <h2 class="view-title">🗺️ VENDIDOS HOY <span style="color: var(--proj-color);">SIN MAPEAR</span> <span style="font-size:1.1vw; color:var(--text-muted);">— se venden pero no están en el mapeo del local (no entran a la reposición)</span></h2>
+            <div class="card table-container" style="max-width: 1100px; margin: 0 auto;">
+                <h2 id="nomap-cajero-titulo" style="text-align: center; margin-top: 0;">Mi Sucursal <span id="nomap-cajero-count" style="font-size:1.2vw; color: var(--text-muted);"></span></h2>
+                <table><thead><tr><th style="width: 22%;">Código</th><th style="width: 58%;">Descripción</th><th style="width: 20%; text-align: center;">Unidades</th></tr></thead><tbody id="tbody-nomap-cajero"></tbody></table>
             </div>
         </div>
 
@@ -374,11 +396,11 @@
                 if (!isPaused) document.getElementById('reloj').innerText = 'Act: ' + new Date().toLocaleTimeString();
 
                 if (rolUsuario === 'admin') {
-                    totalVistas = 7;
+                    totalVistas = 8;
                     updateAdmin();
                     updateFichadasAdmin();
                 } else if (rolUsuario === 'cajero') {
-                    totalVistas = 3;
+                    totalVistas = 4;
                     updateCajero();
                     updateFichadasCajero();
                 }
@@ -512,6 +534,18 @@
             updS(grafico7Luro, dataGlobal.ultimos_7_dias.LURO); updS(grafico7Peralta, dataGlobal.ultimos_7_dias.PERALTA);
 
             document.getElementById('table-tipos-balance').innerHTML = dataGlobal.top_tipos_balance.map((t, i) => { let saldo = t.reposicion - t.venta; let cS = saldo >= 0 ? 'saldo-pos' : 'saldo-neg'; return `<tr><td>${i+1}</td><td>${t.descripcion}</td><td style="text-align:center; color: var(--text-muted);">${nf(t.venta)}</td><td style="text-align:center; color: #58a6ff;">${nf(t.reposicion)}</td><td style="text-align:right;" class="${cS}">${saldo>0?'+':''}${nf(saldo)}</td></tr>`; }).join('');
+
+            // Vendidos hoy SIN mapear (admin-view-7): por local, lo que se vendió y no está en el mapeo.
+            const renderNoMap = (tbodyId, countId, items) => {
+                items = items || [];
+                document.getElementById(countId).innerText = items.length ? '(' + items.length + ')' : '';
+                document.getElementById(tbodyId).innerHTML = items.length
+                    ? items.map(a => `<tr><td style="color: var(--text-muted);">${a.codigo||''}</td><td>${a.descripcion||''}</td><td style="text-align:center; font-weight:bold;">${nf(a.unidades)}</td></tr>`).join('')
+                    : '<tr><td colspan="3" style="text-align:center; color: var(--text-muted); padding:40px;">Todo lo vendido hoy está mapeado ✓</td></tr>';
+            };
+            const vnm = dataGlobal.ventas_no_mapeadas || {};
+            renderNoMap('tbody-nomap-luro', 'nomap-luro-count', vnm.LURO);
+            renderNoMap('tbody-nomap-peralta', 'nomap-peralta-count', vnm.PERALTA);
         }
 
         // --- Rubro interactivo: drill Rubro → Familia → Grupo → Artículo ---
@@ -635,6 +669,14 @@
             document.getElementById('list-cajero-ranking').innerHTML = Object.entries(d.por_cajero).sort((a,b)=>b[1]-a[1]).map(([n,v], i) =>
                 `<div class="list-item" style="font-size: 2.5vw;"><span class="item-name">${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}${n}</span><span class="item-value">${v} Tks</span></div>`
             ).join('');
+
+            // Vendidos hoy SIN mapear (cajero-view-3): solo el local del cajero.
+            const cajNoMap = dataGlobal.ventas_no_mapeadas || [];
+            document.getElementById('nomap-cajero-titulo').innerHTML = 'Sucursal ' + d.local + ' <span id="nomap-cajero-count" style="font-size:1.2vw; color: var(--text-muted);">' + (cajNoMap.length ? '(' + cajNoMap.length + ')' : '') + '</span>';
+            document.getElementById('nomap-cajero-titulo').style.color = colorHex;
+            document.getElementById('tbody-nomap-cajero').innerHTML = cajNoMap.length
+                ? cajNoMap.map(a => `<tr><td style="color: var(--text-muted);">${a.codigo||''}</td><td>${a.descripcion||''}</td><td style="text-align:center; font-weight:bold;">${nf(a.unidades)}</td></tr>`).join('')
+                : '<tr><td colspan="3" style="text-align:center; color: var(--text-muted); padding:40px;">Todo lo vendido hoy está mapeado ✓</td></tr>';
         }
 
         function renderDots() {
