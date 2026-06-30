@@ -68,10 +68,11 @@ IF COL_LENGTH('dbo.MKT_RedesMetricas','ImpresionesOrganico') IS NULL ALTER TABLE
         var hoy = ahora.Date;
 
         var (igFollowers, igMedia, igPosts) = await FetchInstagramAsync(token!, igUser!, limite, ct);
-        var (fbFollowers, fbFans, fbPosts) = await FetchFacebookAsync(token!, limite, ct);
+        var (fbFollowers, _, fbPosts) = await FetchFacebookAsync(token!, limite, ct);
 
         await UpsertPerfilAsync(cn, "IG", igFollowers, igMedia, hoy, ahora, ct);
-        await UpsertPerfilAsync(cn, "FB", fbFollowers, fbFans, hoy, ahora, ct);
+        // FB no tiene media_count directo; no usamos fan_count como publicaciones (≈ seguidores, confunde).
+        await UpsertPerfilAsync(cn, "FB", fbFollowers, null, hoy, ahora, ct);
 
         int n = 0;
         foreach (var (red, posts) in new[] { ("IG", igPosts), ("FB", fbPosts) })
@@ -198,8 +199,9 @@ IF COL_LENGTH('dbo.MKT_RedesMetricas','ImpresionesOrganico') IS NULL ALTER TABLE
                 catch { }
                 try
                 {
-                    var ins = await GetAsync($"{id}/insights", new[] { ("metric", "post_impressions_paid,post_impressions_organic") }, ptoken, ct);
+                    var ins = await GetAsync($"{id}/insights", new[] { ("metric", "post_impressions_unique,post_impressions_paid,post_impressions_organic") }, ptoken, ct);
                     var v = Insights(ins);
+                    met["Alcance"] = v.GetValueOrDefault("post_impressions_unique");
                     met["ImpresionesPago"] = v.GetValueOrDefault("post_impressions_paid");
                     met["ImpresionesOrganico"] = v.GetValueOrDefault("post_impressions_organic");
                 }

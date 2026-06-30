@@ -37,6 +37,14 @@
             </select>
         </div>
         <div>
+            <label class="form-label small text-muted mb-1">Pauta</label>
+            <select class="form-select" @bind="_pauta">
+                <option value="TODAS">Todas</option>
+                <option value="ORG">Orgánicas</option>
+                <option value="PAGA">Pagadas</option>
+            </select>
+        </div>
+        <div>
             <label class="form-label small text-muted mb-1">Mostrar</label>
             <select class="form-select" @bind="_top" @bind:after="Cargar">
                 <option value="50">Últimas 50</option>
@@ -72,7 +80,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var p in _posts)
+                    @foreach (var p in PostsFiltrados)
                     {
                         <tr>
                             <td><i class="@(p.Red == "IG" ? "fa-brands fa-instagram text-danger" : "fa-brands fa-facebook text-primary")" title="@p.Red"></i></td>
@@ -80,13 +88,12 @@
                             <td class="text-center">
                                 @if (p.Pagada)
                                 {
-                                    <span class="badge bg-success" title="@($"{p.ImpresionesPago:N0} impresiones pagas · {p.ImpresionesOrganico:N0} orgánicas")">Pagada</span>
+                                    <span class="badge text-bg-success" title="@($"{p.ImpresionesPago:N0} impresiones pagas · {p.ImpresionesOrganico:N0} orgánicas · gasto {p.MonedaAd} {p.Gasto:N0}")">Pagada</span>
                                 }
-                                else if (p.Red == "FB")
+                                else
                                 {
-                                    <span class="badge bg-light text-muted">Orgánica</span>
+                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">Orgánica</span>
                                 }
-                                else { <span class="text-muted">—</span> }
                             </td>
                             <td class="small text-nowrap">@(p.FechaPublicacion?.ToString("dd/MM/yy HH:mm") ?? "—")</td>
                             <td class="small" style="max-width:280px"><div class="text-truncate" title="@p.Texto">@p.Texto</div></td>
@@ -108,7 +115,7 @@
                 </tbody>
             </table>
         </div>
-        <p class="small text-muted mt-2">@_posts.Count publicaciones · métricas del último snapshot por post.</p>
+        <p class="small text-muted mt-2">@PostsFiltrados.Count de @_posts.Count publicaciones · métricas del último snapshot por post.</p>
     }
 </div>
 
@@ -116,8 +123,16 @@
     private List<MktPerfilDto> _perfiles = new();
     private List<MktPublicacionDto> _posts = new();
     private string _red = "TODOS";
+    private string _pauta = "TODAS";
     private int _top = 100;
     private bool _cargando = true;
+
+    private List<MktPublicacionDto> PostsFiltrados => _pauta switch
+    {
+        "PAGA" => _posts.Where(p => p.Pagada).ToList(),
+        "ORG" => _posts.Where(p => !p.Pagada).ToList(),
+        _ => _posts
+    };
 
     protected override async Task OnInitializedAsync()
     {
