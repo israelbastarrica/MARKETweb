@@ -52,7 +52,6 @@ public static class DependencyInjection
         services.AddScoped<IPaletsService, PaletsService>();
         services.AddScoped<IPacksService, PacksService>();
         services.AddScoped<ITelasService, TelasService>();
-        services.AddScoped<MarketWeb.Application.PedidosOrdenes.IPedidosOrdenesService, MarketWeb.Application.PedidosOrdenes.PedidosOrdenesService>();
         services.AddSingleton<EstancadosCache>();
         services.AddSingleton<BackgroundCache<List<MarketWeb.Shared.LogisticaDashboard.ArticuloUbicacionesDto>>>();
         services.AddSingleton(new BackgroundCache<MarketWeb.Application.LogisticaDashboard.ReposFast> { Ttl = TimeSpan.FromSeconds(60) });
