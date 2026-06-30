@@ -110,30 +110,39 @@ CREATE TABLE dbo.MKT_RedesInsights (
 
         var ahora = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TzAr).DateTime;
         var hasta = ahora.Date;
-        var s = hasta.AddDays(-dias).ToString("yyyy-MM-dd");
-        var u = hasta.ToString("yyyy-MM-dd");
-        int n = 0;
 
-        // IG
-        n += await SerieDiaAsync(cn, "IG", igUser!, "reach", token!, s, u, ahora, ct);
-        n += await TotalValueAsync(cn, "IG", igUser!, "views", token!, s, u, ahora, ct);
-        n += await TotalValueAsync(cn, "IG", igUser!, "total_interactions", token!, s, u, ahora, ct);
-        n += await TotalValueAsync(cn, "IG", igUser!, "accounts_engaged", token!, s, u, ahora, ct);
-        n += await TotalValueAsync(cn, "IG", igUser!, "reach", token!, s, u, ahora, ct, "follow_type");
-
-        // FB (con el page token)
+        // page token de FB (una vez)
+        string? pid = null, ptoken = null;
         try
         {
             var acc = await GetAsync("me/accounts", new[] { ("fields", "id,access_token") }, token!, ct);
             var pg = acc.GetProperty("data").EnumerateArray().First();
-            var pid = Str(pg, "id")!; var ptoken = Str(pg, "access_token")!;
-            n += await SerieDiaAsync(cn, "FB", pid, "page_post_engagements", ptoken, s, u, ahora, ct);
-            n += await SerieDiaAsync(cn, "FB", pid, "page_daily_follows", ptoken, s, u, ahora, ct);
-            n += await SerieDiaAsync(cn, "FB", pid, "page_daily_unfollows", ptoken, s, u, ahora, ct);
+            pid = Str(pg, "id"); ptoken = Str(pg, "access_token");
         }
-        catch { /* FB no debe tumbar IG */ }
+        catch { }
 
-        return (true, $"Insights cuenta OK: {n} valores ({s}→{u}).");
+        async Task<int> Periodo(string s, string u)
+        {
+            int k = 0;
+            k += await SerieDiaAsync(cn, "IG", igUser!, "reach", token!, s, u, ahora, ct);
+            k += await TotalValueAsync(cn, "IG", igUser!, "views", token!, s, u, ahora, ct);
+            k += await TotalValueAsync(cn, "IG", igUser!, "total_interactions", token!, s, u, ahora, ct);
+            k += await TotalValueAsync(cn, "IG", igUser!, "accounts_engaged", token!, s, u, ahora, ct);
+            k += await TotalValueAsync(cn, "IG", igUser!, "reach", token!, s, u, ahora, ct, "follow_type");
+            if (pid is not null && ptoken is not null)
+            {
+                k += await SerieDiaAsync(cn, "FB", pid, "page_post_engagements", ptoken, s, u, ahora, ct);
+                k += await SerieDiaAsync(cn, "FB", pid, "page_daily_follows", ptoken, s, u, ahora, ct);
+                k += await SerieDiaAsync(cn, "FB", pid, "page_daily_unfollows", ptoken, s, u, ahora, ct);
+            }
+            return k;
+        }
+
+        // período actual y el anterior (para el % de comparación)
+        var n = await Periodo(hasta.AddDays(-dias).ToString("yyyy-MM-dd"), hasta.ToString("yyyy-MM-dd"));
+        n += await Periodo(hasta.AddDays(-dias * 2).ToString("yyyy-MM-dd"), hasta.AddDays(-dias).ToString("yyyy-MM-dd"));
+
+        return (true, $"Insights cuenta OK: {n} valores (actual + previo {dias}d).");
     }
 
     private async Task<int> SerieDiaAsync(Microsoft.Data.SqlClient.SqlConnection cn, string red, string path, string metric, string token, string since, string until, DateTime ahora, CancellationToken ct)

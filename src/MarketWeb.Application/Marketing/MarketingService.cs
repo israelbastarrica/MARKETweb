@@ -57,10 +57,10 @@ public sealed class MarketingService : IMarketingService
             "SELECT CAST(Valor AS INT) FROM dbo.MKT_RedesInsights WHERE Red=@red AND Metrica=@met AND Segmento=@seg AND Fecha=@fecha",
             new { red, met, seg, fecha }, cancellationToken: ct));
 
-    private static async Task<int?> InsSum(Microsoft.Data.SqlClient.SqlConnection cn, string red, string met, CancellationToken ct)
+    private static async Task<int?> InsSumRange(Microsoft.Data.SqlClient.SqlConnection cn, string red, string met, DateTime desde, DateTime hasta, CancellationToken ct)
         => await cn.ExecuteScalarAsync<int?>(new CommandDefinition(
-            "SELECT CAST(SUM(Valor) AS INT) FROM dbo.MKT_RedesInsights WHERE Red=@red AND Metrica=@met AND Segmento='TOTAL'",
-            new { red, met }, cancellationToken: ct));
+            "SELECT CAST(SUM(Valor) AS INT) FROM dbo.MKT_RedesInsights WHERE Red=@red AND Metrica=@met AND Segmento='TOTAL' AND Fecha > @desde AND Fecha <= @hasta",
+            new { red, met, desde, hasta }, cancellationToken: ct));
 
     public async Task<MktDashboardDto> DashboardAsync(CancellationToken ct = default)
     {
@@ -76,19 +76,38 @@ public sealed class MarketingService : IMarketingService
             dto.Hasta = maxF;
             if (maxF.HasValue)
             {
-                dto.VisualizacionesIG = await InsVal(cn, "IG", "views", "TOTAL", maxF.Value, ct);
-                dto.Interacciones = await InsVal(cn, "IG", "total_interactions", "TOTAL", maxF.Value, ct);
-                dto.CuentasAlcanzadas = await InsVal(cn, "IG", "accounts_engaged", "TOTAL", maxF.Value, ct);
-                dto.AlcanceSeguidores = await InsVal(cn, "IG", "reach", "FOLLOWER", maxF.Value, ct);
-                dto.AlcanceNoSeguidores = await InsVal(cn, "IG", "reach", "NON_FOLLOWER", maxF.Value, ct);
+                var max = maxF.Value;
+                var prevF = await cn.ExecuteScalarAsync<DateTime?>(new CommandDefinition(
+                    "SELECT MAX(Fecha) FROM dbo.MKT_RedesInsights WHERE Red='IG' AND Metrica='views' AND Segmento='TOTAL' AND Fecha < @max",
+                    new { max }, cancellationToken: ct));
+
+                dto.VisualizacionesIG = await InsVal(cn, "IG", "views", "TOTAL", max, ct);
+                dto.Interacciones = await InsVal(cn, "IG", "total_interactions", "TOTAL", max, ct);
+                dto.CuentasAlcanzadas = await InsVal(cn, "IG", "accounts_engaged", "TOTAL", max, ct);
+                dto.AlcanceSeguidores = await InsVal(cn, "IG", "reach", "FOLLOWER", max, ct);
+                dto.AlcanceNoSeguidores = await InsVal(cn, "IG", "reach", "NON_FOLLOWER", max, ct);
                 dto.Alcance = (dto.AlcanceSeguidores ?? 0) + (dto.AlcanceNoSeguidores ?? 0);
+
+                if (prevF.HasValue)
+                {
+                    dto.VisualizacionesPrevIG = await InsVal(cn, "IG", "views", "TOTAL", prevF.Value, ct);
+                    dto.InteraccionesPrev = await InsVal(cn, "IG", "total_interactions", "TOTAL", prevF.Value, ct);
+                    var rf = await InsVal(cn, "IG", "reach", "FOLLOWER", prevF.Value, ct);
+                    var rn = await InsVal(cn, "IG", "reach", "NON_FOLLOWER", prevF.Value, ct);
+                    if (rf.HasValue || rn.HasValue) dto.AlcancePrev = (rf ?? 0) + (rn ?? 0);
+                }
+
+                // FB: sumas por ventana (actual = últimos 28 días; previo = los 28 anteriores).
+                var ini = max.AddDays(-28); var iniPrev = max.AddDays(-56);
+                dto.FbInteracciones = await InsSumRange(cn, "FB", "page_post_engagements", ini, max, ct);
+                dto.FbSeguidoresNuevos = await InsSumRange(cn, "FB", "page_daily_follows", ini, max, ct);
+                dto.FbDejaronSeguir = await InsSumRange(cn, "FB", "page_daily_unfollows", ini, max, ct);
+                dto.FbInteraccionesPrev = await InsSumRange(cn, "FB", "page_post_engagements", iniPrev, ini, ct);
+
+                dto.AlcanceSerie = (await cn.QueryAsync<MktSeriePuntoDto>(new CommandDefinition(
+                    "SELECT Fecha, Valor FROM dbo.MKT_RedesInsights WHERE Red='IG' AND Metrica='reach' AND Segmento='TOTAL' AND Fecha > @ini ORDER BY Fecha",
+                    new { ini }, cancellationToken: ct))).ToList();
             }
-            dto.FbInteracciones = await InsSum(cn, "FB", "page_post_engagements", ct);
-            dto.FbSeguidoresNuevos = await InsSum(cn, "FB", "page_daily_follows", ct);
-            dto.FbDejaronSeguir = await InsSum(cn, "FB", "page_daily_unfollows", ct);
-            dto.AlcanceSerie = (await cn.QueryAsync<MktSeriePuntoDto>(new CommandDefinition(
-                "SELECT Fecha, Valor FROM dbo.MKT_RedesInsights WHERE Red='IG' AND Metrica='reach' AND Segmento='TOTAL' ORDER BY Fecha",
-                cancellationToken: ct))).ToList();
         }
 
         if (await ExistenAsync(cn, ct))

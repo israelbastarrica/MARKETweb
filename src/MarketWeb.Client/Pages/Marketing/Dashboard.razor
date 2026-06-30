@@ -29,14 +29,14 @@
             <div class="col-6 col-lg-3">
                 <div class="market-card h-100">
                     <div class="small text-muted"><i class="fa-brands fa-instagram me-1"></i>Visualizaciones (IG)</div>
-                    <div class="fs-2 fw-bold">@Abrev(_d.VisualizacionesIG)</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.VisualizacionesIG)@Flecha(_d.VisualizacionesIG, _d.VisualizacionesPrevIG)</div>
                     <div class="small text-muted">vistas del período</div>
                 </div>
             </div>
             <div class="col-6 col-lg-3">
                 <div class="market-card h-100">
                     <div class="small text-muted">Alcance</div>
-                    <div class="fs-2 fw-bold">@Abrev(_d.Alcance)</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.Alcance)@Flecha(_d.Alcance, _d.AlcancePrev)</div>
                     <div class="small text-muted">
                         seguidores @Abrev(_d.AlcanceSeguidores) · no seg. @Abrev(_d.AlcanceNoSeguidores)
                     </div>
@@ -45,14 +45,14 @@
             <div class="col-6 col-lg-3">
                 <div class="market-card h-100">
                     <div class="small text-muted">Interacciones</div>
-                    <div class="fs-2 fw-bold">@Abrev(_d.Interacciones)</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.Interacciones)@Flecha(_d.Interacciones, _d.InteraccionesPrev)</div>
                     <div class="small text-muted">cuentas alcanzadas @Abrev(_d.CuentasAlcanzadas)</div>
                 </div>
             </div>
             <div class="col-6 col-lg-3">
                 <div class="market-card h-100">
                     <div class="small text-muted"><i class="fa-brands fa-facebook me-1"></i>Facebook</div>
-                    <div class="fs-2 fw-bold">@Abrev(_d.FbInteracciones)</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.FbInteracciones)@Flecha(_d.FbInteracciones, _d.FbInteraccionesPrev)</div>
                     <div class="small text-muted">
                         <span class="text-success">+@(_d.FbSeguidoresNuevos ?? 0)</span> /
                         <span class="text-danger">-@(_d.FbDejaronSeguir ?? 0)</span> seguidores
@@ -116,6 +116,23 @@
         try { _d = await Api.DashboardAsync(); }
         catch { _d = null; }
         finally { _cargando = false; }
+    }
+
+    // Flecha de % vs período anterior.
+    private static (double Pct, bool Up)? Delta(int? cur, int? prev)
+    {
+        if (cur is null || prev is null || prev.Value == 0) return null;
+        var p = (cur.Value - prev.Value) / (double)prev.Value * 100;
+        return (Math.Abs(p), p >= 0);
+    }
+    private MarkupString Flecha(int? cur, int? prev)
+    {
+        var d = Delta(cur, prev);
+        if (d is null) return (MarkupString)"";
+        var cls = d.Value.Up ? "text-success" : "text-danger";
+        var ico = d.Value.Up ? "fa-arrow-up" : "fa-arrow-down";
+        var txt = d.Value.Pct.ToString("0.0").Replace(".", ",");
+        return (MarkupString)$"<span class='small {cls} ms-2'><i class='fa-solid {ico}'></i> {txt}%</span>";
     }
 
     // Número grande abreviado: 2.830.108 -> "2,8 mill" · 75.597 -> "75,6 mil".

@@ -29,6 +29,11 @@ public sealed class MktDashboardDto
     public int? FbInteracciones { get; set; }         // FB page_post_engagements (suma del período)
     public int? FbSeguidoresNuevos { get; set; }      // FB page_daily_follows (suma)
     public int? FbDejaronSeguir { get; set; }         // FB page_daily_unfollows (suma)
+    // Período anterior (para el % de comparación)
+    public int? VisualizacionesPrevIG { get; set; }
+    public int? AlcancePrev { get; set; }
+    public int? InteraccionesPrev { get; set; }
+    public int? FbInteraccionesPrev { get; set; }
     public List<MktSeriePuntoDto> AlcanceSerie { get; set; } = new();   // alcance IG por día (tendencia)
     public List<MktPublicacionDto> Destacados { get; set; } = new();    // top publicaciones por alcance
 }
