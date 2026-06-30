@@ -488,8 +488,10 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
             try
             {
                 var limite = DateTime.Now.AddDays(-p.RetencionDias);
-                foreach (var f in Directory.EnumerateFiles(carpeta, "MARKET_*.rar"))
-                    if (File.GetLastWriteTime(f) < limite) { File.Delete(f); borrados++; }
+                // Borra .rar viejos Y .bak sueltos (los que quedan cuando WinRAR falla esa corrida).
+                foreach (var patron in new[] { "MARKET_*.rar", "MARKET_*.bak" })
+                    foreach (var f in Directory.EnumerateFiles(carpeta, patron))
+                        if (File.GetLastWriteTime(f) < limite) { File.Delete(f); borrados++; }
             }
             catch { /* la retención no debe tumbar la tarea */ }
         }
