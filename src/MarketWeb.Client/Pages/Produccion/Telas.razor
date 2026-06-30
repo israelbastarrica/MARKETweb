@@ -398,26 +398,44 @@
                             {
                                 <div class="col-6 col-md-4">
                                     <label class="form-label fw-semibold">Cantidad de rollos</label>
-                                    <InputNumber class="form-control" @bind-Value="_editado.CantidadRollos" min="1" />
+                                    <InputNumber class="form-control" @bind-Value="_editado.CantidadRollos" @bind-Value:after="SyncLineas" min="1" max="500" />
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <label class="form-label">Unidad (todos)</label>
+                                    <select class="form-select" @bind="_loteUnidad" @bind:after="AplicarUnidadATodos">
+                                        <option value="Kg">Kg</option><option value="M">Metros</option>
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold mb-1">Peso por rollo</label>
+                                    <div class="tl-lote-grid">
+                                        @for (var i = 0; i < _lineas.Count; i++)
+                                        {
+                                            var ln = _lineas[i];
+                                            var n = i + 1;
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <span class="text-muted small" style="width:34px">#@n</span>
+                                                <InputNumber class="form-control form-control-sm" @bind-Value="ln.Cantidad" placeholder="Cantidad" />
+                                                <select class="form-select form-select-sm" style="max-width:120px" @bind="ln.Unidad">
+                                                    <option value="Kg">Kg</option><option value="M">Metros</option>
+                                                </select>
+                                            </div>
+                                        }
+                                    </div>
+                                    <small class="text-muted">Total: <strong>@TotalLote()</strong></small>
                                 </div>
                             }
-                            <div class="col-6 col-md-4">
-                                <label class="form-label">Cantidad @(_esAlta ? "(c/rollo)" : "")</label>
-                                <InputNumber class="form-control" @bind-Value="_editado.Cantidad" />
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label class="form-label">Unidad</label>
-                                <InputSelect class="form-select" @bind-Value="_editado.Unidad">
-                                    <option value="">—</option><option value="Kg">Kg</option><option value="M">Metros</option>
-                                </InputSelect>
-                            </div>
-
-                            @if (_esAlta && _editado.CantidadRollos > 1)
+                            else
                             {
-                                <div class="col-12">
-                                    <div class="alert alert-info py-2 mb-0">
-                                        Se crean <strong>@_editado.CantidadRollos rollos</strong> con estos mismos datos@(_editado.Cantidad is > 0 ? $" · total {FormatTotal()}" : "").
-                                    </div>
+                                <div class="col-6 col-md-4">
+                                    <label class="form-label">Cantidad</label>
+                                    <InputNumber class="form-control" @bind-Value="_editado.Cantidad" />
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <label class="form-label">Unidad</label>
+                                    <InputSelect class="form-select" @bind-Value="_editado.Unidad">
+                                        <option value="">—</option><option value="Kg">Kg</option><option value="M">Metros</option>
+                                    </InputSelect>
                                 </div>
                             }
                         </div>
@@ -499,6 +517,9 @@
     private int _idEditado;
     private string? _errorModal;
     private RolloSaveRequest _editado = new();
+    // Alta por lote: una línea (peso/unidad) por rollo
+    private List<RolloLineaDto> _lineas = new();
+    private string _loteUnidad = "Kg";
 
     // Alta de catálogo (material / depósito / telera)
     private bool _catModal, _catReqCod, _catGuardando;
@@ -712,7 +733,9 @@
     {
         _esAlta = true;
         _idEditado = 0;
-        _editado = new RolloSaveRequest { IdDeposito = idDeposito ?? 0, IdMaterial = idMaterial ?? 0, CantidadRollos = 1, Unidad = "Kg" };
+        _editado = new RolloSaveRequest { IdDeposito = idDeposito ?? 0, IdMaterial = idMaterial ?? 0, CantidadRollos = 1 };
+        _loteUnidad = "Kg";
+        _lineas = new List<RolloLineaDto> { new() { Unidad = _loteUnidad } };
         _errorModal = null;
         _modal = true;
     }
@@ -732,22 +755,48 @@
 
     private async Task Guardar()
     {
-        if (_esAlta && _editado.CantidadRollos < 1) { _errorModal = "La cantidad de rollos debe ser al menos 1."; return; }
-        _guardando = true;
         _errorModal = null;
-        var (ok, error) = _esAlta ? await Api.CrearLoteRollosAsync(_editado) : await Api.ModificarRolloAsync(_idEditado, _editado);
+        if (_esAlta && _lineas.Count == 0) { _errorModal = "Agregá al menos un rollo al lote."; return; }
+        _guardando = true;
+        (bool ok, string? error) res;
+        if (_esAlta)
+        {
+            _editado.Lineas = _lineas;
+            _editado.CantidadRollos = _lineas.Count;
+            res = await Api.CrearLoteRollosAsync(_editado);
+        }
+        else
+        {
+            res = await Api.ModificarRolloAsync(_idEditado, _editado);
+        }
         _guardando = false;
-        if (!ok) { _errorModal = error; return; }
+        if (!res.ok) { _errorModal = res.error; return; }
         _modal = false;
-        Ui.Exito(_esAlta ? $"{_editado.CantidadRollos} rollo(s) agregado(s)." : "Rollo modificado.");
+        Ui.Exito(_esAlta ? $"{_lineas.Count} rollo(s) agregado(s)." : "Rollo modificado.");
         await RefrescarTrasAbm();
     }
 
-    private string FormatTotal()
+    // ---- Lote: pesos por rollo ----
+    private void SyncLineas()
     {
-        var n = _editado.CantidadRollos < 1 ? 1 : _editado.CantidadRollos;
-        var total = (_editado.Cantidad ?? 0m) * n;
-        return $"{total:0.##} {_editado.Unidad}".Trim();
+        var n = _editado.CantidadRollos;
+        if (n < 1) { n = 1; _editado.CantidadRollos = 1; }
+        if (n > 500) { n = 500; _editado.CantidadRollos = 500; }
+        while (_lineas.Count < n) _lineas.Add(new RolloLineaDto { Unidad = _loteUnidad });
+        while (_lineas.Count > n) _lineas.RemoveAt(_lineas.Count - 1);
+    }
+
+    private void AplicarUnidadATodos()
+    {
+        foreach (var l in _lineas) l.Unidad = _loteUnidad;
+    }
+
+    private string TotalLote()
+    {
+        var partes = _lineas.Where(l => l.Cantidad is > 0)
+            .GroupBy(l => string.IsNullOrWhiteSpace(l.Unidad) ? "" : l.Unidad!)
+            .Select(g => $"{g.Sum(x => x.Cantidad ?? 0m):0.##} {(g.Key == "M" ? "Metros" : g.Key)}".Trim());
+        return partes.Any() ? string.Join(" · ", partes) : "—";
     }
 
     private async Task EliminarRollo(TelaRolloDto r)

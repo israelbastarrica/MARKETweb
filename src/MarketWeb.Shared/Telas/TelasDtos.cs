@@ -88,12 +88,22 @@ public sealed class RolloSaveRequest
     public int? IdColor { get; set; }
     public int? IdTelera { get; set; }
 
-    /// <summary>Cantidad de rollos a crear en el alta por lote (cada uno con estos mismos datos). En modificación se ignora.</summary>
+    /// <summary>Cantidad de rollos a crear en el alta por lote. En modificación se ignora.</summary>
     public int CantidadRollos { get; set; } = 1;
+
+    /// <summary>Líneas del lote: una por rollo, cada una con su cantidad/unidad. Datos comunes (material, depósito, color, etc.) salen de esta misma request.</summary>
+    public List<RolloLineaDto> Lineas { get; set; } = new();
 
     [MaxLength(150)] public string? ColorTelera { get; set; }
     [MaxLength(50)] public string? NumPedido { get; set; }
     [MaxLength(50)] public string? NumRemito { get; set; }
+    public decimal? Cantidad { get; set; }
+    [MaxLength(10)] public string? Unidad { get; set; }
+}
+
+/// <summary>Un rollo del lote: su peso (cantidad) y unidad. Los demás datos son comunes al lote.</summary>
+public sealed class RolloLineaDto
+{
     public decimal? Cantidad { get; set; }
     [MaxLength(10)] public string? Unidad { get; set; }
 }
