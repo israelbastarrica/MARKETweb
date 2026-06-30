@@ -178,6 +178,25 @@ public sealed class TelasService : ITelasService
         return await cn.ExecuteScalarAsync<int>(new CommandDefinition(sql, p, cancellationToken: ct));
     }
 
+    public async Task<int> CrearRollosLoteAsync(RolloSaveRequest req, string usuario, CancellationToken ct = default)
+    {
+        var n = req.CantidadRollos;
+        if (n < 1) throw new BusinessException("La cantidad de rollos debe ser al menos 1.");
+        if (n > 500) throw new BusinessException("No se pueden crear más de 500 rollos por lote.");
+
+        var p = Params(req);   // valida material/depósito y arma los parámetros comunes
+        p.Add("aud", Auditoria($"Alta lote (x{n})", usuario));
+        const string sql = """
+            INSERT INTO TelasRollos (IdMaterial, IdColor, ColorTelera, IdDeposito, IdTelera, NumPedido, NumRemito, Cantidad, Unidad, Eliminado, Auditoria)
+            VALUES (@IdMaterial, @IdColor, @ColorTelera, @IdDeposito, @IdTelera, @NumPedido, @NumRemito, @Cantidad, @Unidad, 0, @aud);
+            """;
+        using var cn = _db.Create();
+        var total = 0;
+        for (var i = 0; i < n; i++)
+            total += await cn.ExecuteAsync(new CommandDefinition(sql, p, cancellationToken: ct));
+        return total;
+    }
+
     public async Task ModificarRolloAsync(int id, RolloSaveRequest req, string usuario, CancellationToken ct = default)
     {
         var p = Params(req);

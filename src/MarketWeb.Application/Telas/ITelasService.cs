@@ -23,6 +23,7 @@ public interface ITelasService
     // ABM de stock (rollos)
     Task<IReadOnlyList<TelaRolloDto>> ListarRollosAsync(int? idDeposito, int? idMaterial, int? idColor, int? idTelera, string? numPedido, bool sinColor = false, CancellationToken ct = default);
     Task<int> CrearRolloAsync(RolloSaveRequest req, string usuario, CancellationToken ct = default);
+    Task<int> CrearRollosLoteAsync(RolloSaveRequest req, string usuario, CancellationToken ct = default);
     Task ModificarRolloAsync(int id, RolloSaveRequest req, string usuario, CancellationToken ct = default);
     Task EliminarRolloAsync(int id, string usuario, CancellationToken ct = default);
 }

@@ -9,7 +9,7 @@
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
         <button class="btn btn-primary" @onclick="() => AbrirAlta(null, null)">
-            <i class="fa-solid fa-plus me-1"></i> Agregar rollo
+            <i class="fa-solid fa-plus me-1"></i> Agregar lote de rollos
         </button>
         <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus me-1"></i> Material</button>
         <button class="btn btn-outline-primary" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus me-1"></i> Depósito</button>
@@ -294,7 +294,7 @@
                 </div>
                 <div class="modal-body">
                     <button class="btn btn-primary btn-sm mb-3" @onclick="() => AbrirAlta(_idDeposito, _idMaterial)">
-                        <i class="fa-solid fa-plus me-1"></i> Agregar rollo acá
+                        <i class="fa-solid fa-plus me-1"></i> Agregar lote de rollos acá
                     </button>
                     <div class="table-responsive">
                         <table class="market-table align-middle">
@@ -334,33 +334,42 @@
                 <EditForm Model="_editado" OnValidSubmit="Guardar">
                     <DataAnnotationsValidator />
                     <div class="modal-header">
-                        <h5 class="modal-title">@(_esAlta ? "Nuevo rollo" : "Modificar rollo")</h5>
+                        <h5 class="modal-title">@(_esAlta ? "Agregar lote de rollos" : "Modificar rollo")</h5>
                         <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
                     </div>
                     <div class="modal-body">
                         @if (_errorModal is not null) { <div class="alert alert-danger py-2">@_errorModal</div> }
                         <div class="row g-3">
-                            <div class="col-12 col-md-6">
-                                <label class="form-label d-flex justify-content-between align-items-center">
-                                    <span>Material</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar material" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus"></i></button>
-                                </label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdMaterial">
-                                    <option value="0">— Seleccione —</option>
-                                    @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
-                                </InputSelect>
-                                <ValidationMessage For="() => _editado.IdMaterial" />
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">N° Pedido</label>
+                                <InputText class="form-control" @bind-Value="_editado.NumPedido" />
                             </div>
-                            <div class="col-12 col-md-6">
-                                <label class="form-label d-flex justify-content-between align-items-center">
-                                    <span>Depósito</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar depósito" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus"></i></button>
-                                </label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
-                                    <option value="0">— Seleccione —</option>
-                                    @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
-                                </InputSelect>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">N° Remito</label>
+                                <InputText class="form-control" @bind-Value="_editado.NumRemito" />
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Depósito</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="_editado.IdDeposito">
+                                        <option value="0">— Seleccione —</option>
+                                        @foreach (var d in _depositos) { <option value="@d.Id">@DepLabel(d)</option> }
+                                    </InputSelect>
+                                    <button type="button" class="btn btn-outline-primary" title="Agregar depósito" @onclick='() => AbrirCatalogo(CatalogoTela.Depositos)'><i class="fa-solid fa-plus"></i></button>
+                                </div>
                                 <ValidationMessage For="() => _editado.IdDeposito" />
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Material</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="_editado.IdMaterial">
+                                        <option value="0">— Seleccione —</option>
+                                        @foreach (var m in _materialesCombo) { <option value="@m.Id">@m.Nombre</option> }
+                                    </InputSelect>
+                                    <button type="button" class="btn btn-outline-primary" title="Agregar material" @onclick='() => AbrirCatalogo(CatalogoTela.Materiales)'><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                                <ValidationMessage For="() => _editado.IdMaterial" />
                             </div>
                             <div class="col-12 col-md-6">
                                 <label class="form-label">Color (nuestro)</label>
@@ -369,38 +378,48 @@
                                     @foreach (var c in _coloresCombo) { <option value="@c.Id">@c.Codigo - @c.Nombre</option> }
                                 </InputSelect>
                             </div>
+
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Telera</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="_editado.IdTelera">
+                                        <option value="">— (ninguna) —</option>
+                                        @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
+                                    </InputSelect>
+                                    <button type="button" class="btn btn-outline-primary" title="Agregar telera" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
                             <div class="col-12 col-md-6">
                                 <label class="form-label">Color telera (texto)</label>
                                 <InputText class="form-control" @bind-Value="_editado.ColorTelera" />
                             </div>
-                            <div class="col-12 col-md-6">
-                                <label class="form-label d-flex justify-content-between align-items-center">
-                                    <span>Telera</span>
-                                    <button type="button" class="btn btn-link btn-sm p-0" title="Agregar telera" @onclick='() => AbrirCatalogo(CatalogoTela.Teleras)'><i class="fa-solid fa-plus"></i></button>
-                                </label>
-                                <InputSelect class="form-select" @bind-Value="_editado.IdTelera">
-                                    <option value="">— (ninguna) —</option>
-                                    @foreach (var t in _telerasCombo) { <option value="@t.Id">@t.Nombre</option> }
-                                </InputSelect>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">N° Pedido</label>
-                                <InputText class="form-control" @bind-Value="_editado.NumPedido" />
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">N° Remito</label>
-                                <InputText class="form-control" @bind-Value="_editado.NumRemito" />
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Cantidad</label>
+
+                            @if (_esAlta)
+                            {
+                                <div class="col-6 col-md-4">
+                                    <label class="form-label fw-semibold">Cantidad de rollos</label>
+                                    <InputNumber class="form-control" @bind-Value="_editado.CantidadRollos" min="1" />
+                                </div>
+                            }
+                            <div class="col-6 col-md-4">
+                                <label class="form-label">Cantidad @(_esAlta ? "(c/rollo)" : "")</label>
                                 <InputNumber class="form-control" @bind-Value="_editado.Cantidad" />
                             </div>
-                            <div class="col-6 col-md-3">
+                            <div class="col-6 col-md-4">
                                 <label class="form-label">Unidad</label>
                                 <InputSelect class="form-select" @bind-Value="_editado.Unidad">
-                                    <option value="">—</option><option value="Kg">Kg</option><option value="M">M</option>
+                                    <option value="">—</option><option value="Kg">Kg</option><option value="M">Metros</option>
                                 </InputSelect>
                             </div>
+
+                            @if (_esAlta && _editado.CantidadRollos > 1)
+                            {
+                                <div class="col-12">
+                                    <div class="alert alert-info py-2 mb-0">
+                                        Se crean <strong>@_editado.CantidadRollos rollos</strong> con estos mismos datos@(_editado.Cantidad is > 0 ? $" · total {FormatTotal()}" : "").
+                                    </div>
+                                </div>
+                            }
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -693,7 +712,7 @@
     {
         _esAlta = true;
         _idEditado = 0;
-        _editado = new RolloSaveRequest { IdDeposito = idDeposito ?? 0, IdMaterial = idMaterial ?? 0 };
+        _editado = new RolloSaveRequest { IdDeposito = idDeposito ?? 0, IdMaterial = idMaterial ?? 0, CantidadRollos = 1, Unidad = "Kg" };
         _errorModal = null;
         _modal = true;
     }
@@ -713,14 +732,22 @@
 
     private async Task Guardar()
     {
+        if (_esAlta && _editado.CantidadRollos < 1) { _errorModal = "La cantidad de rollos debe ser al menos 1."; return; }
         _guardando = true;
         _errorModal = null;
-        var (ok, error) = _esAlta ? await Api.CrearRolloAsync(_editado) : await Api.ModificarRolloAsync(_idEditado, _editado);
+        var (ok, error) = _esAlta ? await Api.CrearLoteRollosAsync(_editado) : await Api.ModificarRolloAsync(_idEditado, _editado);
         _guardando = false;
         if (!ok) { _errorModal = error; return; }
         _modal = false;
-        Ui.Exito(_esAlta ? "Rollo agregado." : "Rollo modificado.");
+        Ui.Exito(_esAlta ? $"{_editado.CantidadRollos} rollo(s) agregado(s)." : "Rollo modificado.");
         await RefrescarTrasAbm();
+    }
+
+    private string FormatTotal()
+    {
+        var n = _editado.CantidadRollos < 1 ? 1 : _editado.CantidadRollos;
+        var total = (_editado.Cantidad ?? 0m) * n;
+        return $"{total:0.##} {_editado.Unidad}".Trim();
     }
 
     private async Task EliminarRollo(TelaRolloDto r)

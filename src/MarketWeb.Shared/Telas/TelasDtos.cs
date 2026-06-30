@@ -88,6 +88,9 @@ public sealed class RolloSaveRequest
     public int? IdColor { get; set; }
     public int? IdTelera { get; set; }
 
+    /// <summary>Cantidad de rollos a crear en el alta por lote (cada uno con estos mismos datos). En modificación se ignora.</summary>
+    public int CantidadRollos { get; set; } = 1;
+
     [MaxLength(150)] public string? ColorTelera { get; set; }
     [MaxLength(50)] public string? NumPedido { get; set; }
     [MaxLength(50)] public string? NumRemito { get; set; }
