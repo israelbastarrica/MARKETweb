@@ -63,6 +63,34 @@ public sealed class DashboardService : IDashboardService
         }
     }
 
+    // ARTCOD que YA están mapeados en alguna posición activa del local (Mapeo/MapeoRegistro, MARKET central).
+    private static async Task<HashSet<string>> MapeadosLocalAsync(SqlConnection cn, string local, CancellationToken ct)
+    {
+        const string sql = @"
+            SELECT DISTINCT RTRIM(R.ARTCOD)
+            FROM MapeoRegistro R
+            INNER JOIN Mapeo M       ON R.IDMapeo = M.ID
+            INNER JOIN Ubicaciones U ON M.IDUbicacion = U.ID
+            WHERE UPPER(RTRIM(U.Descripcion)) = @local
+              AND R.Eliminado = 0 AND M.Eliminado = 0 AND U.Eliminado = 0;";
+        var rows = await cn.QueryAsync<string>(new CommandDefinition(sql, new { local = local.ToUpperInvariant() }, cancellationToken: ct));
+        return new HashSet<string>(rows.Select(s => (s ?? "").Trim()), StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Artículos vendidos en el día que NO están mapeados en el local (orden por unidades desc).
+    // Detecta quiebres de reposición: se vende pero no está en el mapeo → no entra a la corrida.
+    private static List<object> NoMapeadasItems(Dictionary<string, ArtRow> articulos, HashSet<string> mapeados)
+        => articulos.Values
+            .Where(a => Math.Round(a.Cantidad) > 0 && !mapeados.Contains((a.Codigo ?? "").Trim()))
+            .OrderByDescending(a => a.Cantidad)
+            .Select(a => (object)new Dictionary<string, object>
+            {
+                ["codigo"] = (a.Codigo ?? "").Trim(),
+                ["descripcion"] = a.Descripcion ?? "",
+                ["unidades"] = (int)Math.Round(a.Cantidad)
+            })
+            .ToList();
+
     // ---- VENTA del local (en vivo) ----
     private async Task<VentaLocal> VentaLocalAsync(SqlConnection cn, string local, string hoy, string inicio, CancellationToken ct)
     {
@@ -267,7 +295,8 @@ public sealed class DashboardService : IDashboardService
                 ["local"] = local,
                 ["por_hora"] = v.PorHora,
                 ["totales_dia"] = v.Totales,
-                ["por_cajero"] = v.PorCajero
+                ["por_cajero"] = v.PorCajero,
+                ["ventas_no_mapeadas"] = NoMapeadasItems(v.Articulos, await MapeadosLocalAsync(cn, local, ct))
             };
         }
 
@@ -293,7 +322,12 @@ public sealed class DashboardService : IDashboardService
             ["articulos_por_tipo"] = ArticulosPorTipo(vL.ArticulosDet, vP.ArticulosDet),
             ["ultimos_7_dias"] = new Dictionary<string, object> { ["LURO"] = dias7L, ["PERALTA"] = dias7P },
             ["totales_7_dias"] = new Dictionary<string, object> { ["LURO"] = tot7L, ["PERALTA"] = tot7P },
-            ["top_tipos_balance"] = TopMergeBalance(vL.VentaPorTipo, vP.VentaPorTipo, rL, rP)
+            ["top_tipos_balance"] = TopMergeBalance(vL.VentaPorTipo, vP.VentaPorTipo, rL, rP),
+            ["ventas_no_mapeadas"] = new Dictionary<string, object>
+            {
+                ["LURO"] = NoMapeadasItems(vL.Articulos, await MapeadosLocalAsync(cn, "LURO", ct)),
+                ["PERALTA"] = NoMapeadasItems(vP.Articulos, await MapeadosLocalAsync(cn, "PERALTA", ct))
+            }
         };
     }
 
