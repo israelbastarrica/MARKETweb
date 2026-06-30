@@ -110,7 +110,7 @@
                     {
                         <tr class="@FilaClase(r.Estado)">
                             <td><span class="badge @BadgeClase(r.Estado)">@r.Estado</span></td>
-                            <td class="fw-semibold">@r.NroRemito</td>
+                            <td class="fw-semibold"><RemitoLink Numero="@r.NroRemito" Codigo="@r.RemitoCodigo" Origen="@r.LocalOrigen" Destino="@r.LocalDestino" /></td>
                             <td>@r.LocalOrigen</td>
                             <td>@r.LocalDestino</td>
                             <td class="small">@r.FechaEmision.ToString("dd/MM/yyyy HH:mm")</td>
@@ -210,7 +210,7 @@
                                     {
                                         <tr class="fila-anulado">
                                             <td><span class="badge @BadgeRechazoClase(r)">@TextoRechazo(r)</span></td>
-                                            <td class="fw-semibold">@r.NroRemito</td>
+                                            <td class="fw-semibold"><RemitoLink Numero="@r.NroRemito" Codigo="@r.RemitoCodigo" Origen="@r.LocalOrigen" Destino="@r.LocalDestino" /></td>
                                             <td>@r.LocalOrigen</td>
                                             <td>@r.LocalDestino</td>
                                             <td class="small">@r.FechaEmision.ToString("dd/MM/yyyy HH:mm")</td>

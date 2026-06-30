@@ -425,7 +425,67 @@ public sealed class ReposicionService : IReposicionService
         if (!dto.Ubicaciones.Any(u => u.EsDeposito))
             dto.EnPalet = await EnPaletAsync(artCod, ct);
 
+        // Resuelve el CODIGO Dragon de las filas que son remitos R reales (ancla + envíos) para
+        // habilitar el link al detalle. Defensivo: ante error deja las filas sin link.
+        await ResolverRemitosAsync(dto, local, ct);
+
         return dto;
+    }
+
+    // Bases Dragonfish válidas para un remito (whitelist → seguro interpolar en el nombre de la base).
+    private static readonly HashSet<string> _basesRemito =
+        new(StringComparer.OrdinalIgnoreCase) { "CENTRAL", "CCENTRAL", "LURO", "PERALTA" };
+
+    // Completa RemitoCodigo/RemitoBase de las filas que son remitos R reales de Dragon: el ANCLA (Orden=0)
+    // y los ENVÍOS al local (Orden=1). El SP arma esas filas con Remito = RTRIM(DESCFW) del comprobante;
+    // acá buscamos su CODIGO en la base Dragonfish del origen. Ventas/ajustes/eventos quedan sin link.
+    private async Task ResolverRemitosAsync(ExplicarDto dto, string local, CancellationToken ct)
+    {
+        var cand = dto.Movimientos.Where(m => m.Orden is 0 or 1 && !string.IsNullOrWhiteSpace(m.Remito)).ToList();
+        if (cand.Count == 0) return;
+        try
+        {
+            await using var cn = _db.Create();
+            await cn.OpenAsync(ct);
+            foreach (var m in cand)
+            {
+                // Envío: el Origen ya dice la base (CENTRAL/CCENTRAL). Ancla: no la trae → probamos ambas.
+                var origen = (m.Origen ?? "").Trim();
+                string[] bases = m.Orden == 0
+                    ? new[] { "CENTRAL", "CCENTRAL" }
+                    : (_basesRemito.Contains(origen) ? new[] { origen.ToUpperInvariant() } : Array.Empty<string>());
+                foreach (var b in bases)
+                {
+                    var cod = await BuscarCodigoRemitoAsync(cn, b, m.Remito.Trim(), local, ct);
+                    if (!string.IsNullOrEmpty(cod)) { m.RemitoCodigo = cod; m.RemitoBase = b; break; }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // El link es un extra: si Dragon no responde, devolvemos las filas igual (sin link).
+            Console.Error.WriteLine(ex);
+        }
+    }
+
+    // Busca el CODIGO Dragon de un remito por su texto (DESCFW). Match exacto contra la misma columna que el
+    // SP mostró; fallback por el número embebido (NNNN-NNNNNNNN) para no depender del prefijo del renglón.
+    private static async Task<string?> BuscarCodigoRemitoAsync(SqlConnection cn, string origen, string remitoTexto, string local, CancellationToken ct)
+    {
+        var baseDb = "DRAGONFISH_" + origen;   // origen viene de la whitelist _basesRemito → seguro interpolar
+        var num = System.Text.RegularExpressions.Regex.Match(remitoTexto, @"\d{3,4}-\d{6,8}").Value;
+        var sql = $@"
+            SELECT TOP 1 RTRIM(CODIGO)
+            FROM {baseDb}.ZooLogic.COMPROBANTEV WITH (NOLOCK)
+            WHERE FLETRA = 'R' AND ANULADO = 0 AND UPPER(RTRIM(FCLIENTE)) = @local
+              AND (RTRIM(DESCFW) = @desc{(num.Length > 0 ? " OR RTRIM(DESCFW) LIKE @like" : "")})
+            ORDER BY CASE WHEN RTRIM(DESCFW) = @desc THEN 0 ELSE 1 END, CODIGO DESC;";
+        await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 30 };
+        cmd.Parameters.Add("@local", SqlDbType.NVarChar, 20).Value = local;
+        cmd.Parameters.Add("@desc", SqlDbType.NVarChar, 60).Value = remitoTexto;
+        if (num.Length > 0) cmd.Parameters.Add("@like", SqlDbType.NVarChar, 32).Value = "%" + num;
+        var o = await cmd.ExecuteScalarAsync(ct);
+        return o is null or DBNull ? null : o.ToString()!.Trim();
     }
 
     public async Task<ResetResultadoDto> ResetearDesdeRemitoAsync(ResetRemitoRequest req, string usuario, CancellationToken ct = default)
