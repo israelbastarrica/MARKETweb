@@ -26,8 +26,8 @@
                     @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } else { <i class="fa-solid fa-eye me-1"></i> }
                     Ver
                 </button>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="AbrirImprimir">
-                    <i class="fa-solid fa-print me-1"></i> Abrir / imprimir
+                <button class="btn btn-outline-danger btn-sm" @onclick="AbrirPdf">
+                    <i class="fa-solid fa-file-pdf me-1"></i> PDF
                 </button>
             </div>
         </div>
@@ -63,5 +63,6 @@
         finally { _cargando = false; }
     }
 
-    private async Task AbrirImprimir() => await JS.InvokeVoidAsync("open", Url, "_blank");
+    private async Task AbrirPdf() => await JS.InvokeVoidAsync("open",
+        $"api/control-remitos/reporte/pdf?desde={_desde:yyyy-MM-ddTHH:mm}&hasta={_hasta:yyyy-MM-ddTHH:mm}", "_blank");
 }

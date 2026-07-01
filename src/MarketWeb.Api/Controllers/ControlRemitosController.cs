@@ -26,6 +26,13 @@ public sealed class ControlRemitosController : ControllerBase
         return Content(html, "text/html", System.Text.Encoding.UTF8);
     }
 
+    [HttpGet("reporte/pdf")]
+    public async Task<IActionResult> ReportePdf([FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, CancellationToken ct = default)
+    {
+        var (pdf, _) = await _reporte.ConstruirPdfAsync(desde ?? DateTime.Today.AddDays(-1).AddHours(21), hasta ?? DateTime.Now, ct);
+        return File(pdf, "application/pdf");   // inline: se abre en el navegador
+    }
+
     [HttpGet("estado")]
     public async Task<ActionResult<IReadOnlyList<ControlEstadoDto>>> Estado(
         [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, CancellationToken ct = default)

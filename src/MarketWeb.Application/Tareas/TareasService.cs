@@ -338,10 +338,13 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
         // Ventana HORARIA del ciclo: desde la corrida de anoche (21:00) hasta ahora (~9:00).
         var desde = DateTime.Today.AddDays(-1).AddHours(21);
         var hasta = DateTime.Now;
-        var (html, resumen) = await _reporteRepo.ConstruirAsync(desde, hasta, ct);
+        var (pdf, resumen) = await _reporteRepo.ConstruirPdfAsync(desde, hasta, ct);
 
         var asunto = "Control de Reposición " + DateTime.Now.ToString("dd/MM/yyyy");
-        var enviado = await _smtp.EnviarAsync(dest, asunto, html, ct);
+        var body = "<p>Se adjunta el control de reposición del ciclo (" +
+                   $"{desde:dd/MM HH:mm} – {hasta:dd/MM HH:mm}).</p><p>{System.Net.WebUtility.HtmlEncode(resumen)}</p>";
+        var nombre = $"ControlReposicion_{DateTime.Now:yyyyMMdd}.pdf";
+        var enviado = await _smtp.EnviarAsync(dest, asunto, body, pdf, nombre, ct);
         return enviado ? (true, "Enviado. " + resumen) : (false, "Falló el envío del mail. " + resumen);
     }
 

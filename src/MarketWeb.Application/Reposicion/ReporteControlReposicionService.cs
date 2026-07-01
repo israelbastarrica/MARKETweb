@@ -2,6 +2,9 @@ using System.Net;
 using System.Text;
 using MarketWeb.Application.Data;
 using Microsoft.Data.SqlClient;
+using PdfSharpCore.Drawing;
+using PdfSharpCore.Fonts;
+using PdfSharpCore.Pdf;
 
 namespace MarketWeb.Application.Reposicion;
 
@@ -19,6 +22,8 @@ public interface IReporteControlReposicionService
 {
     /// <summary>Arma el HTML del reporte para la ventana [desde, hasta]. Devuelve (html, resumen corto).</summary>
     Task<(string Html, string Resumen)> ConstruirAsync(DateTime desde, DateTime hasta, CancellationToken ct = default);
+    /// <summary>Genera el PDF del reporte para la ventana [desde, hasta]. Devuelve (pdf, resumen corto).</summary>
+    Task<(byte[] Pdf, string Resumen)> ConstruirPdfAsync(DateTime desde, DateTime hasta, CancellationToken ct = default);
 }
 
 public sealed class ReporteControlReposicionService : IReporteControlReposicionService
@@ -48,6 +53,29 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         public List<DiffRow> Repo = new();
         public List<AfueraRow> Afuera = new();
     }
+    private sealed class Datos
+    {
+        public DateTime Desde, Hasta;
+        public List<PedidoLocal> Pedidos = new();
+        public ReempTotales Reemp = new();
+        public DiffResult Diff = new();
+    }
+
+    public async Task<(string Html, string Resumen)> ConstruirAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
+    {
+        var d = await ObtenerAsync(desde, hasta, ct);
+        return (Render(d), Resumen(d));
+    }
+
+    public async Task<(byte[] Pdf, string Resumen)> ConstruirPdfAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
+    {
+        var d = await ObtenerAsync(desde, hasta, ct);
+        return (RenderPdf(d), Resumen(d));
+    }
+
+    private static string Resumen(Datos d)
+        => $"repo pidió {d.Pedidos.Sum(p => p.Packs)} packs · {d.Diff.Ok.Sum(o => o.PacksOk)} packs OK · " +
+           $"{d.Diff.Repo.Count} art. con dif · {d.Diff.Afuera.Count} sin pedir · {d.Reemp.Enviados}/{d.Reemp.Cargados} reemplazos";
 
     private static string DragonDb(string origen) => (origen ?? "").ToUpperInvariant() switch
     {
@@ -56,7 +84,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         _ => "DRAGONFISH_CENTRAL",
     };
 
-    public async Task<(string Html, string Resumen)> ConstruirAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
+    private async Task<Datos> ObtenerAsync(DateTime desde, DateTime hasta, CancellationToken ct)
     {
         var pedidos = new List<PedidoLocal>();
         var reemp = new ReempTotales();
@@ -108,11 +136,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         }
 
         var diff = await DiferenciasAsync(desde, hasta, ct);
-
-        var html = Render(desde, hasta, pedidos, reemp, diff);
-        var resumen = $"repo pidió {pedidos.Sum(p => p.Packs)} packs · {diff.Ok.Sum(o => o.PacksOk)} packs OK · " +
-                      $"{diff.Repo.Count} art. con dif · {diff.Afuera.Count} sin pedir · {reemp.Enviados}/{reemp.Cargados} reemplazos";
-        return (html, resumen);
+        return new Datos { Desde = desde, Hasta = hasta, Pedidos = pedidos, Reemp = reemp, Diff = diff };
     }
 
     // Reconciliación repo vs enviado por local+artículo. Pedido = PacksAReponer*CantPack (prendas) del snapshot.
@@ -293,8 +317,10 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         return res;
     }
 
-    private static string Render(DateTime desde, DateTime hasta, List<PedidoLocal> pedidos, ReempTotales reemp, DiffResult diff)
+    private static string Render(Datos d)
     {
+        DateTime desde = d.Desde, hasta = d.Hasta;
+        var pedidos = d.Pedidos; var reemp = d.Reemp; var diff = d.Diff;
         static string H(string? s) => WebUtility.HtmlEncode(s ?? "");
         var sb = new StringBuilder();
         var mismaFecha = desde.Date == hasta.Date;
@@ -397,6 +423,158 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         sb.Append("<p style='color:#999;font-size:12px;margin-top:20px'>Generado automáticamente por MARKET Web.</p>");
         sb.Append("</div>");
         return sb.ToString();
+    }
+
+    // ===================== PDF (PdfSharpCore) =====================
+    private static readonly object _fontLock = new();
+    private sealed class Celda { public string Texto = ""; public bool Der; public bool Bold; public XColor? Color; }
+
+    private static byte[] RenderPdf(Datos d)
+    {
+        lock (_fontLock)
+            if (GlobalFontSettings.FontResolver is null)
+                GlobalFontSettings.FontResolver = new ArialFontResolver();
+
+        var negro = XBrushes.Black;
+        var gris = new XSolidBrush(XColor.FromArgb(120, 120, 120));
+        var headerBg = new XSolidBrush(XColor.FromArgb(238, 238, 238));
+        var subBg = new XSolidBrush(XColor.FromArgb(248, 248, 248));
+        var pen = new XPen(XColor.FromArgb(210, 210, 210), 0.5);
+        var fTit = new XFont("Arial", 15, XFontStyle.Bold);
+        var fSec = new XFont("Arial", 11, XFontStyle.Bold);
+        var fSub = new XFont("Arial", 9.5, XFontStyle.Bold);
+        var fHead = new XFont("Arial", 8, XFontStyle.Bold);
+        var fCell = new XFont("Arial", 8, XFontStyle.Regular);
+        var fCellB = new XFont("Arial", 8, XFontStyle.Bold);
+        var fNota = new XFont("Arial", 8, XFontStyle.Regular);
+
+        const double margin = 32, rowH = 15;
+        using var doc = new PdfDocument();
+        PdfPage page = null!; XGraphics gfx = null!;
+        double w = 0, h = 0, y = 0;
+
+        void NewPage()
+        {
+            gfx?.Dispose();
+            page = doc.AddPage();
+            page.Size = PdfSharpCore.PageSize.A4;
+            page.Orientation = PdfSharpCore.PageOrientation.Landscape;
+            gfx = XGraphics.FromPdfPage(page);
+            w = page.Width; h = page.Height; y = margin;
+        }
+        void Ensure(double need) { if (y + need > h - margin) NewPage(); }
+        string Fit(string s, XFont f, double maxW)
+        {
+            s ??= "";
+            if (gfx.MeasureString(s, f).Width <= maxW) return s;
+            while (s.Length > 1 && gfx.MeasureString(s + "…", f).Width > maxW) s = s[..^1];
+            return s + "…";
+        }
+        void Row(Celda[] cells, double[] cw, XFont f, XBrush? bg = null)
+        {
+            Ensure(rowH);
+            double x = margin;
+            if (bg is not null) gfx.DrawRectangle(bg, x, y, cw.Sum(), rowH);
+            for (int i = 0; i < cells.Length; i++)
+            {
+                gfx.DrawRectangle(pen, x, y, cw[i], rowH);
+                var c = cells[i];
+                var brush = c.Color is { } col ? new XSolidBrush(col) : negro;
+                var ff = c.Bold ? fCellB : f;
+                var pad = 3.0;
+                var fmt = c.Der ? XStringFormats.CenterRight : XStringFormats.CenterLeft;
+                var rect = new XRect(x + pad, y, cw[i] - 2 * pad, rowH);
+                gfx.DrawString(Fit(c.Texto, ff, cw[i] - 2 * pad), ff, brush, rect, fmt);
+                x += cw[i];
+            }
+            y += rowH;
+        }
+        void Header(string[] hs, double[] cw, bool[] der)
+        {
+            Ensure(rowH);
+            Row(hs.Select((t, i) => new Celda { Texto = t, Der = der[i], Bold = true }).ToArray(), cw, fHead, headerBg);
+        }
+        void Titulo(string t) { Ensure(20); gfx.DrawString(t, fSec, negro, new XRect(margin, y, w - 2 * margin, 16), XStringFormats.TopLeft); y += 20; }
+        void Sub(string t) { Ensure(16); gfx.DrawString(t, fSub, negro, new XRect(margin, y, w - 2 * margin, 14), XStringFormats.TopLeft); y += 16; }
+        void Nota(string t) { Ensure(13); gfx.DrawString(t, fNota, gris, new XRect(margin, y, w - 2 * margin, 12), XStringFormats.TopLeft); y += 13; }
+        double[] Cols(params double[] pct) { double tw = w - 2 * margin; return pct.Select(p => p * tw).ToArray(); }
+        Celda L(string t, bool b = false) => new() { Texto = t, Der = false, Bold = b };
+        Celda R(string t, bool b = false, XColor? c = null) => new() { Texto = t, Der = true, Bold = b, Color = c };
+        static string N(int n) => n.ToString("N0");
+
+        NewPage();
+        gfx.DrawString("Control de Reposición", fTit, negro, new XRect(margin, y, w - 2 * margin, 18), XStringFormats.TopLeft); y += 22;
+        var per = $"Ciclo: {d.Desde:dd/MM HH:mm} – {d.Hasta:dd/MM HH:mm}";
+        gfx.DrawString(per, fNota, gris, new XRect(margin, y, w - 2 * margin, 12), XStringFormats.TopLeft); y += 20;
+
+        // 1) Pedido por local
+        Titulo("1 · Repo — pedido por local");
+        var c1 = Cols(0.40, 0.20, 0.20, 0.20); var d1 = new[] { false, true, true, true };
+        Header(new[] { "Local", "Artículos", "Packs", "Prendas" }, c1, d1);
+        foreach (var p in d.Pedidos) Row(new[] { L(p.Local), R(N(p.Articulos)), R(N(p.Packs)), R(N(p.Prendas)) }, c1, fCell);
+        Row(new[] { L("TOTAL", true), R(N(d.Pedidos.Sum(x => x.Articulos)), true), R(N(d.Pedidos.Sum(x => x.Packs)), true), R(N(d.Pedidos.Sum(x => x.Prendas)), true) }, c1, fCellB, subBg);
+        y += 10;
+
+        // 2) Reemplazos
+        Titulo("2 · Reemplazos");
+        var c2 = Cols(0.40, 0.20);
+        Row(new[] { L("Cargados (propuestos)"), R(N(d.Reemp.Cargados)) }, c2, fCell);
+        Row(new[] { L("Enviados (visados)"), R(N(d.Reemp.Enviados)) }, c2, fCell);
+        y += 10;
+
+        // 3) Control repo vs enviado
+        Titulo("3 · Control repo vs enviado");
+        Nota("«Enviado» = unidades de los remitos con escaneo de recepción (RemitoEscaneado).");
+
+        Sub("OK por local (se envió lo que pidió)");
+        var c3 = Cols(0.36, 0.16, 0.16, 0.16, 0.16); var d3 = new[] { false, true, true, true, true };
+        Header(new[] { "Local", "Art. OK", "Packs OK", "Prendas OK", "Art. c/dif" }, c3, d3);
+        foreach (var o in d.Diff.Ok) Row(new[] { L(o.Local), R(N(o.ArticulosOk)), R(N(o.PacksOk)), R(N(o.PrendasOk)), R(N(o.ArticulosDif)) }, c3, fCell);
+        y += 10;
+
+        Sub("Diferencias (lado repo) — pidió y no se envió igual (prendas)");
+        var cD = Cols(0.08, 0.10, 0.30, 0.07, 0.09, 0.09, 0.09, 0.09, 0.09);
+        var dD = new[] { false, false, false, true, true, true, true, true, true };
+        var headD = new[] { "Local", "Código", "Descripción", "Packs", "Cant/pack", "Pedido", "Packs env.", "Enviado", "Dif." };
+        if (d.Diff.Repo.Count == 0) { Nota("Sin diferencias: se envió todo lo pedido."); }
+        else
+        {
+            Header(headD, cD, dD);
+            foreach (var g in d.Diff.Repo.GroupBy(r => r.Local))
+            {
+                foreach (var r in g)
+                {
+                    var des = r.Des + (r.SinMapeo ? "  · SIN MAPEO DEPO" : "");
+                    var cDif = r.Dif > 0 ? XColor.FromArgb(180, 0, 0) : XColor.FromArgb(0, 140, 90);
+                    var pe = r.CantPack > 0 ? r.PacksEnv.ToString("0.#") : "—";
+                    Row(new[] { L(r.Local), L(r.Art), new Celda { Texto = des, Color = r.SinMapeo ? XColor.FromArgb(180, 0, 0) : (XColor?)null },
+                        R(N(r.PacksPed)), R(N(r.CantPack)), R(N(r.Pedido)), R(pe), R(N(r.Enviado)), R(N(r.Dif), true, cDif) }, cD, fCell);
+                }
+                int sPacks = g.Sum(x => x.PacksPed), sPed = g.Sum(x => x.Pedido), sEnv = g.Sum(x => x.Enviado), sDif = sPed - sEnv;
+                var cS = sDif > 0 ? XColor.FromArgb(180, 0, 0) : XColor.FromArgb(0, 140, 90);
+                Row(new[] { L("Subtotal " + g.Key, true), L(""), L(""), R(N(sPacks), true), L(""), R(N(sPed), true), L(""), R(N(sEnv), true), R(N(sDif), true, cS) }, cD, fCellB, subBg);
+            }
+        }
+        y += 10;
+
+        Sub("Se mandó sin pedir — no estaba en la repo (prendas)");
+        var cA = Cols(0.10, 0.12, 0.44, 0.12, 0.14); var dA = new[] { false, false, false, true, false };
+        if (d.Diff.Afuera.Count == 0) { Nota("Nada: no se envió nada fuera de lo pedido."); }
+        else
+        {
+            Header(new[] { "Local", "Código", "Descripción", "Enviado", "¿Reemplazo?" }, cA, dA);
+            foreach (var a in d.Diff.Afuera)
+            {
+                var tag = a.EsReemplazo ? "Reemplazo" : "Por afuera";
+                var tc = a.EsReemplazo ? XColor.FromArgb(0, 140, 90) : XColor.FromArgb(180, 0, 0);
+                Row(new[] { L(a.Local), L(a.Art), L(a.Des), R(N(a.Enviado)), new Celda { Texto = tag, Bold = true, Color = tc } }, cA, fCell);
+            }
+        }
+
+        gfx.Dispose();
+        using var ms = new MemoryStream();
+        doc.Save(ms);
+        return ms.ToArray();
     }
 
     private static string Th(string t, bool num = false)
