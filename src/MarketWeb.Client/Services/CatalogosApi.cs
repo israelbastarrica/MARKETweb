@@ -15,14 +15,20 @@ public sealed class CatalogosApi
     public async Task<CatalogoDetalleDto?> DetalleAsync(int id)
         => await _http.GetFromJsonAsync<CatalogoDetalleDto>($"api/catalogos/{id}");
 
-    public async Task<List<string>> TemporadasAsync()
-        => await _http.GetFromJsonAsync<List<string>>("api/catalogos/temporadas") ?? new();
+    public async Task<CatalogoCombosDto> CombosAsync()
+        => await _http.GetFromJsonAsync<CatalogoCombosDto>("api/catalogos/combos") ?? new();
 
     public async Task<CatalogoRenglonDto?> ArticuloAsync(string codigo)
     {
         var resp = await _http.GetAsync($"api/catalogos/articulo/{Uri.EscapeDataString(codigo)}");
         return resp.IsSuccessStatusCode ? await resp.Content.ReadFromJsonAsync<CatalogoRenglonDto>() : null;
     }
+
+    public async Task<List<PedidoOrdenSelDto>> PedidosOrdenesAsync(string? filtro)
+        => await _http.GetFromJsonAsync<List<PedidoOrdenSelDto>>($"api/catalogos/pedidos-ordenes?filtro={Uri.EscapeDataString(filtro ?? "")}") ?? new();
+
+    public async Task<List<CatalogoRenglonDto>> ProformaAsync(int nro)
+        => await _http.GetFromJsonAsync<List<CatalogoRenglonDto>>($"api/catalogos/proforma/{nro}") ?? new();
 
     public async Task<int> GuardarAsync(CatalogoGuardarRequest req)
     {

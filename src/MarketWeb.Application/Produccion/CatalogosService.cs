@@ -9,22 +9,30 @@ public interface ICatalogosService
 {
     Task<IReadOnlyList<CatalogoDto>> ListarAsync(CancellationToken ct = default);
     Task<CatalogoDetalleDto?> DetalleAsync(int id, CancellationToken ct = default);
-    Task<IReadOnlyList<string>> TemporadasAsync(CancellationToken ct = default);
+    Task<CatalogoCombosDto> CombosAsync(CancellationToken ct = default);
     /// <summary>Resuelve descripción + categoría de un ARTCOD desde Dragon (para agregar un renglón).</summary>
     Task<CatalogoRenglonDto?> ResolverArticuloAsync(string codigo, CancellationToken ct = default);
+    /// <summary>Órdenes de pedido activas (PedidosOrdenes) para el selector — opción "Orden de Pedido".</summary>
+    Task<IReadOnlyList<PedidoOrdenSelDto>> PedidosOrdenesAsync(string? filtro, CancellationToken ct = default);
+    /// <summary>Artículos de una proforma de Dragon (PedidosOrdenes por NroOrden) — opción "Proforma Dragon".</summary>
+    Task<IReadOnlyList<CatalogoRenglonDto>> ProformaAsync(int nroProforma, CancellationToken ct = default);
     Task<int> GuardarAsync(CatalogoGuardarRequest req, string aud, CancellationToken ct = default);
     Task<bool> EliminarAsync(int id, string aud, CancellationToken ct = default);
 }
 
 /// <summary>
 /// Catálogos (Producción) — port fiel de frmABMCatalogo (.Net), SIN Canva.
-/// Un catálogo = Nombre/Año/Temporada + lista de ítems ordenados (ARTÍCULO por código / TEXTO libre).
+/// Un catálogo = Nombre/Año/Temporada + lista de ítems ordenados. Tipos de ítem:
+/// ARTÍCULO (por código), TEXTO (línea con fondo negro), OP {nroOrden} (renglón de una Orden de
+/// Pedido de PedidosOrdenes) y DG {nroProforma} (artículos de una proforma de Dragon).
 /// Reusa las tablas existentes Catalogos + CatalogosDetalle (mismas que usa el .Net → interoperan).
-/// La descripción/categoría del artículo salen de Dragon (ART / CATEGART), igual que el .Net.
+/// Descripción/categoría salen de Dragon (ART / CATEGART). Combos Año/Temporada desde Dragon (ART / TEMPORADA).
 /// El PDF (las tarjetas) se genera aparte, en una segunda etapa.
 /// </summary>
 public sealed class CatalogosService : ICatalogosService
 {
+    private const string DbDragon = "DRAGONFISH_CENTRAL.ZooLogic";
+
     private readonly ISqlConnectionFactory _db;
     public CatalogosService(ISqlConnectionFactory db) => _db = db;
 
@@ -76,19 +84,28 @@ ORDER BY c.ID DESC;";
         var dto = await cn.QueryFirstOrDefaultAsync<CatalogoDetalleDto>(new CommandDefinition(cab, new { id }, cancellationToken: ct));
         if (dto is null) return null;
 
-        // ARTÍCULO/OP/DG → descripción desde Dragon (ART.ARTDES); TEXTO → el propio Valor.
-        const string det = @"
+        // Reconstruye la grilla igual que CargarDetalle del .Net:
+        //  TEXTO       → Valor es el texto; Código vacío.
+        //  ARTÍCULO/DG → Valor es el ARTCOD; descripción desde ART.
+        //  OP          → Valor es el ID de PedidosOrdenes; el ARTCOD sale de ahí, descripción desde ART.
+        var det = $@"
 SELECT d.Tipo AS Tipo,
-       ISNULL(d.Valor,'') AS Valor,
+       CASE WHEN d.Tipo='TEXTO' THEN ''
+            WHEN d.Tipo LIKE 'OP %' THEN RTRIM(ISNULL(PO.ARTCOD,''))
+            ELSE ISNULL(d.Valor,'') END AS Codigo,
        CASE WHEN d.Tipo='TEXTO' THEN ISNULL(d.Valor,'')
             ELSE LTRIM(RTRIM(ISNULL(ART.ARTDES,''))) END AS Descripcion,
        ISNULL(d.Categoria,'') AS Categoria,
        ISNULL(d.Orden,0) AS Orden,
+       ISNULL(d.Valor,'') AS RefValor,
        CASE WHEN d.Tipo='TEXTO' THEN CAST(1 AS BIT)
             WHEN ART.ARTCOD IS NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS ExisteEnDragon
 FROM dbo.CatalogosDetalle d
-OUTER APPLY (SELECT TOP 1 A.ARTCOD, A.ARTDES FROM DRAGONFISH_CENTRAL.Zoologic.ART A WITH(NOLOCK)
-             WHERE RTRIM(A.ARTCOD)=RTRIM(d.Valor)) ART
+OUTER APPLY (SELECT TOP 1 P.ARTCOD FROM dbo.PedidosOrdenes P
+             WHERE d.Tipo LIKE 'OP %' AND P.ID = TRY_CONVERT(INT, d.Valor)) PO
+OUTER APPLY (SELECT TOP 1 A.ARTCOD, A.ARTDES FROM {DbDragon}.ART A WITH(NOLOCK)
+             WHERE RTRIM(A.ARTCOD) = CASE WHEN d.Tipo LIKE 'OP %' THEN RTRIM(ISNULL(PO.ARTCOD,''))
+                                          ELSE RTRIM(ISNULL(d.Valor,'')) END) ART
 WHERE d.IDCatalogo=@id AND d.Eliminado=0
 ORDER BY ISNULL(d.Orden,0), d.ID;";
         var items = await cn.QueryAsync<CatalogoRenglonDto>(new CommandDefinition(det, new { id }, cancellationToken: ct));
@@ -96,19 +113,31 @@ ORDER BY ISNULL(d.Orden,0), d.ID;";
         return dto;
     }
 
-    public async Task<IReadOnlyList<string>> TemporadasAsync(CancellationToken ct = default)
+    public async Task<CatalogoCombosDto> CombosAsync(CancellationToken ct = default)
     {
         using var cn = _db.Create();
         if (cn.State != System.Data.ConnectionState.Open) await cn.OpenAsync(ct);
-        // Temporadas de Dragon (ATEMPORADA→TEMPORADA); si falla, lista vacía y el combo queda libre.
+        var dto = new CatalogoCombosDto();
+        // Igual que CargarCombos del .Net: años y temporadas realmente usados por artículos de Dragon.
         try
         {
-            const string sql = @"SELECT LTRIM(RTRIM(DESCRIP)) FROM DRAGONFISH_CENTRAL.Zoologic.TEMPORADA WITH(NOLOCK)
-                                 WHERE ISNULL(DESCRIP,'')<>'' ORDER BY DESCRIP;";
-            var t = await cn.QueryAsync<string>(new CommandDefinition(sql, cancellationToken: ct));
-            return t.ToList();
+            var anios = await cn.QueryAsync<int>(new CommandDefinition(
+                $@"SELECT DISTINCT ANO FROM {DbDragon}.ART WITH(NOLOCK) WHERE ANO<>0 ORDER BY ANO DESC;",
+                cancellationToken: ct));
+            dto.Anios = anios.ToList();
         }
-        catch { return new List<string>(); }
+        catch { }
+        try
+        {
+            var temps = await cn.QueryAsync<string>(new CommandDefinition(
+                $@"SELECT DISTINCT LTRIM(RTRIM(TEM.TDES)) FROM {DbDragon}.ART ART WITH(NOLOCK)
+                   LEFT JOIN {DbDragon}.TEMPORADA TEM WITH(NOLOCK) ON TEM.TCOD=ART.ATEMPORADA
+                   WHERE ISNULL(TEM.TDES,'')<>'' ORDER BY 1;",
+                cancellationToken: ct));
+            dto.Temporadas = temps.ToList();
+        }
+        catch { }
+        return dto;
     }
 
     public async Task<CatalogoRenglonDto?> ResolverArticuloAsync(string codigo, CancellationToken ct = default)
@@ -117,19 +146,56 @@ ORDER BY ISNULL(d.Orden,0), d.ID;";
         if (codigo.Length == 0) return null;
         using var cn = _db.Create();
         if (cn.State != System.Data.ConnectionState.Open) await cn.OpenAsync(ct);
-        const string sql = @"
-SELECT TOP 1 LTRIM(RTRIM(A.ARTCOD)) AS Valor,
+        var sql = $@"
+SELECT TOP 1 LTRIM(RTRIM(A.ARTCOD)) AS Codigo,
        LTRIM(RTRIM(ISNULL(A.ARTDES,''))) AS Descripcion,
        UPPER(LTRIM(RTRIM(ISNULL(CATE.DESCRIP,'')))) AS Categoria
-FROM DRAGONFISH_CENTRAL.Zoologic.ART A WITH(NOLOCK)
-LEFT JOIN DRAGONFISH_CENTRAL.Zoologic.CATEGART CATE WITH(NOLOCK) ON CATE.COD=A.CATEARTI
+FROM {DbDragon}.ART A WITH(NOLOCK)
+LEFT JOIN {DbDragon}.CATEGART CATE WITH(NOLOCK) ON CATE.COD=A.CATEARTI
 WHERE RTRIM(A.ARTCOD)=@codigo;";
         var item = await cn.QueryFirstOrDefaultAsync<CatalogoRenglonDto>(new CommandDefinition(sql, new { codigo }, cancellationToken: ct));
         if (item is null)
-            return new CatalogoRenglonDto { Tipo = "ARTÍCULO", Valor = codigo, Descripcion = "NO EXISTE EN DRAGON", Categoria = "", ExisteEnDragon = false };
+            return new CatalogoRenglonDto { Tipo = "ARTÍCULO", Codigo = codigo, Descripcion = "NO EXISTE EN DRAGON", Categoria = "", ExisteEnDragon = false };
         item.Tipo = "ARTÍCULO";
         item.ExisteEnDragon = true;
         return item;
+    }
+
+    public async Task<IReadOnlyList<PedidoOrdenSelDto>> PedidosOrdenesAsync(string? filtro, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+        if (cn.State != System.Data.ConnectionState.Open) await cn.OpenAsync(ct);
+        filtro = (filtro ?? "").Trim();
+        var sql = $@"
+SELECT TOP 500 PO.ID AS Id, PO.NroOrden AS NroOrden, RTRIM(ISNULL(PO.ARTCOD,'')) AS ARTCOD,
+       LTRIM(RTRIM(COALESCE(NULLIF(RTRIM(ART.ARTDES),''), NULLIF(LTRIM(RTRIM(PO.DescripcionALT)),''), ''))) AS Descripcion,
+       ISNULL(PO.Tipo,'') AS Tipo
+FROM dbo.PedidosOrdenes PO
+OUTER APPLY (SELECT TOP 1 A.ARTDES FROM {DbDragon}.ART A WITH(NOLOCK) WHERE RTRIM(A.ARTCOD)=RTRIM(PO.ARTCOD)) ART
+WHERE ISNULL(PO.Eliminado,0)=0
+  AND (@f='' OR PO.ARTCOD LIKE '%'+@f+'%' OR CONVERT(NVARCHAR(20),PO.NroOrden) LIKE '%'+@f+'%')
+ORDER BY PO.NroOrden DESC, PO.ID;";
+        var rows = await cn.QueryAsync<PedidoOrdenSelDto>(new CommandDefinition(sql, new { f = filtro }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<CatalogoRenglonDto>> ProformaAsync(int nroProforma, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+        if (cn.State != System.Data.ConnectionState.Open) await cn.OpenAsync(ct);
+        // Igual que CrearCatalogoProformaDragon del .Net: artículos activos de esa orden → filas "DG {nro}".
+        var sql = $@"
+SELECT ('DG ' + CONVERT(NVARCHAR(20), PO.NroOrden)) AS Tipo,
+       RTRIM(ISNULL(PO.ARTCOD,'')) AS Codigo,
+       LTRIM(RTRIM(ISNULL(ART.ARTDES,''))) AS Descripcion,
+       '' AS Categoria,
+       CASE WHEN ART.ARTCOD IS NULL THEN CAST(0 AS BIT) ELSE CAST(1 AS BIT) END AS ExisteEnDragon
+FROM dbo.PedidosOrdenes PO
+OUTER APPLY (SELECT TOP 1 A.ARTCOD, A.ARTDES FROM {DbDragon}.ART A WITH(NOLOCK) WHERE RTRIM(A.ARTCOD)=RTRIM(PO.ARTCOD)) ART
+WHERE ISNULL(PO.Eliminado,0)=0 AND PO.NroOrden=@nro
+ORDER BY PO.ID;";
+        var rows = await cn.QueryAsync<CatalogoRenglonDto>(new CommandDefinition(sql, new { nro = nroProforma }, cancellationToken: ct));
+        return rows.ToList();
     }
 
     public async Task<int> GuardarAsync(CatalogoGuardarRequest req, string aud, CancellationToken ct = default)
@@ -168,8 +234,11 @@ WHERE RTRIM(A.ARTCOD)=@codigo;";
             {
                 orden++;
                 var tipo = string.IsNullOrWhiteSpace(it.Tipo) ? "ARTÍCULO" : it.Tipo.Trim();
-                // TEXTO guarda el texto en Valor; ARTÍCULO guarda el código en Valor.
-                var valor = tipo == "TEXTO" ? (it.Descripcion ?? "") : (it.Valor ?? "");
+                // Qué se persiste en Valor, igual que el .Net:
+                //  TEXTO → el texto (Descripcion) · OP → el ID de PedidosOrdenes (RefValor) · resto (ARTÍCULO/DG) → el código.
+                string valor = tipo == "TEXTO" ? (it.Descripcion ?? "")
+                             : tipo.StartsWith("OP ", StringComparison.Ordinal) ? (it.RefValor ?? it.Codigo ?? "")
+                             : (it.Codigo ?? "");
                 await cn.ExecuteAsync(new CommandDefinition(insDet,
                     new { id, Tipo = tipo, Valor = valor, Categoria = it.Categoria ?? "", Orden = orden, pc, aud },
                     tx, cancellationToken: ct));

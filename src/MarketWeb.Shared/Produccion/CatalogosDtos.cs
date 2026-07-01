@@ -11,14 +11,20 @@ public sealed class CatalogoDto
     public bool TienePdf { get; set; }
 }
 
-/// <summary>Un ítem del catálogo (ARTICULO / TEXTO / OP), resuelto para mostrar en la grilla.</summary>
+/// <summary>
+/// Un ítem del catálogo, resuelto para la grilla. Espeja la fila de dgvReporte del .Net.
+/// Tipo: "ARTÍCULO" | "TEXTO" | "OP {nroOrden}" | "DG {nroProforma}".
+/// Codigo = ARTCOD mostrado (vacío en TEXTO). RefValor = valor a persistir cuando NO es el código
+/// (en OP se guarda el ID de PedidosOrdenes; en el resto el propio código/texto).
+/// </summary>
 public sealed class CatalogoRenglonDto
 {
-    public string Tipo { get; set; } = "ARTICULO";   // ARTICULO / TEXTO / OP
-    public string Valor { get; set; } = "";           // ARTCOD, texto libre, o id de PedidosOrdenes
-    public string Descripcion { get; set; } = "";     // desc de Dragon (ARTICULO) o el texto (TEXTO)
+    public string Tipo { get; set; } = "ARTÍCULO";
+    public string Codigo { get; set; } = "";
+    public string Descripcion { get; set; } = "";
     public string Categoria { get; set; } = "";
     public int Orden { get; set; }
+    public string? RefValor { get; set; }
     public bool ExisteEnDragon { get; set; }
 }
 
@@ -40,4 +46,21 @@ public sealed class CatalogoGuardarRequest
     public int? Anio { get; set; }
     public string Temporada { get; set; } = "";
     public List<CatalogoRenglonDto> Items { get; set; } = new();
+}
+
+/// <summary>Combos de cabecera (Año / Temporada), traídos de Dragon (ART / TEMPORADA).</summary>
+public sealed class CatalogoCombosDto
+{
+    public List<int> Anios { get; set; } = new();
+    public List<string> Temporadas { get; set; } = new();
+}
+
+/// <summary>Fila para el selector de Órdenes de Pedido (PedidosOrdenes) — opción "Orden de Pedido" del botón Agregar.</summary>
+public sealed class PedidoOrdenSelDto
+{
+    public int Id { get; set; }
+    public int NroOrden { get; set; }
+    public string ARTCOD { get; set; } = "";
+    public string Descripcion { get; set; } = "";
+    public string Tipo { get; set; } = "";
 }

@@ -27,9 +27,9 @@ public sealed class CatalogosController : ControllerBase
         return c is null ? NotFound() : Ok(c);
     }
 
-    [HttpGet("temporadas")]
-    public async Task<ActionResult<IReadOnlyList<string>>> Temporadas(CancellationToken ct)
-        => Ok(await _service.TemporadasAsync(ct));
+    [HttpGet("combos")]
+    public async Task<ActionResult<CatalogoCombosDto>> Combos(CancellationToken ct)
+        => Ok(await _service.CombosAsync(ct));
 
     [HttpGet("articulo/{codigo}")]
     public async Task<ActionResult<CatalogoRenglonDto>> Articulo(string codigo, CancellationToken ct)
@@ -37,6 +37,14 @@ public sealed class CatalogosController : ControllerBase
         var it = await _service.ResolverArticuloAsync(codigo, ct);
         return it is null ? NotFound() : Ok(it);
     }
+
+    [HttpGet("pedidos-ordenes")]
+    public async Task<ActionResult<IReadOnlyList<PedidoOrdenSelDto>>> PedidosOrdenes([FromQuery] string? filtro, CancellationToken ct)
+        => Ok(await _service.PedidosOrdenesAsync(filtro, ct));
+
+    [HttpGet("proforma/{nro:int}")]
+    public async Task<ActionResult<IReadOnlyList<CatalogoRenglonDto>>> Proforma(int nro, CancellationToken ct)
+        => Ok(await _service.ProformaAsync(nro, ct));
 
     [HttpPost("guardar")]
     public async Task<ActionResult<int>> Guardar([FromBody] CatalogoGuardarRequest req, CancellationToken ct)

@@ -1,7 +1,9 @@
 @page "/produccion/catalogos/nuevo"
 @page "/produccion/catalogos/{Id:int}"
 @using MarketWeb.Shared.Produccion
+@using MarketWeb.Shared.Reposicion
 @inject CatalogosApi Api
+@inject ReporteArticulosApi RepApi
 @inject NavigationManager Nav
 @inject MarketWeb.Client.Services.UiService Ui
 
@@ -25,50 +27,46 @@
                 </div>
                 <div class="col-6 col-md-4">
                     <label class="form-label small text-muted mb-1">Temporada</label>
-                    <input class="form-control" list="temporadas" @bind="_temporada" placeholder="Temporada" />
-                    <datalist id="temporadas">
-                        @foreach (var t in _temporadas) { <option value="@t" /> }
-                    </datalist>
+                    <select class="form-select" @bind="_temporada">
+                        <option value="">(sin temporada)</option>
+                        @foreach (var t in _combos.Temporadas) { <option value="@t">@t</option> }
+                    </select>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small text-muted mb-1">Año</label>
-                    <input type="number" class="form-control" @bind="_anio" placeholder="@DateTime.Now.Year.ToString()" />
+                    <select class="form-select" @bind="_anio">
+                        <option value="">(sin año)</option>
+                        @foreach (var a in _combos.Anios) { <option value="@a">@a</option> }
+                    </select>
                 </div>
             </div>
         </div>
 
-        <!-- Agregar ítems -->
-        <div class="market-card mb-3">
-            <div class="row g-2 align-items-end">
-                <div class="col-12 col-md-4">
-                    <label class="form-label small text-muted mb-1">Agregar artículo (código)</label>
-                    <div class="input-group">
-                        <input class="form-control" @bind="_codigo" @bind:event="oninput" @onkeydown="CodigoKey" placeholder="Ej: IH051.229" />
-                        <button class="btn btn-outline-primary" @onclick="AgregarArticulo" disabled="@(_agregando || string.IsNullOrWhiteSpace(_codigo))">
-                            @if (_agregando) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-plus"></i> }
-                        </button>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small text-muted mb-1">Agregar texto (título / separador)</label>
-                    <div class="input-group">
-                        <input class="form-control" @bind="_texto" @bind:event="oninput" @onkeydown="TextoKey" placeholder="Texto libre" />
-                        <button class="btn btn-outline-secondary" @onclick="AgregarTexto" disabled="@string.IsNullOrWhiteSpace(_texto)">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="col-12 col-md-2 text-md-end">
-                    <span class="text-muted small">@_items.Count ítem(s)</span>
-                </div>
+        <!-- Botón AGREGAR (despliega las 4 opciones, igual que gpbAgregar del .Net) -->
+        <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+            <div class="btn-group">
+                <button class="btn btn-primary" @onclick="() => _menu = !_menu">
+                    <i class="fa-solid fa-plus me-1"></i> Agregar
+                </button>
             </div>
+            @if (_menu)
+            {
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-primary" @onclick="AbrirArticulo"><i class="fa-solid fa-shirt me-1"></i> Artículo</button>
+                    <button class="btn btn-outline-secondary" @onclick="AbrirTexto"><i class="fa-solid fa-font me-1"></i> Texto</button>
+                    <button class="btn btn-outline-info" @onclick="AbrirOP"><i class="fa-solid fa-bag-shopping me-1"></i> Orden de Pedido</button>
+                    <button class="btn btn-outline-warning" @onclick="AbrirProforma"><i class="fa-solid fa-file-invoice me-1"></i> Proforma Dragon</button>
+                    <button class="btn btn-link text-muted" @onclick="() => _menu = false">Cancelar</button>
+                </div>
+            }
+            <span class="text-muted small ms-auto">@_items.Count ítem(s)</span>
         </div>
 
         <!-- Grilla de ítems -->
         <div class="market-card table-responsive mb-3">
             @if (_items.Count == 0)
             {
-                <p class="text-muted mb-0 p-2">Sin ítems. Agregá artículos por código o textos.</p>
+                <p class="text-muted mb-0 p-2">Sin ítems. Usá «Agregar» para sumar artículos, textos, órdenes de pedido o una proforma.</p>
             }
             else
             {
@@ -77,8 +75,8 @@
                         <tr>
                             <th style="width:50px" class="text-center">#</th>
                             <th>Tipo</th><th>Código</th><th>Descripción</th><th>Categoría</th>
-                            <th class="text-center" style="width:140px">Orden</th>
-                            <th class="text-center" style="width:60px"></th>
+                            <th class="text-center" style="width:120px">Orden</th>
+                            <th class="text-center" style="width:50px"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -88,12 +86,8 @@
                             var it = _items[idx];
                             <tr class="@(it.Tipo == "TEXTO" ? "cat-texto" : "")">
                                 <td class="text-center text-muted">@(idx + 1)</td>
-                                <td>
-                                    @if (it.Tipo == "TEXTO") { <span class="badge bg-secondary">TEXTO</span> }
-                                    else if (!it.ExisteEnDragon) { <span class="badge bg-danger" title="No existe en Dragon">ARTÍCULO</span> }
-                                    else { <span class="badge bg-primary">ARTÍCULO</span> }
-                                </td>
-                                <td class="fw-semibold">@it.Valor</td>
+                                <td>@TipoBadge(it)</td>
+                                <td class="fw-semibold">@it.Codigo</td>
                                 <td>@it.Descripcion</td>
                                 <td class="small">@it.Categoria</td>
                                 <td class="text-center text-nowrap">
@@ -120,22 +114,238 @@
     }
 </div>
 
+@* ===================== MODAL: ARTÍCULO (selección desde el reporte, con checks) ===================== *@
+@if (_modal == Modal.Articulo)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title"><i class="fa-solid fa-shirt me-2"></i>Agregar artículos</h5>
+            <button type="button" class="btn-close" @onclick="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+            <div class="row g-2 mb-2">
+                <div class="col-6 col-md-3">
+                    <input class="form-control form-control-sm" placeholder="Código" @bind="_artFiltro.CodArt" @onkeydown="ArtKey" />
+                </div>
+                <div class="col-6 col-md-4">
+                    <input class="form-control form-control-sm" placeholder="Descripción" @bind="_artFiltro.Descripcion" @onkeydown="ArtKey" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <select class="form-select form-select-sm" @bind="_artFiltro.Categoria">
+                        <option value="TODOS">Categoría</option>
+                        @foreach (var c in _artCombos.Categorias) { <option value="@c">@c</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select class="form-select form-select-sm" @bind="_artFiltro.Temporada">
+                        <option value="TODOS">Temporada</option>
+                        @foreach (var t in _artCombos.Temporadas) { <option value="@t">@t</option> }
+                    </select>
+                </div>
+                <div class="col-12 col-md-1 d-grid">
+                    <button class="btn btn-sm btn-primary" @onclick="BuscarArt" disabled="@_artBuscando">
+                        @if (_artBuscando) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-magnifying-glass"></i> }
+                    </button>
+                </div>
+            </div>
+
+            @if (_artResultados.Count > 0)
+            {
+                <div class="d-flex gap-2 mb-2 small">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodos(true)">Seleccionar todo</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodos(false)">Desmarcar todo</button>
+                    <span class="text-muted ms-auto align-self-center">@_artSel.Count seleccionado(s) de @_artResultados.Count</span>
+                </div>
+            }
+
+            <div style="max-height:52vh;overflow:auto">
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:40px"></th><th>Código</th><th>Descripción</th><th>Categoría</th><th>Temp./Año</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_artResultados.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-muted p-2">Buscá artículos con el filtro de arriba.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var a in _artResultados)
+                            {
+                                <tr class="cat-row" @onclick="() => ToggleArt(a.Codigo)">
+                                    <td class="text-center" @onclick:stopPropagation="true">
+                                        <input type="checkbox" class="form-check-input" checked="@_artSel.Contains(a.Codigo)"
+                                               @onchange="() => ToggleArt(a.Codigo)" />
+                                    </td>
+                                    <td class="fw-semibold">@a.Codigo</td>
+                                    <td>@a.Descripcion</td>
+                                    <td class="small">@a.Categoria</td>
+                                    <td class="small">@a.Temporada @(string.IsNullOrEmpty(a.Anio) ? "" : $"· {a.Anio}")</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @onclick="Cerrar">Cancelar</button>
+            <button class="btn btn-primary" @onclick="AgregarArticulosSel" disabled="@(_artSel.Count == 0)">
+                Agregar @(_artSel.Count > 0 ? $"({_artSel.Count})" : "")
+            </button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ===================== MODAL: TEXTO ===================== *@
+@if (_modal == Modal.Texto)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title"><i class="fa-solid fa-font me-2"></i>Agregar texto</h5>
+            <button type="button" class="btn-close" @onclick="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+            <label class="form-label small text-muted mb-1">Texto (se muestra como tarjeta con fondo negro)</label>
+            <textarea class="form-control" rows="3" @bind="_textoInput" placeholder="Ej: NUEVA TEMPORADA"></textarea>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @onclick="Cerrar">Cancelar</button>
+            <button class="btn btn-primary" @onclick="AgregarTextoConfirm" disabled="@string.IsNullOrWhiteSpace(_textoInput)">Agregar</button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ===================== MODAL: ORDEN DE PEDIDO ===================== *@
+@if (_modal == Modal.OP)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title"><i class="fa-solid fa-bag-shopping me-2"></i>Agregar desde Orden de Pedido</h5>
+            <button type="button" class="btn-close" @onclick="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group input-group-sm mb-2" style="max-width:420px">
+                <span class="input-group-text">Buscar</span>
+                <input class="form-control" placeholder="N° orden o código" @bind="_opFiltro" @onkeydown="OpKey" />
+                <button class="btn btn-primary" @onclick="BuscarOP" disabled="@_opBuscando">
+                    @if (_opBuscando) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-magnifying-glass"></i> }
+                </button>
+            </div>
+            @if (_opResultados.Count > 0)
+            {
+                <div class="d-flex gap-2 mb-2 small">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodosOP(true)">Seleccionar todo</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodosOP(false)">Desmarcar todo</button>
+                    <span class="text-muted ms-auto align-self-center">@_opSel.Count seleccionado(s) de @_opResultados.Count</span>
+                </div>
+            }
+            <div style="max-height:52vh;overflow:auto">
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr><th style="width:40px"></th><th>N° orden</th><th>Tipo</th><th>Código</th><th>Descripción</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (_opResultados.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-muted p-2">Buscá una orden de pedido.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var o in _opResultados)
+                            {
+                                <tr class="cat-row" @onclick="() => ToggleOP(o.Id)">
+                                    <td class="text-center" @onclick:stopPropagation="true">
+                                        <input type="checkbox" class="form-check-input" checked="@_opSel.Contains(o.Id)"
+                                               @onchange="() => ToggleOP(o.Id)" />
+                                    </td>
+                                    <td class="fw-semibold">@o.NroOrden</td>
+                                    <td class="small">@o.Tipo</td>
+                                    <td>@o.ARTCOD</td>
+                                    <td>@o.Descripcion</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @onclick="Cerrar">Cancelar</button>
+            <button class="btn btn-primary" @onclick="AgregarOPSel" disabled="@(_opSel.Count == 0)">
+                Agregar @(_opSel.Count > 0 ? $"({_opSel.Count})" : "")
+            </button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* ===================== MODAL: PROFORMA DRAGON ===================== *@
+@if (_modal == Modal.Proforma)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title"><i class="fa-solid fa-file-invoice me-2"></i>Proforma de Dragon</h5>
+            <button type="button" class="btn-close" @onclick="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+            <label class="form-label small text-muted mb-1">N° de proforma (orden de Dragon)</label>
+            <input type="number" class="form-control" @bind="_proformaNro" @onkeydown="ProformaKey" placeholder="Ej: 4538" />
+            <p class="small text-muted mt-2 mb-0">Trae todos los artículos activos de esa orden.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @onclick="Cerrar">Cancelar</button>
+            <button class="btn btn-primary" @onclick="AgregarProformaConfirm" disabled="@(_proformaNro is null || _procesando)">
+                @if (_procesando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                Agregar
+            </button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 <style>
     .cat-texto td { background: var(--mk-row-hover); font-style: italic; }
+    .cat-row { cursor: pointer; }
+    .cat-row:hover td { background: var(--mk-row-hover); }
 </style>
 
 @code {
     [Parameter] public int? Id { get; set; }
 
+    private enum Modal { None, Articulo, Texto, OP, Proforma }
+
     private bool _esNuevo;
-    private bool _cargando = true, _guardando, _agregando;
+    private bool _cargando = true, _guardando, _procesando, _menu;
     private string _nombre = "";
     private string _temporada = "";
-    private int? _anio = DateTime.Now.Year;
-    private string _codigo = "";
-    private string _texto = "";
+    private int? _anio;
+    private CatalogoCombosDto _combos = new();
     private List<CatalogoRenglonDto> _items = new();
-    private List<string> _temporadas = new();
+    private Modal _modal = Modal.None;
+
+    // Artículo
+    private ReporteArticulosFiltro _artFiltro = new();
+    private ReporteArticulosCombosDto _artCombos = new();
+    private List<ArticuloReporteDto> _artResultados = new();
+    private readonly HashSet<string> _artSel = new();
+    private bool _artBuscando;
+
+    // Texto
+    private string _textoInput = "";
+
+    // Orden de Pedido
+    private string _opFiltro = "";
+    private List<PedidoOrdenSelDto> _opResultados = new();
+    private readonly HashSet<int> _opSel = new();
+    private bool _opBuscando;
+
+    // Proforma
+    private int? _proformaNro;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -143,7 +353,7 @@
         _cargando = true;
         try
         {
-            _temporadas = await Api.TemporadasAsync();
+            _combos = await Api.CombosAsync();
             if (!_esNuevo)
             {
                 var d = await Api.DetalleAsync(Id!.Value);
@@ -160,38 +370,110 @@
         finally { _cargando = false; }
     }
 
-    private async Task CodigoKey(KeyboardEventArgs e) { if (e.Key == "Enter") await AgregarArticulo(); }
-    private void TextoKey(KeyboardEventArgs e) { if (e.Key == "Enter") AgregarTexto(); }
-
-    private async Task AgregarArticulo()
+    private MarkupString TipoBadge(CatalogoRenglonDto it)
     {
-        var cod = _codigo.Trim();
-        if (cod.Length == 0) return;
-        _agregando = true;
-        try
-        {
-            var it = await Api.ArticuloAsync(cod);
-            if (it is null) { Ui.Error("No se pudo consultar el artículo."); return; }
-            if (!it.ExisteEnDragon) Ui.Toast($"«{cod}» no existe en Dragon, se agrega igual.");
-            _items.Add(it);
-            _codigo = "";
-        }
-        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
-        finally { _agregando = false; }
-    }
-
-    private void AgregarTexto()
-    {
-        var t = _texto.Trim();
-        if (t.Length == 0) return;
-        _items.Add(new CatalogoRenglonDto { Tipo = "TEXTO", Valor = "", Descripcion = t, Categoria = "TEXTO", ExisteEnDragon = true });
-        _texto = "";
+        if (it.Tipo == "TEXTO") return (MarkupString)"<span class='badge bg-secondary'>TEXTO</span>";
+        if (it.Tipo.StartsWith("OP ")) return (MarkupString)$"<span class='badge bg-info text-dark'>{it.Tipo}</span>";
+        if (it.Tipo.StartsWith("DG ")) return (MarkupString)$"<span class='badge bg-warning text-dark'>{it.Tipo}</span>";
+        if (!it.ExisteEnDragon) return (MarkupString)"<span class='badge bg-danger' title='No existe en Dragon'>ARTÍCULO</span>";
+        return (MarkupString)"<span class='badge bg-primary'>ARTÍCULO</span>";
     }
 
     private void Subir(int i) { if (i > 0) (_items[i - 1], _items[i]) = (_items[i], _items[i - 1]); }
     private void Bajar(int i) { if (i < _items.Count - 1) (_items[i + 1], _items[i]) = (_items[i], _items[i + 1]); }
     private void Quitar(int i) => _items.RemoveAt(i);
 
+    private void Cerrar() => _modal = Modal.None;
+
+    // ---- Artículo ----
+    private async Task AbrirArticulo()
+    {
+        _menu = false; _modal = Modal.Articulo; _artSel.Clear();
+        if (_artCombos.Categorias.Count == 0)
+            try { _artCombos = await RepApi.CombosAsync(); } catch { }
+    }
+    private async Task ArtKey(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarArt(); }
+    private async Task BuscarArt()
+    {
+        _artBuscando = true;
+        try { _artResultados = await RepApi.ListarAsync(_artFiltro); }
+        catch { _artResultados = new(); }
+        finally { _artBuscando = false; }
+    }
+    private void ToggleArt(string cod) { if (!_artSel.Add(cod)) _artSel.Remove(cod); }
+    private void MarcarTodos(bool sel)
+    {
+        _artSel.Clear();
+        if (sel) foreach (var a in _artResultados) _artSel.Add(a.Codigo);
+    }
+    private void AgregarArticulosSel()
+    {
+        foreach (var a in _artResultados.Where(a => _artSel.Contains(a.Codigo)))
+            _items.Add(new CatalogoRenglonDto { Tipo = "ARTÍCULO", Codigo = a.Codigo, Descripcion = a.Descripcion, Categoria = a.Categoria, ExisteEnDragon = true });
+        Cerrar();
+    }
+
+    // ---- Texto ----
+    private void AbrirTexto() { _menu = false; _textoInput = ""; _modal = Modal.Texto; }
+    private void AgregarTextoConfirm()
+    {
+        var t = _textoInput.Trim();
+        if (t.Length == 0) return;
+        _items.Add(new CatalogoRenglonDto { Tipo = "TEXTO", Codigo = "", Descripcion = t, Categoria = "TEXTO", ExisteEnDragon = true });
+        Cerrar();
+    }
+
+    // ---- Orden de Pedido ----
+    private void AbrirOP() { _menu = false; _opSel.Clear(); _opResultados = new(); _opFiltro = ""; _modal = Modal.OP; }
+    private async Task OpKey(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarOP(); }
+    private async Task BuscarOP()
+    {
+        _opBuscando = true;
+        try { _opResultados = await Api.PedidosOrdenesAsync(_opFiltro); }
+        catch { _opResultados = new(); }
+        finally { _opBuscando = false; }
+    }
+    private void ToggleOP(int id) { if (!_opSel.Add(id)) _opSel.Remove(id); }
+    private void MarcarTodosOP(bool sel)
+    {
+        _opSel.Clear();
+        if (sel) foreach (var o in _opResultados) _opSel.Add(o.Id);
+    }
+    private void AgregarOPSel()
+    {
+        foreach (var o in _opResultados.Where(o => _opSel.Contains(o.Id)))
+            _items.Add(new CatalogoRenglonDto
+            {
+                Tipo = $"OP {o.NroOrden}",
+                Codigo = o.ARTCOD,
+                Descripcion = o.Descripcion,
+                Categoria = "",
+                RefValor = o.Id.ToString(),
+                ExisteEnDragon = true
+            });
+        Cerrar();
+    }
+
+    // ---- Proforma Dragon ----
+    private void AbrirProforma() { _menu = false; _proformaNro = null; _modal = Modal.Proforma; }
+    private async Task ProformaKey(KeyboardEventArgs e) { if (e.Key == "Enter") await AgregarProformaConfirm(); }
+    private async Task AgregarProformaConfirm()
+    {
+        if (_proformaNro is null) return;
+        _procesando = true;
+        try
+        {
+            var filas = await Api.ProformaAsync(_proformaNro.Value);
+            if (filas.Count == 0) { Ui.Error("No se encontraron artículos activos para esa proforma."); return; }
+            _items.AddRange(filas);
+            Ui.Exito($"Se agregaron {filas.Count} artículos.");
+            Cerrar();
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _procesando = false; }
+    }
+
+    // ---- Guardar ----
     private async Task Guardar()
     {
         if (string.IsNullOrWhiteSpace(_nombre)) { Ui.Error("Poné un nombre al catálogo."); return; }
