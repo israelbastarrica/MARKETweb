@@ -133,13 +133,12 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                          MAX(rd.ARTDES) AS Des, ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
                          MAX(ISNULL(rd.CantPack,1)) AS CantPack,
                          ISNULL(SUM(rd.PacksAReponer * ISNULL(rd.CantPack,1)),0) AS Prendas,
-                         MAX(CASE WHEN RTRIM(ISNULL(rd.UbicacionDeposito,'')) <> ''
-                                   AND EXISTS (SELECT 1 FROM MARKET.dbo.Mapeo m
-                                               WHERE m.IDUbicacion = 1 AND m.Eliminado = 0
-                                                 AND RTRIM(m.Modulo) = RTRIM(rd.UbicacionDeposito))
-                              THEN 1 ELSE 0 END) AS TieneDepo
+                         MAX(CASE WHEN RTRIM(ISNULL(rd.UbicacionDeposito,'')) <> '' AND mp.Hay = 1 THEN 1 ELSE 0 END) AS TieneDepo
                   FROM MARKET.dbo.ReposicionDetalle rd
                   JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
+                  OUTER APPLY (SELECT TOP 1 1 AS Hay FROM MARKET.dbo.Mapeo m
+                               WHERE m.IDUbicacion = 1 AND m.Eliminado = 0
+                                 AND RTRIM(m.Modulo) = RTRIM(rd.UbicacionDeposito)) mp
                   WHERE ISNULL(r.Eliminado,0)=0 AND r.FechaHoraCorrida >= @desde AND r.FechaHoraCorrida <= @hasta
                   GROUP BY UPPER(LTRIM(RTRIM(rd.LocalDestino))), RTRIM(rd.ARTCOD)", cn) { CommandTimeout = 90 })
             {
