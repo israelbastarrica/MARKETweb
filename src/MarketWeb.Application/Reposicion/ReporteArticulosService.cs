@@ -28,6 +28,7 @@ public sealed class ReporteArticulosService : IReporteArticulosService
             Anios = await ListaAsync(cn, $"SELECT DISTINCT ANO AS V FROM {DF}.ART ART WHERE ART.ANO<>0 ORDER BY ANO DESC", ct),
             Temporadas = await ListaAsync(cn, $"SELECT DISTINCT TEM.TDES AS V FROM {DF}.ART ART LEFT JOIN {DF}.TEMPORADA TEM ON TEM.TCOD=ART.ATEMPORADA WHERE TEM.TDES<>'' ORDER BY TEM.TDES", ct),
             Categorias = await ListaAsync(cn, $"SELECT DISTINCT CATE.DESCRIP AS V FROM {DF}.ART ART LEFT JOIN {DF}.CATEGART CATE ON CATE.COD=ART.CATEARTI WHERE CATE.DESCRIP<>'' ORDER BY CATE.DESCRIP", ct),
+            Subfamilias = await ListaAsync(cn, $"SELECT DISTINCT GRU.DESCRIP AS V FROM {DF}.ART ART LEFT JOIN {DF}.GRUPO GRU ON GRU.COD=ART.GRUPO WHERE GRU.DESCRIP<>'' ORDER BY GRU.DESCRIP", ct),
         };
 
         await using (var cmd = new SqlCommand(
@@ -111,6 +112,36 @@ public sealed class ReporteArticulosService : IReporteArticulosService
                 FechaPack = D("FechaPack")
             });
         }
+        rdr.Close();
+
+        // Subfamilia (Grupo) no la trae el SP: la traemos de Dragon para los códigos del resultado,
+        // así podemos mostrarla y filtrar por ella sin tocar sp_ConsultaArticulos.
+        var codigos = lista.Select(x => x.Codigo).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+        if (codigos.Count > 0)
+        {
+            var grupos = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            // IN (...) con parámetros por lote (por si son muchos códigos).
+            for (int off = 0; off < codigos.Count; off += 1000)
+            {
+                var lote = codigos.Skip(off).Take(1000).ToList();
+                var ps = lote.Select((_, i) => "@c" + i).ToList();
+                await using var cmd2 = new SqlCommand(
+                    $"SELECT RTRIM(ART.ARTCOD) AS Cod, ISNULL(GRU.DESCRIP,'') AS Grupo FROM {DF}.ART ART " +
+                    $"LEFT JOIN {DF}.GRUPO GRU ON GRU.COD=ART.GRUPO WHERE RTRIM(ART.ARTCOD) IN ({string.Join(",", ps)})", cn)
+                { CommandTimeout = 60 };
+                for (int i = 0; i < lote.Count; i++) cmd2.Parameters.AddWithValue(ps[i], lote[i]);
+                await using var r2 = await cmd2.ExecuteReaderAsync(ct);
+                while (await r2.ReadAsync(ct))
+                    grupos[(r2["Cod"]?.ToString() ?? "").Trim()] = (r2["Grupo"]?.ToString() ?? "").Trim();
+            }
+            foreach (var it in lista)
+                if (grupos.TryGetValue(it.Codigo.Trim(), out var g)) it.Subfamilia = g;
+        }
+
+        // Filtro por Subfamilia (si se eligió una en el combo).
+        if (!string.IsNullOrWhiteSpace(f.Subfamilia) && f.Subfamilia != "TODOS")
+            lista = lista.Where(x => string.Equals(x.Subfamilia, f.Subfamilia, StringComparison.OrdinalIgnoreCase)).ToList();
+
         return lista;
     }
 

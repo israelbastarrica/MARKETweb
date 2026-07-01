@@ -123,61 +123,123 @@
     }
 </div>
 
-@* ===================== MODAL: ARTÍCULO (selección desde el reporte, con checks) ===================== *@
+@* ===================== MODAL: ARTÍCULO (reporte de artículos en modo selección) ===================== *@
 @if (_modal == Modal.Articulo)
 {
-    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content">
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down"><div class="modal-content">
         <div class="modal-header">
-            <h5 class="modal-title"><i class="fa-solid fa-shirt me-2"></i>Agregar artículos</h5>
+            <h5 class="modal-title"><i class="fa-solid fa-shirt me-2"></i>Agregar artículos — reporte</h5>
             <button type="button" class="btn-close" @onclick="Cerrar"></button>
         </div>
         <div class="modal-body">
-            <div class="row g-2 mb-2">
-                <div class="col-6 col-md-3">
-                    <input class="form-control form-control-sm" placeholder="Código" @bind="_artFiltro.CodArt" @onkeydown="ArtKey" />
-                </div>
-                <div class="col-6 col-md-4">
-                    <input class="form-control form-control-sm" placeholder="Descripción" @bind="_artFiltro.Descripcion" @onkeydown="ArtKey" />
-                </div>
-                <div class="col-6 col-md-2">
-                    <select class="form-select form-select-sm" @bind="_artFiltro.Categoria">
-                        <option value="TODOS">Categoría</option>
-                        @foreach (var c in _artCombos.Categorias) { <option value="@c">@c</option> }
-                    </select>
-                </div>
-                <div class="col-6 col-md-2">
-                    <select class="form-select form-select-sm" @bind="_artFiltro.Temporada">
-                        <option value="TODOS">Temporada</option>
-                        @foreach (var t in _artCombos.Temporadas) { <option value="@t">@t</option> }
-                    </select>
-                </div>
-                <div class="col-12 col-md-1 d-grid">
-                    <button class="btn btn-sm btn-primary" @onclick="BuscarArt" disabled="@_artBuscando">
-                        @if (_artBuscando) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-magnifying-glass"></i> }
-                    </button>
+            <div class="market-card p-2 mb-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Código</label>
+                        <input class="form-control form-control-sm" @bind="_artFiltro.CodArt" @onkeydown="ArtKey" />
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small text-muted mb-1">Descripción</label>
+                        <input class="form-control form-control-sm" @bind="_artFiltro.Descripcion" @onkeydown="ArtKey" />
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Tipo</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Tipo">
+                            <option value="TODOS">TODOS</option>
+                            @foreach (var x in _artCombos.Tipos) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Combo</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Combo">
+                            <option value="TODOS">TODOS</option>
+                            @foreach (var x in _artCombos.Combos) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small text-muted mb-1">Proveedor</label>
+                        <select class="form-select form-select-sm" @bind="_artProvSel">
+                            <option value="">TODOS</option>
+                            @foreach (var p in _artCombos.Proveedores) { <option value="@p.Cod">@p.Nombre</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Familia</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Familia">
+                            <option value="TODOS">TODOS</option>
+                            @foreach (var x in _artCombos.Familias) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Subfamilia</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Subfamilia">
+                            <option value="TODOS">TODOS</option>
+                            @foreach (var x in _artCombos.Subfamilias) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Categoría</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Categoria">
+                            <option value="TODOS">TODOS</option>
+                            @foreach (var x in _artCombos.Categorias) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Temporada</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Temporada">
+                            <option value="TODOS">TODOS</option>
+                            @foreach (var x in _artCombos.Temporadas) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Año</label>
+                        <select class="form-select form-select-sm" @bind="_artAnioSel">
+                            <option value="">TODOS</option>
+                            @foreach (var x in _artCombos.Anios) { <option value="@x">@x</option> }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small text-muted mb-1">Stock</label>
+                        <select class="form-select form-select-sm" @bind="_artFiltro.Stock">
+                            <option value="0">—</option>
+                            <option value="1">En CENTRAL</option>
+                            <option value="5">En CCENTRAL</option>
+                            <option value="2">En LURO</option>
+                            <option value="3">En PERALTA</option>
+                            <option value="4">En LOCALES</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2 d-grid">
+                        <button class="btn btn-primary btn-sm" @onclick="BuscarArt" disabled="@_artBuscando">
+                            @if (_artBuscando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } else { <i class="fa-solid fa-magnifying-glass me-1"></i> }
+                            Buscar
+                        </button>
+                    </div>
                 </div>
             </div>
 
             @if (_artResultados.Count > 0)
             {
-                <div class="d-flex gap-2 mb-2 small">
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodos(true)">Seleccionar todo</button>
+                <div class="d-flex gap-2 mb-2 small align-items-center">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodos(true)">Marcar todo</button>
                     <button class="btn btn-sm btn-outline-secondary" @onclick="() => MarcarTodos(false)">Desmarcar todo</button>
-                    <span class="text-muted ms-auto align-self-center">@_artSel.Count seleccionado(s) de @_artResultados.Count</span>
+                    <span class="text-muted ms-auto">@_artSel.Count seleccionado(s) de @_artResultados.Count</span>
                 </div>
             }
 
-            <div style="max-height:52vh;overflow:auto">
+            <div style="max-height:56vh;overflow:auto">
                 <table class="market-table align-middle">
                     <thead>
                         <tr>
-                            <th style="width:40px"></th><th>Código</th><th>Descripción</th><th>Categoría</th><th>Temp./Año</th>
+                            <th style="width:40px"></th><th class="text-end">Orden</th><th>Código</th><th>Descripción</th>
+                            <th>Proveedor</th><th>Combo</th><th>Familia</th><th>Tipo</th><th>Temporada</th>
+                            <th class="text-center">Año</th><th>Categoría</th><th>Subfamilia</th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (_artResultados.Count == 0)
                         {
-                            <tr><td colspan="5" class="text-muted p-2">Buscá artículos con el filtro de arriba.</td></tr>
+                            <tr><td colspan="12" class="text-muted p-2">@(_artBusco ? "No se encontraron artículos con esos filtros." : "Aplicá filtros y tocá Buscar.")</td></tr>
                         }
                         else
                         {
@@ -188,10 +250,17 @@
                                         <input type="checkbox" class="form-check-input" checked="@_artSel.Contains(a.Codigo)"
                                                @onchange="() => ToggleArt(a.Codigo)" />
                                     </td>
-                                    <td class="fw-semibold">@a.Codigo</td>
+                                    <td class="text-end">@a.Orden</td>
+                                    <td @onclick:stopPropagation="true"><ArticuloLink Codigo="@a.Codigo" /></td>
                                     <td>@a.Descripcion</td>
-                                    <td class="small">@a.Categoria</td>
-                                    <td class="small">@a.Temporada @(string.IsNullOrEmpty(a.Anio) ? "" : $"· {a.Anio}")</td>
+                                    <td>@a.Proveedor</td>
+                                    <td>@a.Combo</td>
+                                    <td>@a.Familia</td>
+                                    <td>@a.Tipo</td>
+                                    <td>@a.Temporada</td>
+                                    <td class="text-center">@a.Anio</td>
+                                    <td>@a.Categoria</td>
+                                    <td>@a.Subfamilia</td>
                                 </tr>
                             }
                         }
@@ -337,12 +406,14 @@
     private List<CatalogoRenglonDto> _items = new();
     private Modal _modal = Modal.None;
 
-    // Artículo
+    // Artículo (reporte en modo selección)
     private ReporteArticulosFiltro _artFiltro = new();
     private ReporteArticulosCombosDto _artCombos = new();
     private List<ArticuloReporteDto> _artResultados = new();
-    private readonly HashSet<string> _artSel = new();
-    private bool _artBuscando;
+    private readonly HashSet<string> _artSel = new(StringComparer.OrdinalIgnoreCase);
+    private string _artProvSel = "";
+    private string _artAnioSel = "";
+    private bool _artBuscando, _artBusco;
 
     // Texto
     private string _textoInput = "";
@@ -404,10 +475,13 @@
     private async Task ArtKey(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarArt(); }
     private async Task BuscarArt()
     {
-        _artBuscando = true;
+        _artBuscando = true; _artBusco = true;
+        _artFiltro.ProveedorCod = _artProvSel;
+        _artFiltro.Anio = int.TryParse(_artAnioSel, out var a) ? a : 0;
         try { _artResultados = await RepApi.ListarAsync(_artFiltro); }
         catch { _artResultados = new(); }
         finally { _artBuscando = false; }
+        _artSel.RemoveWhere(c => !_artResultados.Any(i => string.Equals(i.Codigo, c, StringComparison.OrdinalIgnoreCase)));
     }
     private void ToggleArt(string cod) { if (!_artSel.Add(cod)) _artSel.Remove(cod); }
     private void MarcarTodos(bool sel)

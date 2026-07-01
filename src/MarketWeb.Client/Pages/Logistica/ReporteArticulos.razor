@@ -60,6 +60,13 @@
                 </select>
             </div>
             <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Subfamilia</label>
+                <select class="form-select form-select-sm" @bind="_f.Subfamilia">
+                    <option value="TODOS">TODOS</option>
+                    @foreach (var x in _c.Subfamilias) { <option value="@x">@x</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Temporada</label>
                 <select class="form-select form-select-sm" @bind="_f.Temporada">
                     <option value="TODOS">TODOS</option>
@@ -122,7 +129,7 @@
                     <tr>
                         <th style="width:42px"></th>
                         <th class="text-end">Orden</th><th>Código</th><th>Descripción</th><th>Proveedor</th>
-                        <th>Combo</th><th>Familia</th><th>Tipo</th><th>Temporada</th><th class="text-center">Año</th><th>Categoría</th>
+                        <th>Combo</th><th>Familia</th><th>Tipo</th><th>Temporada</th><th class="text-center">Año</th><th>Categoría</th><th>Subfamilia</th>
                         <th class="text-end">Cant. Pack</th><th class="text-end">Packs Reemp.</th><th>Fecha Pack</th>
                     </tr>
                 </thead>
@@ -141,6 +148,7 @@
                             <td>@a.Temporada</td>
                             <td class="text-center">@a.Anio</td>
                             <td>@a.Categoria</td>
+                            <td>@a.Subfamilia</td>
                             <td class="text-end fw-bold">@(a.CantPack?.ToString("N0") ?? "—")</td>
                             <td class="text-end">@(a.PacksReemplazo?.ToString("N0") ?? "—")</td>
                             <td class="small">@(a.FechaPack?.ToString("dd/MM/yyyy") ?? "")</td>
@@ -224,6 +232,7 @@
     [Parameter, SupplyParameterFromQuery(Name = "combo")] public string? ComboQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "fam")] public string? FamQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "cat")] public string? CatQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sub")] public string? SubQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "temp")] public string? TempQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "prov")] public string? ProvQ { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "anio")] public string? AnioQ { get; set; }
@@ -240,6 +249,7 @@
             if (_f.Combo != "TODOS") p.Add($"combo={Uri.EscapeDataString(_f.Combo)}");
             if (_f.Familia != "TODOS") p.Add($"fam={Uri.EscapeDataString(_f.Familia)}");
             if (_f.Categoria != "TODOS") p.Add($"cat={Uri.EscapeDataString(_f.Categoria)}");
+            if (_f.Subfamilia != "TODOS") p.Add($"sub={Uri.EscapeDataString(_f.Subfamilia)}");
             if (_f.Temporada != "TODOS") p.Add($"temp={Uri.EscapeDataString(_f.Temporada)}");
             if (!string.IsNullOrEmpty(_provSel)) p.Add($"prov={Uri.EscapeDataString(_provSel)}");
             if (!string.IsNullOrEmpty(_anioSel)) p.Add($"anio={Uri.EscapeDataString(_anioSel)}");
@@ -251,7 +261,7 @@
     protected override async Task OnInitializedAsync()
     {
         var hayQuery = ArtQ != null || DescQ != null || TipoQ != null || ComboQ != null || FamQ != null
-            || CatQ != null || TempQ != null || ProvQ != null || AnioQ != null || StockQ.HasValue;
+            || CatQ != null || SubQ != null || TempQ != null || ProvQ != null || AnioQ != null || StockQ.HasValue;
 
         // Restaura la consulta al volver (ej. de la ficha del artículo) sin re-buscar ni recargar combos.
         if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
@@ -276,6 +286,7 @@
             if (ComboQ != null) _f.Combo = ComboQ;
             if (FamQ != null) _f.Familia = FamQ;
             if (CatQ != null) _f.Categoria = CatQ;
+            if (SubQ != null) _f.Subfamilia = SubQ;
             if (TempQ != null) _f.Temporada = TempQ;
             if (ProvQ != null) _provSel = ProvQ;
             if (AnioQ != null) _anioSel = AnioQ;

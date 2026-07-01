@@ -13,6 +13,7 @@ public sealed class ArticuloReporteDto
     public string Temporada { get; set; } = "";
     public string Anio { get; set; } = "";
     public string Categoria { get; set; } = "";
+    public string Subfamilia { get; set; } = "";
     public int? CantPack { get; set; }
     public int? PacksReemplazo { get; set; }
     public DateTime? FechaPack { get; set; }
@@ -28,6 +29,7 @@ public sealed class ReporteArticulosFiltro
     public string Familia { get; set; } = "TODOS";
     public string Temporada { get; set; } = "TODOS";
     public string Categoria { get; set; } = "TODOS";
+    public string Subfamilia { get; set; } = "TODOS";   // Grupo (GRUPO.DESCRIP); se filtra en el servicio
     public string ProveedorCod { get; set; } = "";   // código del proveedor; "" = todos
     public int Anio { get; set; }                     // 0 = todos
     public int Stock { get; set; }                    // 0 ninguno,1 CENTRAL,2 LURO,3 PERALTA,4 LOCALES,5 CCENTRAL
@@ -52,6 +54,7 @@ public sealed class ReporteArticulosCombosDto
     public List<string> Temporadas { get; set; } = new();
     public List<string> Anios { get; set; } = new();
     public List<string> Categorias { get; set; } = new();
+    public List<string> Subfamilias { get; set; } = new();
     public List<ProveedorComboDto> Proveedores { get; set; } = new();
 }
 
