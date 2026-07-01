@@ -1,0 +1,121 @@
+@page "/produccion/catalogos"
+@using MarketWeb.Shared.Produccion
+@inject CatalogosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Catálogos</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Producción" Titulo="Catálogos" Icono="fa-solid fa-book-open" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Armá un catálogo con una lista de artículos (por código) y textos, y ordenalos. Después se genera el PDF para compartir e imprimir.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button class="btn btn-primary" @onclick="Nuevo"><i class="fa-solid fa-plus me-1"></i> Nuevo catálogo</button>
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_lista.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-book-open"></i>
+            <p>No hay catálogos todavía.</p>
+            <p class="small text-muted mb-0">Creá uno con «Nuevo catálogo».</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Nombre</th><th>Temporada</th><th class="text-center">Año</th>
+                        <th class="text-end">Ítems</th><th class="text-center">PDF</th>
+                        <th class="text-center" style="width:90px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _lista)
+                    {
+                        <tr class="cat-row" @onclick="() => Abrir(c.Id)">
+                            <td class="fw-semibold">@c.Nombre</td>
+                            <td>@(string.IsNullOrWhiteSpace(c.Temporada) ? "—" : c.Temporada)</td>
+                            <td class="text-center">@(c.Anio?.ToString() ?? "—")</td>
+                            <td class="text-end fw-bold">@c.CantItems</td>
+                            <td class="text-center" @onclick:stopPropagation="true">
+                                @if (c.TienePdf)
+                                {
+                                    <a href="@($"api/catalogos/{c.Id}/pdf")" target="_blank" rel="noopener"
+                                       class="btn btn-sm btn-outline-danger" title="Abrir PDF">
+                                        <i class="fa-solid fa-file-pdf"></i>
+                                    </a>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="text-center text-nowrap" @onclick:stopPropagation="true">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Abrir" @onclick="() => Abrir(c.Id)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-success me-1" title="@(c.TienePdf ? "Regenerar PDF" : "Generar PDF")" @onclick="() => Generar(c)" disabled="@(_generandoId == c.Id)">
+                                    @if (_generandoId == c.Id) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-file-pdf"></i> }
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(c)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .cat-row { cursor: pointer; }
+    .cat-row:hover td { background: var(--mk-row-hover); }
+</style>
+
+@code {
+    private List<CatalogoDto> _lista = new();
+    private bool _cargando = true;
+    private int _generandoId;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _lista = await Api.ListarAsync(); }
+        catch { _lista = new(); }
+        finally { _cargando = false; }
+    }
+
+    private void Nuevo() => Nav.NavigateTo("/produccion/catalogos/nuevo");
+    private void Abrir(int id) => Nav.NavigateTo($"/produccion/catalogos/{id}");
+
+    private async Task Generar(CatalogoDto c)
+    {
+        _generandoId = c.Id; StateHasChanged();
+        try
+        {
+            var ok = await Api.GenerarPdfAsync(c.Id);
+            if (!ok) { Ui.Error("No se pudo generar el PDF."); return; }
+            c.TienePdf = true;
+            Ui.Exito("PDF generado.");
+            await JS.InvokeVoidAsync("open", $"api/catalogos/{c.Id}/pdf", "_blank");
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _generandoId = 0; }
+    }
+
+    private async Task Eliminar(CatalogoDto c)
+    {
+        if (!await Ui.ConfirmAsync($"¿Eliminar el catálogo «{c.Nombre}»? Se da de baja (no borra físico).", "Eliminar catálogo", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarAsync(c.Id);
+        await Cargar();
+    }
+}

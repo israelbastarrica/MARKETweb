@@ -22,14 +22,17 @@ public sealed class TareasService : ITareasService
     private readonly IReposicionPdf _pdf;
     private readonly ISmtpSender _smtp;
     private readonly IConfiguration _cfg;
+    private readonly MarketWeb.Application.Marketing.IMarketingCollector _redes;
 
-    public TareasService(ISqlConnectionFactory db, IReposicionService repo, IReposicionPdf pdf, ISmtpSender smtp, IConfiguration cfg)
+    public TareasService(ISqlConnectionFactory db, IReposicionService repo, IReposicionPdf pdf, ISmtpSender smtp, IConfiguration cfg,
+        MarketWeb.Application.Marketing.IMarketingCollector redes)
     {
         _db = db;
         _repo = repo;
         _pdf = pdf;
         _smtp = smtp;
         _cfg = cfg;
+        _redes = redes;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken ct = default)
@@ -119,19 +122,22 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
 
     public async Task<int> GuardarAsync(TareaSaveRequest req, string usuario, CancellationToken ct = default)
     {
-        var parametros = req.Tipo == TipoTarea.Backup
-            ? JsonSerializer.Serialize(new ParametrosBackup
+        var parametros = req.Tipo switch
+        {
+            TipoTarea.Backup => JsonSerializer.Serialize(new ParametrosBackup
             {
                 Carpeta = (req.BackupCarpeta ?? "").Trim(),
                 RetencionDias = req.BackupRetencionDias,
                 MailFallo = (req.BackupMail ?? "").Trim()
-            })
-            : JsonSerializer.Serialize(new ParametrosReposicion
+            }),
+            TipoTarea.Redes => JsonSerializer.Serialize(new ParametrosRedes()),  // cada 4 h, 25 posts/red
+            _ => JsonSerializer.Serialize(new ParametrosReposicion
             {
                 Local = string.IsNullOrWhiteSpace(req.Local) ? "TODOS" : req.Local.Trim().ToUpperInvariant(),
                 GenerarReemplazos = req.GenerarReemplazos,
                 Destinatarios = (req.Destinatarios ?? "").Trim()
-            });
+            })
+        };
 
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
@@ -171,7 +177,7 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
         await using var cn = _db.Create();
         await cn.OpenAsync(ct);
         var rows = await cn.QueryAsync(new CommandDefinition(
-            @"SELECT Id, Hora, DiasSemana, UltimaEjecucionAuto
+            @"SELECT Id, Tipo, Parametros, Hora, DiasSemana, UltimaEjecucionAuto
               FROM MARKET.dbo.TareasProgramadas
               WHERE Eliminado = 0 AND Activa = 1", cancellationToken: ct));
 
@@ -182,6 +188,23 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
             string dias = r.DiasSemana ?? "";
             if (!dias.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains(hoyIso.ToString()))
                 continue;
+
+            // REDES corre por INTERVALO (cada N horas), no a una hora fija.
+            if ((string)(r.Tipo ?? "") == TipoTarea.Redes)
+            {
+                int horas = 4;
+                try
+                {
+                    var pr = JsonSerializer.Deserialize<ParametrosRedes>((string?)r.Parametros ?? "");
+                    if (pr is not null && pr.IntervaloHoras > 0) horas = pr.IntervaloHoras;
+                }
+                catch { }
+                DateTime? ult = r.UltimaEjecucionAuto;
+                if (ult is null || (ahora - ult.Value) >= TimeSpan.FromHours(horas))
+                    pendientes.Add((int)r.Id);
+                continue;
+            }
+
             if (!TimeSpan.TryParse((string)(r.Hora ?? "00:00"), out var hora)) continue;
             if (ahora.TimeOfDay < hora) continue;
             // Corre una vez por día a su hora. Al GUARDAR la tarea se resetea esta marca (UltimaEjecucionAuto=NULL),
@@ -237,6 +260,7 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
             {
                 TipoTarea.Reposicion => await EjecutarReposicionAsync((string?)tarea.Parametros, ct),
                 TipoTarea.Backup => await EjecutarBackupAsync((string?)tarea.Parametros, ct),
+                TipoTarea.Redes => await EjecutarRedesAsync((string?)tarea.Parametros, ct),
                 _ => (false, $"Tipo de tarea no soportado: {tarea.Tipo}")
             };
         }
@@ -282,6 +306,16 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
             await _smtp.EnviarAsync(dest.Replace(',', ';'), $"⚠ Tarea MARKET falló: {nombre}", body, ct);
         }
         catch { /* best-effort: el fallo ya quedó en el log */ }
+    }
+
+    private async Task<(bool Ok, string Resultado)> EjecutarRedesAsync(string? parametrosJson, CancellationToken ct)
+    {
+        var p = string.IsNullOrWhiteSpace(parametrosJson)
+            ? new ParametrosRedes()
+            : (System.Text.Json.JsonSerializer.Deserialize<ParametrosRedes>(parametrosJson!) ?? new ParametrosRedes());
+        var (okPosts, resPosts) = await _redes.RecolectarAsync(p.Limite, ct);
+        var (okIns, resIns) = await _redes.RecolectarInsightsAsync(28, ct);
+        return (okPosts && okIns, $"{resPosts} | {resIns}");
     }
 
     private async Task<(bool Ok, string Resultado)> EjecutarReposicionAsync(string? parametrosJson, CancellationToken ct)
@@ -456,8 +490,10 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
             try
             {
                 var limite = DateTime.Now.AddDays(-p.RetencionDias);
-                foreach (var f in Directory.EnumerateFiles(carpeta, "MARKET_*.rar"))
-                    if (File.GetLastWriteTime(f) < limite) { File.Delete(f); borrados++; }
+                // Borra .rar viejos Y .bak sueltos (los que quedan cuando WinRAR falla esa corrida).
+                foreach (var patron in new[] { "MARKET_*.rar", "MARKET_*.bak" })
+                    foreach (var f in Directory.EnumerateFiles(carpeta, patron))
+                        if (File.GetLastWriteTime(f) < limite) { File.Delete(f); borrados++; }
             }
             catch { /* la retención no debe tumbar la tarea */ }
         }
