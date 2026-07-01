@@ -164,21 +164,12 @@ public sealed class CatalogosPdf
         yield return ("Stock", c.Stock);
     }
 
-    // Portada / separador (tarjeta TEXTO): marca "MARKET" discreta arriba + título con aire, centrado.
+    // Portada / separador (tarjeta TEXTO): título con aire centrado + marca "MARKET" fija ABAJO.
     private static void DibujarTexto(XGraphics gfx, string texto, double w, double h, XBrush blanco)
     {
-        // Marca MARKET: chica, con bastante tracking (aire editorial). Gris claro, no blanco puro.
-        var marca = new XSolidBrush(XColor.FromArgb(210, 210, 210));
-        var fMarca = new XFont("Arial", 13, XFontStyle.Bold);
-        double marcaY = h * 0.12;
-        DibujarConTracking(gfx, "MARKET", fMarca, marca, w, marcaY, 7);
-        // Hairline corta debajo.
-        double lineY = marcaY + fMarca.GetHeight() + 7;
-        gfx.DrawLine(new XPen(XColor.FromArgb(80, 80, 80), 0.8), w * 0.42, lineY, w * 0.58, lineY);
-
-        // Título: tamaño moderado. Se elige el mayor que entre, pero con tope prudente (nada gigante).
+        // Título: tamaño moderado. Se elige el mayor que entre, con tope prudente (nada gigante).
         double maxW = w * 0.72;
-        double topRegion = h * 0.34, botRegion = h * 0.84;
+        double topRegion = h * 0.22, botRegion = h * 0.78;
         double availH = botRegion - topRegion;
         var candidatos = new[] { 46, 42, 38, 34, 30, 26, 22 };
         XFont f = new("Arial", candidatos[^1], XFontStyle.Bold);
@@ -198,6 +189,13 @@ public sealed class CatalogosPdf
             gfx.DrawString(ln, f, blanco, new XRect(0, y, w, lh), XStringFormats.TopCenter);
             y += lh;
         }
+
+        // Marca MARKET fija ABAJO: chica, con tracking, gris claro; hairline corta encima.
+        var marca = new XSolidBrush(XColor.FromArgb(210, 210, 210));
+        var fMarca = new XFont("Arial", 13, XFontStyle.Bold);
+        double marcaY = h * 0.88;
+        gfx.DrawLine(new XPen(XColor.FromArgb(80, 80, 80), 0.8), w * 0.42, marcaY - 10, w * 0.58, marcaY - 10);
+        DibujarConTracking(gfx, "MARKET", fMarca, marca, w, marcaY, 7);
     }
 
     // Dibuja un texto centrado horizontalmente con espaciado extra entre letras (tracking).
