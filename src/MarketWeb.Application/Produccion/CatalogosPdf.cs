@@ -164,19 +164,55 @@ public sealed class CatalogosPdf
         yield return ("Stock", c.Stock);
     }
 
-    // Texto grande centrado (tarjeta TEXTO).
+    // Portada / separador (tarjeta TEXTO): marca "MARKET" fija arriba + título grande auto-ajustado.
     private static void DibujarTexto(XGraphics gfx, string texto, double w, double h, XBrush blanco)
     {
-        var f = new XFont("Arial", 34, XFontStyle.Bold);
-        double maxW = w * 0.82;
-        var lineas = Envolver(gfx, texto ?? "", f, maxW);
-        double lh = f.GetHeight() * 1.15;
+        var gris = new XSolidBrush(XColor.FromArgb(160, 160, 160));
+
+        // Marca MARKET fija (arriba, centrada, con tracking).
+        var fMarca = new XFont("Arial", 30, XFontStyle.Bold);
+        DibujarConTracking(gfx, "MARKET", fMarca, blanco, w, h * 0.14, 8);
+        // Línea fina debajo de la marca.
+        double lineY = h * 0.14 + fMarca.GetHeight() + 6;
+        var pen = new XPen(XColor.FromArgb(90, 90, 90), 1);
+        gfx.DrawLine(pen, w * 0.34, lineY, w * 0.66, lineY);
+
+        // Título de portada: elegir el tamaño más grande que entre en el ancho y el alto disponibles.
+        double maxW = w * 0.84;
+        double topRegion = h * 0.30, botRegion = h * 0.90;
+        double availH = botRegion - topRegion;
+        var candidatos = new[] { 92, 84, 76, 68, 60, 52, 44, 38, 32 };
+        XFont f = new("Arial", candidatos[^1], XFontStyle.Bold);
+        List<string> lineas = Envolver(gfx, texto ?? "", f, maxW);
+        foreach (var size in candidatos)
+        {
+            var ff = new XFont("Arial", size, XFontStyle.Bold);
+            var ls = Envolver(gfx, texto ?? "", ff, maxW);
+            if (ls.Count * ff.GetHeight() * 1.12 <= availH) { f = ff; lineas = ls; break; }
+        }
+
+        double lh = f.GetHeight() * 1.12;
         double totalH = lineas.Count * lh;
-        double y = (h - totalH) / 2;
+        double y = topRegion + (availH - totalH) / 2;
         foreach (var ln in lineas)
         {
             gfx.DrawString(ln, f, blanco, new XRect(0, y, w, lh), XStringFormats.TopCenter);
             y += lh;
+        }
+    }
+
+    // Dibuja un texto centrado horizontalmente con espaciado extra entre letras (tracking).
+    private static void DibujarConTracking(XGraphics gfx, string texto, XFont f, XBrush brush, double w, double y, double tracking)
+    {
+        double total = 0;
+        foreach (var ch in texto) total += gfx.MeasureString(ch.ToString(), f).Width + tracking;
+        total -= tracking;
+        double x = (w - total) / 2;
+        foreach (var ch in texto)
+        {
+            var s = ch.ToString();
+            gfx.DrawString(s, f, brush, new XRect(x, y, 200, f.GetHeight()), XStringFormats.TopLeft);
+            x += gfx.MeasureString(s, f).Width + tracking;
         }
     }
 
