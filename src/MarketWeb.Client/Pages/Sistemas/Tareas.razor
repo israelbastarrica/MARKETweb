@@ -161,6 +161,7 @@
                                 <option value="@TipoTarea.Reposicion">Reposición (PDF + mail)</option>
                                 <option value="@TipoTarea.Backup">Backup MARKET (.rar)</option>
                                 <option value="@TipoTarea.Redes">Redes Sociales (FB/IG, cada 4 h)</option>
+                                <option value="@TipoTarea.ReporteRepo">Reporte de Reposición (mail, ej. 9 AM)</option>
                             </select>
                         </div>
                         <div class="col">
@@ -230,6 +231,18 @@
                         <div class="alert alert-info py-2 small mb-0">
                             Baja publicaciones, métricas e <b>insights de cuenta</b> (para el Dashboard) de <b>Facebook e Instagram</b> cada <b>4 horas</b> (no usa la "Hora"; sí respeta los días marcados).
                             El token de Meta lo toma de <code>MKT_Config</code> (lo deja el colector Python al correr/renovar).
+                        </div>
+                    }
+                    else if (_eTipo == TipoTarea.ReporteRepo)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Destinatarios</label>
+                            <input class="form-control" @bind="_eDestinatarios" placeholder="mail1@marketarg.com; mail2@marketarg.com" />
+                            <div class="form-text">Separados por ; o ,</div>
+                        </div>
+                        <div class="alert alert-info py-2 small mb-0">
+                            Manda por mail el <b>control de reposición</b> del día anterior: remitos por local (enviado/recibido/aceptado),
+                            refuerzos enviados por afuera y reemplazos cargados vs enviados. Corre a la <b>Hora</b> fijada (ej. 09:00) los días marcados.
                         </div>
                     }
 
@@ -435,6 +448,7 @@
         {
             TipoTarea.Backup => $"¿Ejecutar \"{t.Nombre}\" ahora? Hace el BACKUP de MARKET y lo comprime a .rar (puede tardar).",
             TipoTarea.Redes => $"¿Ejecutar \"{t.Nombre}\" ahora? Baja publicaciones y métricas de Facebook e Instagram. No manda mail ni corre reposición.",
+            TipoTarea.ReporteRepo => $"¿Ejecutar \"{t.Nombre}\" ahora? Arma y manda por mail el reporte de control de reposición del día anterior.",
             _ => $"¿Ejecutar \"{t.Nombre}\" ahora? Corre la reposición real (~2 min) y manda el mail con el PDF."
         };
         if (!await Ui.ConfirmAsync(aviso, "Ejecutar ahora")) return;

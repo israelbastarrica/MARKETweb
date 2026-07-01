@@ -6,6 +6,13 @@ public static class TipoTarea
     public const string Reposicion = "REPOSICION";
     public const string Backup = "BACKUP";
     public const string Redes = "REDES";
+    public const string ReporteRepo = "REPORTE_REPO";   // reporte de control de reposición por mail (ej. 9 AM)
+}
+
+/// <summary>Parámetros serializados (JSON) de una tarea de Reporte de control de Reposición.</summary>
+public sealed class ParametrosReporteRepo
+{
+    public string Destinatarios { get; set; } = "";    // separados por ; o ,
 }
 
 /// <summary>Parámetros serializados (JSON) de una tarea de Redes (colector Marketing FB/IG).</summary>

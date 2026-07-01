@@ -23,9 +23,10 @@ public sealed class TareasService : ITareasService
     private readonly ISmtpSender _smtp;
     private readonly IConfiguration _cfg;
     private readonly MarketWeb.Application.Marketing.IMarketingCollector _redes;
+    private readonly IReporteControlReposicionService _reporteRepo;
 
     public TareasService(ISqlConnectionFactory db, IReposicionService repo, IReposicionPdf pdf, ISmtpSender smtp, IConfiguration cfg,
-        MarketWeb.Application.Marketing.IMarketingCollector redes)
+        MarketWeb.Application.Marketing.IMarketingCollector redes, IReporteControlReposicionService reporteRepo)
     {
         _db = db;
         _repo = repo;
@@ -33,6 +34,7 @@ public sealed class TareasService : ITareasService
         _smtp = smtp;
         _cfg = cfg;
         _redes = redes;
+        _reporteRepo = reporteRepo;
     }
 
     public async Task EnsureSchemaAsync(CancellationToken ct = default)
@@ -131,6 +133,7 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
                 MailFallo = (req.BackupMail ?? "").Trim()
             }),
             TipoTarea.Redes => JsonSerializer.Serialize(new ParametrosRedes()),  // cada 4 h, 25 posts/red
+            TipoTarea.ReporteRepo => JsonSerializer.Serialize(new ParametrosReporteRepo { Destinatarios = (req.Destinatarios ?? "").Trim() }),
             _ => JsonSerializer.Serialize(new ParametrosReposicion
             {
                 Local = string.IsNullOrWhiteSpace(req.Local) ? "TODOS" : req.Local.Trim().ToUpperInvariant(),
@@ -261,6 +264,7 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
                 TipoTarea.Reposicion => await EjecutarReposicionAsync((string?)tarea.Parametros, ct),
                 TipoTarea.Backup => await EjecutarBackupAsync((string?)tarea.Parametros, ct),
                 TipoTarea.Redes => await EjecutarRedesAsync((string?)tarea.Parametros, ct),
+                TipoTarea.ReporteRepo => await EjecutarReporteRepoAsync((string?)tarea.Parametros, ct),
                 _ => (false, $"Tipo de tarea no soportado: {tarea.Tipo}")
             };
         }
@@ -316,6 +320,29 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
         var (okPosts, resPosts) = await _redes.RecolectarAsync(p.Limite, ct);
         var (okIns, resIns) = await _redes.RecolectarInsightsAsync(28, ct);
         return (okPosts && okIns, $"{resPosts} | {resIns}");
+    }
+
+    private async Task<(bool Ok, string Resultado)> EjecutarReporteRepoAsync(string? parametrosJson, CancellationToken ct)
+    {
+        var dest = "";
+        try
+        {
+            var p = JsonSerializer.Deserialize<ParametrosReporteRepo>(parametrosJson ?? "");
+            dest = (p?.Destinatarios ?? "").Trim();
+        }
+        catch { }
+        dest = dest.Replace(',', ';');
+        if (string.IsNullOrWhiteSpace(dest)) return (false, "La tarea no tiene destinatarios.");
+        if (!_smtp.Configurado) return (false, "El SMTP no está configurado en el servidor.");
+
+        // Ventana: ciclo del día anterior hasta hoy (repo de anoche + despacho/recepción de esta mañana).
+        var desde = DateTime.Today.AddDays(-1);
+        var hasta = DateTime.Today;
+        var (html, resumen) = await _reporteRepo.ConstruirAsync(desde, hasta, ct);
+
+        var asunto = "Control de Reposición " + DateTime.Now.ToString("dd/MM/yyyy");
+        var enviado = await _smtp.EnviarAsync(dest, asunto, html, ct);
+        return enviado ? (true, "Enviado. " + resumen) : (false, "Falló el envío del mail. " + resumen);
     }
 
     private async Task<(bool Ok, string Resultado)> EjecutarReposicionAsync(string? parametrosJson, CancellationToken ct)
