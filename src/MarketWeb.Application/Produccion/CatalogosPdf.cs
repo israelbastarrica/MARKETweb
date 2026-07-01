@@ -200,10 +200,10 @@ public sealed class CatalogosPdf
 
         // Marca MARKET fija ABAJO: chica, con tracking, gris claro; hairline corta encima.
         var marca = new XSolidBrush(XColor.FromArgb(210, 210, 210));
-        var fMarca = new XFont("Arial", 13, XFontStyle.Bold);
-        double marcaY = h * 0.88;
-        gfx.DrawLine(new XPen(XColor.FromArgb(80, 80, 80), 0.8), w * 0.42, marcaY - 10, w * 0.58, marcaY - 10);
-        DibujarConTracking(gfx, "MARKET", fMarca, marca, w, marcaY, 7);
+        var fMarca = new XFont("Arial", 24, XFontStyle.Bold);
+        double marcaY = h * 0.87;
+        gfx.DrawLine(new XPen(XColor.FromArgb(80, 80, 80), 0.8), w * 0.40, marcaY - 12, w * 0.60, marcaY - 12);
+        DibujarConTracking(gfx, "MARKET", fMarca, marca, w, marcaY, 11);
     }
 
     // Dibuja un texto centrado horizontalmente con espaciado extra entre letras (tracking).
