@@ -135,6 +135,8 @@ ORDER BY c.ID DESC;";
         public byte[]? Foto { get; set; }
     }
 
+    private sealed class FichaRow { public int Id { get; set; } public byte[]? Ficha { get; set; } }
+
     public async Task<byte[]?> GenerarPdfAsync(int id, CancellationToken ct = default)
     {
         var det = await DetalleAsync(id, ct);
@@ -144,6 +146,23 @@ ORDER BY c.ID DESC;";
         var codigos = det.Items
             .Where(i => i.Tipo != "TEXTO" && !string.IsNullOrWhiteSpace(i.Codigo))
             .Select(i => i.Codigo.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        // Fichas técnicas de las Órdenes de Pedido (la página ES esta imagen). El id de PedidosOrdenes
+        // viaja en RefValor de los renglones OP; si no, se cae al Valor.
+        var idsOP = det.Items
+            .Where(i => i.Tipo.StartsWith("OP ", StringComparison.Ordinal))
+            .Select(i => int.TryParse(i.RefValor, out var n) ? n : 0)
+            .Where(n => n > 0).Distinct().ToList();
+        var fichas = new Dictionary<int, byte[]>();
+        if (idsOP.Count > 0)
+        {
+            using var cnf = _db.Create();
+            if (cnf.State != System.Data.ConnectionState.Open) await cnf.OpenAsync(ct);
+            var rows = await cnf.QueryAsync<FichaRow>(new CommandDefinition(
+                "SELECT ID AS Id, FichaTecnica AS Ficha FROM dbo.PedidosOrdenes WHERE ID IN @ids;",
+                new { ids = idsOP }, cancellationToken: ct));
+            foreach (var r in rows) if (r.Ficha is { Length: > 0 }) fichas[r.Id] = r.Ficha;
+        }
 
         var datos = new Dictionary<string, CartaRow>(StringComparer.OrdinalIgnoreCase);
         if (codigos.Count > 0)
@@ -183,6 +202,13 @@ WHERE RTRIM(ART.ARTCOD) IN @codes;";
             if (it.Tipo == "TEXTO")
             {
                 cartas.Add(new CatalogosPdf.Carta { EsTexto = true, Texto = it.Descripcion });
+                continue;
+            }
+            // Orden de Pedido: la hoja ES la ficha técnica guardada en la base.
+            if (it.Tipo.StartsWith("OP ", StringComparison.Ordinal)
+                && int.TryParse(it.RefValor, out var idOp) && fichas.TryGetValue(idOp, out var ficha))
+            {
+                cartas.Add(new CatalogosPdf.Carta { ImagenPagina = ficha });
                 continue;
             }
             datos.TryGetValue((it.Codigo ?? "").Trim(), out var d);

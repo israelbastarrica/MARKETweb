@@ -19,6 +19,8 @@ public sealed class CatalogosPdf
     public sealed class Carta
     {
         public bool EsTexto { get; set; }
+        /// <summary>Ficha técnica (Orden de Pedido): la página ES esta imagen, a hoja completa.</summary>
+        public byte[]? ImagenPagina { get; set; }
         public string Texto { get; set; } = "";
         public string Codigo { get; set; } = "";
         public string Descripcion { get; set; } = "";
@@ -56,7 +58,22 @@ public sealed class CatalogosPdf
             using var gfx = XGraphics.FromPdfPage(page);
             double w = page.Width, h = page.Height;
 
-            // Fondo negro.
+            // Ficha técnica (Orden de Pedido): la hoja ES la imagen, a página completa. Sin componer nada.
+            if (c.ImagenPagina is { Length: > 0 })
+            {
+                try
+                {
+                    var bytes = c.ImagenPagina;
+                    using var img = XImage.FromStream(() => new MemoryStream(bytes));
+                    double iw = w, ih = img.PixelHeight / (double)img.PixelWidth * w;
+                    if (ih > h) { ih = h; iw = img.PixelWidth / (double)img.PixelHeight * h; }
+                    gfx.DrawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
+                }
+                catch { /* ficha ilegible → hoja en blanco */ }
+                continue;
+            }
+
+            // Fondo negro (TEXTO y tarjeta de artículo compuesta).
             gfx.DrawRectangle(negro, 0, 0, w, h);
 
             if (c.EsTexto)
