@@ -36,6 +36,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
     }
     private sealed class RefuerzoLocal { public string Local = ""; public int Eventos; public int Packs; }
     private sealed class ReempTotales { public int Cargados; public int Enviados; }
+    private sealed class PedidoLocal { public string Local = ""; public int Articulos; public int Packs; public int Prendas; }
 
     public async Task<(string Html, string Resumen)> ConstruirAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
     {
@@ -51,7 +52,8 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         }
         var remitos = porLocal.Values.OrderBy(x => x.Local).ToList();
 
-        // 2) Refuerzos (enviado por afuera) y 3) reemplazos.
+        // Packs que pidió la repo por local (snapshot de la/las corrida/s del período), refuerzos y reemplazos.
+        var pedidos = new List<PedidoLocal>();
         var refuerzos = new List<RefuerzoLocal>();
         var reemp = new ReempTotales();
         await using (var cn = _db.Create())
@@ -59,6 +61,30 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             await cn.OpenAsync(ct);
             var d0 = desde.Date;
             var d1 = hasta.Date.AddDays(1);
+
+            // Repo: lo que se PIDIÓ por local (independiente de remitos). PacksAReponer = packs recomendados.
+            await using (var cmd = new SqlCommand(
+                @"SELECT ISNULL(rd.LocalDestino,'') AS Local,
+                         COUNT(DISTINCT rd.ARTCOD) AS Articulos,
+                         ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
+                         ISNULL(SUM(rd.Pendiente),0) AS Prendas
+                  FROM MARKET.dbo.ReposicionDetalle rd
+                  JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
+                  WHERE ISNULL(r.Eliminado,0) = 0 AND r.FechaHoraCorrida >= @d0 AND r.FechaHoraCorrida < @d1
+                  GROUP BY rd.LocalDestino ORDER BY rd.LocalDestino", cn) { CommandTimeout = 60 })
+            {
+                cmd.Parameters.AddWithValue("@d0", d0);
+                cmd.Parameters.AddWithValue("@d1", d1);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                    pedidos.Add(new PedidoLocal
+                    {
+                        Local = rdr["Local"]?.ToString() ?? "",
+                        Articulos = Convert.ToInt32(rdr["Articulos"]),
+                        Packs = Convert.ToInt32(rdr["Packs"]),
+                        Prendas = Convert.ToInt32(rdr["Prendas"])
+                    });
+            }
 
             await using (var cmd = new SqlCommand(
                 @"SELECT ISNULL(Local,'') AS Local, COUNT(*) AS Eventos, ISNULL(SUM(ISNULL(CantidadPacks,0)),0) AS Packs
@@ -97,14 +123,14 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             }
         }
 
-        var html = Render(desde, hasta, remitos, refuerzos, reemp);
+        var html = Render(desde, hasta, pedidos, remitos, refuerzos, reemp);
         var totalRecibidos = remitos.Sum(r => r.Recibidos);
         var totalGenerados = remitos.Sum(r => r.Generados);
-        var resumen = $"{totalRecibidos}/{totalGenerados} remitos recibidos · {refuerzos.Sum(r => r.Packs)} packs de refuerzo · {reemp.Enviados}/{reemp.Cargados} reemplazos enviados";
+        var resumen = $"repo pidió {pedidos.Sum(p => p.Packs)} packs · {totalRecibidos}/{totalGenerados} remitos recibidos · {refuerzos.Sum(r => r.Packs)} packs de refuerzo · {reemp.Enviados}/{reemp.Cargados} reemplazos enviados";
         return (html, resumen);
     }
 
-    private static string Render(DateTime desde, DateTime hasta, List<RemitoLocal> remitos, List<RefuerzoLocal> refuerzos, ReempTotales reemp)
+    private static string Render(DateTime desde, DateTime hasta, List<PedidoLocal> pedidos, List<RemitoLocal> remitos, List<RefuerzoLocal> refuerzos, ReempTotales reemp)
     {
         static string H(string? s) => WebUtility.HtmlEncode(s ?? "");
         var sb = new StringBuilder();
@@ -114,8 +140,23 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         sb.Append($"<h2 style='margin:0 0 2px'>Control de Reposición</h2>");
         sb.Append($"<div style='color:#777;font-size:13px;margin-bottom:16px'>Período: {per}</div>");
 
-        // 1) Remitos por local
-        sb.Append("<h3 style='margin:18px 0 6px'>1 · Remitos por local (enviado vs llegado)</h3>");
+        // 1) Repo: packs pedidos por local (del snapshot, independiente de remitos)
+        sb.Append("<h3 style='margin:18px 0 6px'>1 · Repo — pedido por local</h3>");
+        if (pedidos.Count == 0)
+            sb.Append("<p style='color:#777'>No hay corridas de reposición en el período.</p>");
+        else
+        {
+            sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
+            sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Artículos", true) + Th("Packs", true) + Th("Prendas", true) + "</tr>");
+            foreach (var p in pedidos)
+                sb.Append("<tr>" + Td(H(p.Local)) + TdN(p.Articulos) + TdN(p.Packs) + TdN(p.Prendas) + "</tr>");
+            sb.Append("<tr style='font-weight:bold;background:#fafafa'>" + Td("TOTAL") +
+                TdN(pedidos.Sum(x => x.Articulos)) + TdN(pedidos.Sum(x => x.Packs)) + TdN(pedidos.Sum(x => x.Prendas)) + "</tr>");
+            sb.Append("</table>");
+        }
+
+        // 2) Remitos por local
+        sb.Append("<h3 style='margin:22px 0 6px'>2 · Remitos por local (enviado vs llegado)</h3>");
         if (remitos.Count == 0)
             sb.Append("<p style='color:#777'>Sin remitos en el período.</p>");
         else
@@ -134,7 +175,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         }
 
         // 2) Enviado por afuera (refuerzos)
-        sb.Append("<h3 style='margin:22px 0 6px'>2 · Enviado por afuera — refuerzos</h3>");
+        sb.Append("<h3 style='margin:22px 0 6px'>3 · Enviado por afuera — refuerzos</h3>");
         if (refuerzos.Count == 0)
             sb.Append("<p style='color:#777'>No se cargaron refuerzos en el período.</p>");
         else
@@ -149,7 +190,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         }
 
         // 3) Reemplazos
-        sb.Append("<h3 style='margin:22px 0 6px'>3 · Reemplazos</h3>");
+        sb.Append("<h3 style='margin:22px 0 6px'>4 · Reemplazos</h3>");
         sb.Append("<table style='border-collapse:collapse;font-size:13px'>");
         sb.Append("<tr>" + Td("Cargados (propuestos)") + TdN(reemp.Cargados) + "</tr>");
         sb.Append("<tr>" + Td("Enviados (visados)") + TdN(reemp.Enviados) + "</tr>");
