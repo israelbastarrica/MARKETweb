@@ -36,7 +36,11 @@ public sealed class SmtpSender : ISmtpSender
         var from = string.IsNullOrWhiteSpace(_cfg["Smtp:From"]) ? user : _cfg["Smtp:From"]!;
         var fromName = _cfg["Smtp:FromName"] ?? "MARKET";
 
-        using var msg = new MailMessage { From = new MailAddress(from, fromName), Subject = asunto, Body = htmlBody, IsBodyHtml = true };
+        using var msg = new MailMessage
+        {
+            From = new MailAddress(from, fromName), Subject = asunto, Body = htmlBody, IsBodyHtml = true,
+            BodyEncoding = System.Text.Encoding.UTF8, SubjectEncoding = System.Text.Encoding.UTF8
+        };
         foreach (var d in destinatarios.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             msg.To.Add(d);
         if (msg.To.Count == 0) return false;
