@@ -36,7 +36,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
     private sealed class LocalOk { public string Local = ""; public int ArticulosOk; public int PacksOk; public int PrendasOk; public int ArticulosDif; }
     private sealed class DiffRow
     {
-        public string Local = ""; public string Art = ""; public string Des = ""; public string UbiDepo = "";
+        public string Local = ""; public string Art = ""; public string Des = ""; public bool SinMapeo;
         public int PacksPed; public int CantPack; public int Pedido; public int Enviado;
         public double PacksEnv => CantPack > 0 ? (double)Enviado / CantPack : 0;
         public int Dif => Pedido - Enviado;
@@ -122,7 +122,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         var res = new DiffResult();
 
         // Pedido por (local, artículo) de la corrida del ciclo.
-        var pedido = new Dictionary<string, (int Packs, int CantPack, int Prendas, string Des, string UbiDepo)>(StringComparer.OrdinalIgnoreCase);
+        var pedido = new Dictionary<string, (int Packs, int CantPack, int Prendas, string Des, bool SinMapeo)>(StringComparer.OrdinalIgnoreCase);
         var locales = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var reempSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // ARTCODReemplazo del ciclo
         await using (var cn = _db.Create())
@@ -133,7 +133,11 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                          MAX(rd.ARTDES) AS Des, ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
                          MAX(ISNULL(rd.CantPack,1)) AS CantPack,
                          ISNULL(SUM(rd.PacksAReponer * ISNULL(rd.CantPack,1)),0) AS Prendas,
-                         MAX(LTRIM(RTRIM(ISNULL(rd.UbicacionDeposito,'')))) AS UbiDepo
+                         MAX(CASE WHEN RTRIM(ISNULL(rd.UbicacionDeposito,'')) <> ''
+                                   AND EXISTS (SELECT 1 FROM MARKET.dbo.Mapeo m
+                                               WHERE m.IDUbicacion = 1 AND m.Eliminado = 0
+                                                 AND RTRIM(m.Modulo) = RTRIM(rd.UbicacionDeposito))
+                              THEN 1 ELSE 0 END) AS TieneDepo
                   FROM MARKET.dbo.ReposicionDetalle rd
                   JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
                   WHERE ISNULL(r.Eliminado,0)=0 AND r.FechaHoraCorrida >= @desde AND r.FechaHoraCorrida <= @hasta
@@ -148,7 +152,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                     var art = (rdr["Art"]?.ToString() ?? "").Trim();
                     locales.Add(loc);
                     pedido[loc + "|" + art] = (Convert.ToInt32(rdr["Packs"]), Convert.ToInt32(rdr["CantPack"]),
-                        Convert.ToInt32(rdr["Prendas"]), (rdr["Des"]?.ToString() ?? "").Trim(), (rdr["UbiDepo"]?.ToString() ?? "").Trim());
+                        Convert.ToInt32(rdr["Prendas"]), (rdr["Des"]?.ToString() ?? "").Trim(), Convert.ToInt32(rdr["TieneDepo"]) == 0);
                 }
             }
 
@@ -242,7 +246,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             else
             {
                 o.ArticulosDif++;
-                res.Repo.Add(new DiffRow { Local = loc, Art = art, Des = p.Des, UbiDepo = p.UbiDepo, PacksPed = p.Packs, CantPack = p.CantPack, Pedido = p.Prendas, Enviado = env });
+                res.Repo.Add(new DiffRow { Local = loc, Art = art, Des = p.Des, SinMapeo = p.SinMapeo, PacksPed = p.Packs, CantPack = p.CantPack, Pedido = p.Prendas, Enviado = env });
             }
         }
         res.Ok = okPorLocal.Values.OrderBy(x => x.Local).ToList();
@@ -353,7 +357,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                 {
                     var color = r.Dif > 0 ? "#b00" : "#0a7";
                     var packsEnv = r.CantPack > 0 ? r.PacksEnv.ToString("0.#") : "—";
-                    var desCell = H(r.Des) + (string.IsNullOrWhiteSpace(r.UbiDepo)
+                    var desCell = H(r.Des) + (r.SinMapeo
                         ? " <span style='color:#b00;font-weight:bold'>· SIN MAPEO DEPO</span>" : "");
                     sb.Append("<tr>" + Td(H(r.Local)) + Td(H(r.Art)) + Td(desCell) +
                         TdN(r.PacksPed) + TdN(r.CantPack) + TdN(r.Pedido) + TdT(packsEnv) + TdN(r.Enviado) +
