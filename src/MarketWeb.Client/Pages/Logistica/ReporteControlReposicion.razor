@@ -1,0 +1,67 @@
+@page "/logistica/reporte-control"
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>Control de Reposición</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Control de Reposición" Icono="fa-solid fa-clipboard-list" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Remitos por local (enviado/recibido/aceptado), refuerzos enviados por afuera y reemplazos cargados vs enviados.
+        Es el mismo reporte que se manda por mail a la mañana.
+    </p>
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="_desde" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="_hasta" />
+            </div>
+            <div class="col-12 col-md-auto d-flex gap-2">
+                <button class="btn btn-primary btn-sm" @onclick="Ver" disabled="@_cargando">
+                    @if (_cargando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } else { <i class="fa-solid fa-eye me-1"></i> }
+                    Ver
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="AbrirImprimir">
+                    <i class="fa-solid fa-print me-1"></i> Abrir / imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_html is not null)
+    {
+        <div class="market-card p-3">
+            @((MarkupString)_html)
+        </div>
+    }
+</div>
+
+@code {
+    private DateTime _desde = DateTime.Today.AddDays(-1);
+    private DateTime _hasta = DateTime.Today;
+    private string? _html;
+    private bool _cargando;
+
+    protected override async Task OnInitializedAsync() => await Ver();
+
+    private string Url => $"api/control-remitos/reporte?desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}";
+
+    private async Task Ver()
+    {
+        _cargando = true;
+        try { _html = await Http.GetStringAsync(Url); }
+        catch { _html = "<p style='color:#b00'>No se pudo generar el reporte.</p>"; }
+        finally { _cargando = false; }
+    }
+
+    private async Task AbrirImprimir() => await JS.InvokeVoidAsync("open", Url, "_blank");
+}

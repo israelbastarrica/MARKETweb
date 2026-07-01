@@ -11,7 +11,20 @@ namespace MarketWeb.Api.Controllers;
 public sealed class ControlRemitosController : ControllerBase
 {
     private readonly IControlRemitosService _service;
-    public ControlRemitosController(IControlRemitosService service) => _service = service;
+    private readonly IReporteControlReposicionService _reporte;
+    public ControlRemitosController(IControlRemitosService service, IReporteControlReposicionService reporte)
+    {
+        _service = service;
+        _reporte = reporte;
+    }
+
+    // Reporte de control de reposición (mismo que se manda por mail): HTML listo para mostrar/imprimir.
+    [HttpGet("reporte")]
+    public async Task<IActionResult> Reporte([FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, CancellationToken ct = default)
+    {
+        var (html, _) = await _reporte.ConstruirAsync(desde ?? DateTime.Today.AddDays(-1), hasta ?? DateTime.Today, ct);
+        return Content(html, "text/html");
+    }
 
     [HttpGet("estado")]
     public async Task<ActionResult<IReadOnlyList<ControlEstadoDto>>> Estado(
