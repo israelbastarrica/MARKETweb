@@ -1,0 +1,164 @@
+@page "/marketing/dashboard"
+@using MarketWeb.Shared.Marketing
+@inject MarketingApi Api
+
+<PageTitle>Marketing — Dashboard</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Marketing" Titulo="Dashboard" Icono="fa-solid fa-chart-line" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Resumen de contenido de Instagram y Facebook (insights de cuenta).
+        @if (_d?.Hasta is not null) { <text>Período al @_d.Hasta?.ToString("dd/MM/yyyy") (últimos ~28 días).</text> }
+    </p>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_d is null || _d.Hasta is null)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-chart-line"></i>
+            <p>Todavía no hay insights de cuenta cargados.</p>
+            <p class="small text-muted mb-0">Se llenan cuando corre el colector de insights (Meta).</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+                <div class="market-card h-100">
+                    <div class="small text-muted"><i class="fa-brands fa-instagram me-1"></i>Visualizaciones (IG)</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.VisualizacionesIG)@Flecha(_d.VisualizacionesIG, _d.VisualizacionesPrevIG)</div>
+                    <div class="small text-muted">vistas del período</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="market-card h-100">
+                    <div class="small text-muted">Alcance</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.Alcance)@Flecha(_d.Alcance, _d.AlcancePrev)</div>
+                    <div class="small text-muted">
+                        seguidores @Abrev(_d.AlcanceSeguidores) · no seg. @Abrev(_d.AlcanceNoSeguidores)
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="market-card h-100">
+                    <div class="small text-muted">Interacciones</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.Interacciones)@Flecha(_d.Interacciones, _d.InteraccionesPrev)</div>
+                    <div class="small text-muted">cuentas alcanzadas @Abrev(_d.CuentasAlcanzadas)</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="market-card h-100">
+                    <div class="small text-muted"><i class="fa-brands fa-facebook me-1"></i>Facebook</div>
+                    <div class="fs-2 fw-bold">@Abrev(_d.FbInteracciones)@Flecha(_d.FbInteracciones, _d.FbInteraccionesPrev)</div>
+                    <div class="small text-muted">
+                        <span class="text-success">+@(_d.FbSeguidoresNuevos ?? 0)</span> /
+                        <span class="text-danger">-@(_d.FbDejaronSeguir ?? 0)</span> seguidores
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (_d.AlcanceSerie.Count > 1)
+        {
+            <div class="market-card mb-3">
+                <div class="small text-muted mb-2">Alcance de Instagram por día</div>
+                <svg viewBox="0 0 640 140" preserveAspectRatio="none" style="width:100%;height:140px">
+                    <polygon points="@($"0,130 {LineaPuntos(640, 130)} 640,130")" fill="#0F6E56" fill-opacity="0.12" stroke="none" />
+                    <polyline points="@LineaPuntos(640, 130)" fill="none" stroke="#0F6E56" stroke-width="2" />
+                </svg>
+                <div class="d-flex justify-content-between small text-muted">
+                    <span>@_d.AlcanceSerie.First().Fecha.ToString("dd/MM")</span>
+                    <span>@_d.AlcanceSerie.Last().Fecha.ToString("dd/MM")</span>
+                </div>
+            </div>
+        }
+
+        <h6 class="mb-2">Contenido destacado <span class="text-muted">(por alcance)</span></h6>
+        <div class="row g-3">
+            @foreach (var p in _d.Destacados)
+            {
+                <div class="col-12 col-md-6 col-lg-3">
+                    <div class="market-card h-100 d-flex flex-column">
+                        <img src="@($"api/marketing/thumb/{p.Red}/{Uri.EscapeDataString(p.PostId)}")" loading="lazy" alt=""
+                             style="width:100%;height:140px;object-fit:cover;border-radius:8px;margin-bottom:8px;background:var(--mk-row-hover)"
+                             onerror="this.style.display='none'" />
+                        <div class="small text-muted mb-1">
+                            <i class="@(p.Red == "IG" ? "fa-brands fa-instagram text-danger" : "fa-brands fa-facebook text-primary")"></i>
+                            @(p.FechaPublicacion?.ToString("dd/MM/yyyy") ?? "")
+                            @if (p.Pagada) { <span class="badge text-bg-success ms-1">Pagada</span> }
+                        </div>
+                        <div class="small flex-grow-1" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">@p.Texto</div>
+                        <div class="d-flex justify-content-between align-items-center mt-2 small">
+                            <span title="Alcance"><i class="fa-solid fa-eye me-1"></i>@Abrev(p.Alcance)</span>
+                            <span title="Me gusta"><i class="fa-solid fa-heart me-1"></i>@Abrev(p.MeGusta)</span>
+                            <span title="Comentarios"><i class="fa-solid fa-comment me-1"></i>@Abrev(p.Comentarios)</span>
+                            @if (!string.IsNullOrEmpty(p.Permalink))
+                            {
+                                <a href="@p.Permalink" target="_blank" rel="noopener" title="Abrir"><i class="fa-solid fa-up-right-from-square"></i></a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private MktDashboardDto? _d;
+    private bool _cargando = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _d = await Api.DashboardAsync(); }
+        catch { _d = null; }
+        finally { _cargando = false; }
+    }
+
+    // Flecha de % vs período anterior.
+    private static (double Pct, bool Up)? Delta(int? cur, int? prev)
+    {
+        if (cur is null || prev is null || prev.Value == 0) return null;
+        var p = (cur.Value - prev.Value) / (double)prev.Value * 100;
+        return (Math.Abs(p), p >= 0);
+    }
+    private MarkupString Flecha(int? cur, int? prev)
+    {
+        var d = Delta(cur, prev);
+        if (d is null) return (MarkupString)"";
+        var cls = d.Value.Up ? "text-success" : "text-danger";
+        var ico = d.Value.Up ? "fa-arrow-up" : "fa-arrow-down";
+        var txt = d.Value.Pct.ToString("0.0").Replace(".", ",");
+        return (MarkupString)$"<span class='small {cls} ms-2'><i class='fa-solid {ico}'></i> {txt}%</span>";
+    }
+
+    // Número grande abreviado: 2.830.108 -> "2,8 mill" · 75.597 -> "75,6 mil".
+    private static string Abrev(int? n)
+    {
+        if (n is null) return "—";
+        var v = n.Value;
+        if (v >= 1_000_000) return (v / 1_000_000d).ToString("0.0").Replace(".", ",") + " mill";
+        if (v >= 1_000) return (v / 1_000d).ToString("0.0").Replace(".", ",") + " mil";
+        return v.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"));
+    }
+
+    // Puntos de la polilínea del gráfico de alcance (escala al viewBox w×h).
+    private string LineaPuntos(int w, int h)
+    {
+        var s = _d!.AlcanceSerie;
+        long min = s.Min(p => p.Valor), max = s.Max(p => p.Valor);
+        double rango = Math.Max(1, max - min);
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < s.Count; i++)
+        {
+            double x = s.Count == 1 ? 0 : (double)i / (s.Count - 1) * w;
+            double y = h - (s[i].Valor - min) / rango * (h - 6) - 3;
+            // Coordenadas como ENTEROS: si uso decimales, la cultura es-AR mete coma y rompe el "x,y" del SVG.
+            sb.Append((int)Math.Round(x)).Append(',').Append((int)Math.Round(y)).Append(' ');
+        }
+        return sb.ToString().Trim();
+    }
+}
