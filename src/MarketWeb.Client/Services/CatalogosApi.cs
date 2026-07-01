@@ -38,4 +38,10 @@ public sealed class CatalogosApi
 
     public async Task<bool> EliminarAsync(int id)
         => (await _http.DeleteAsync($"api/catalogos/{id}")).IsSuccessStatusCode;
+
+    public async Task<bool> GenerarPdfAsync(int id)
+    {
+        var resp = await _http.PostAsync($"api/catalogos/{id}/generar-pdf", null);
+        return resp.IsSuccessStatusCode && await resp.Content.ReadFromJsonAsync<bool>();
+    }
 }

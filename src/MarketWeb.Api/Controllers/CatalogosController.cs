@@ -55,6 +55,13 @@ public sealed class CatalogosController : ControllerBase
         return File(bytes, "application/pdf");
     }
 
+    [HttpPost("{id:int}/generar-pdf")]
+    public async Task<ActionResult<bool>> GenerarPdf(int id, CancellationToken ct)
+    {
+        var bytes = await _service.GenerarPdfAsync(id, ct);
+        return Ok(bytes is { Length: > 0 });
+    }
+
     [HttpPost("guardar")]
     public async Task<ActionResult<int>> Guardar([FromBody] CatalogoGuardarRequest req, CancellationToken ct)
         => Ok(await _service.GuardarAsync(req, Aud, ct));

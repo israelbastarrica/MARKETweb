@@ -1,0 +1,197 @@
+using PdfSharpCore.Drawing;
+using PdfSharpCore.Fonts;
+using PdfSharpCore.Pdf;
+using MarketWeb.Application.Reposicion; // ArialFontResolver
+
+namespace MarketWeb.Application.Produccion;
+
+/// <summary>
+/// Genera el PDF del catálogo (lo que antes armaba Canva): una tarjeta por ítem sobre fondo negro.
+///  - TEXTO: título centrado (la "pantalla negra con un texto").
+///  - ARTÍCULO/OP/DG: foto del artículo + descripción, código y atributos (categoría, talles, materiales, etc.).
+/// Diseño base a pulir. Se guarda como archivo físico en el server (no en la base).
+/// </summary>
+public sealed class CatalogosPdf
+{
+    private static readonly object _fontLock = new();
+
+    /// <summary>Datos ya resueltos de una tarjeta (el servicio los arma; acá sólo se dibuja).</summary>
+    public sealed class Carta
+    {
+        public bool EsTexto { get; set; }
+        public string Texto { get; set; } = "";
+        public string Codigo { get; set; } = "";
+        public string Descripcion { get; set; } = "";
+        public string Categoria { get; set; } = "";
+        public string Talles { get; set; } = "";
+        public string Stock { get; set; } = "";
+        public string Materiales { get; set; } = "";
+        public string Colores { get; set; } = "";
+        public string Subfamilia { get; set; } = "";
+        public string Familia { get; set; } = "";
+        public string Linea { get; set; } = "";
+        public string Combo { get; set; } = "";
+        public string Peso { get; set; } = "";
+        public string Precio { get; set; } = "";
+        public byte[]? Foto { get; set; }
+    }
+
+    public byte[] Construir(string nombreCatalogo, string temporada, int? anio, IReadOnlyList<Carta> cartas)
+    {
+        lock (_fontLock)
+            if (GlobalFontSettings.FontResolver is null)
+                GlobalFontSettings.FontResolver = new ArialFontResolver();
+
+        using var doc = new PdfDocument();
+        doc.Info.Title = $"Catálogo {nombreCatalogo}".Trim();
+
+        var negro = XBrushes.Black;
+        var blanco = XBrushes.White;
+        var gris = new XSolidBrush(XColor.FromArgb(180, 180, 180));
+
+        foreach (var c in cartas)
+        {
+            var page = doc.AddPage();
+            page.Size = PdfSharpCore.PageSize.A4;
+            using var gfx = XGraphics.FromPdfPage(page);
+            double w = page.Width, h = page.Height;
+
+            // Fondo negro.
+            gfx.DrawRectangle(negro, 0, 0, w, h);
+
+            if (c.EsTexto)
+            {
+                DibujarTexto(gfx, c.Texto, w, h, blanco);
+                continue;
+            }
+
+            const double margen = 40;
+            double y = margen;
+
+            // Encabezado chico (nombre del catálogo).
+            var fEnc = new XFont("Arial", 10, XFontStyle.Regular);
+            var enc = string.Join("  ·  ", new[] { nombreCatalogo, temporada, anio?.ToString() ?? "" }
+                .Where(s => !string.IsNullOrWhiteSpace(s)));
+            if (enc.Length > 0) { gfx.DrawString(enc, fEnc, gris, new XRect(margen, y, w - 2 * margen, 16), XStringFormats.TopLeft); }
+            y += 24;
+
+            // Foto (encajada en un recuadro, preservando proporción).
+            double boxTop = y, boxH = h * 0.50, boxW = w - 2 * margen;
+            if (c.Foto is { Length: > 0 })
+            {
+                try
+                {
+                    var bytes = c.Foto;
+                    using var img = XImage.FromStream(() => new MemoryStream(bytes));
+                    double scale = Math.Min(boxW / img.PixelWidth, boxH / img.PixelHeight);
+                    double iw = img.PixelWidth * scale, ih = img.PixelHeight * scale;
+                    double ix = (w - iw) / 2, iy = boxTop + (boxH - ih) / 2;
+                    gfx.DrawImage(img, ix, iy, iw, ih);
+                }
+                catch { /* foto ilegible → se omite */ }
+            }
+            y = boxTop + boxH + 16;
+
+            // Descripción (título).
+            var fDesc = new XFont("Arial", 20, XFontStyle.Bold);
+            y = DibujarParrafo(gfx, c.Descripcion, fDesc, blanco, margen, y, w - 2 * margen, 26);
+
+            // Código.
+            var fCod = new XFont("Arial", 13, XFontStyle.Bold);
+            if (!string.IsNullOrWhiteSpace(c.Codigo))
+            {
+                gfx.DrawString(c.Codigo, fCod, gris, new XRect(margen, y, w - 2 * margen, 18), XStringFormats.TopLeft);
+                y += 24;
+            }
+
+            // Precio destacado (si hay).
+            if (!string.IsNullOrWhiteSpace(c.Precio) && c.Precio != "0")
+            {
+                var fPrecio = new XFont("Arial", 22, XFontStyle.Bold);
+                gfx.DrawString($"$ {c.Precio}", fPrecio, blanco, new XRect(margen, y, w - 2 * margen, 28), XStringFormats.TopLeft);
+                y += 34;
+            }
+
+            // Atributos (sólo los que tienen valor).
+            var fLbl = new XFont("Arial", 11, XFontStyle.Bold);
+            var fVal = new XFont("Arial", 11, XFontStyle.Regular);
+            foreach (var (lbl, val) in Atributos(c))
+            {
+                if (string.IsNullOrWhiteSpace(val)) continue;
+                if (y > h - margen - 14) break; // no desbordar la página
+                gfx.DrawString(lbl + ":", fLbl, gris, new XRect(margen, y, 110, 15), XStringFormats.TopLeft);
+                gfx.DrawString(val, fVal, blanco, new XRect(margen + 115, y, w - 2 * margen - 115, 15), XStringFormats.TopLeft);
+                y += 18;
+            }
+        }
+
+        // Si no hubo ninguna carta, una página vacía para que el PDF sea válido.
+        if (doc.PageCount == 0) doc.AddPage().Size = PdfSharpCore.PageSize.A4;
+
+        using var msOut = new MemoryStream();
+        doc.Save(msOut);
+        return msOut.ToArray();
+    }
+
+    private static IEnumerable<(string, string)> Atributos(Carta c)
+    {
+        yield return ("Categoría", c.Categoria);
+        yield return ("Talles", c.Talles);
+        yield return ("Colores", c.Colores);
+        yield return ("Materiales", c.Materiales);
+        yield return ("Subfamilia", c.Subfamilia);
+        yield return ("Familia", c.Familia);
+        yield return ("Línea", c.Linea);
+        yield return ("Combo", c.Combo);
+        yield return ("Peso", string.IsNullOrWhiteSpace(c.Peso) || c.Peso == "0" ? "" : c.Peso + " g");
+        yield return ("Stock", c.Stock);
+    }
+
+    // Texto grande centrado (tarjeta TEXTO).
+    private static void DibujarTexto(XGraphics gfx, string texto, double w, double h, XBrush blanco)
+    {
+        var f = new XFont("Arial", 34, XFontStyle.Bold);
+        double maxW = w * 0.82;
+        var lineas = Envolver(gfx, texto ?? "", f, maxW);
+        double lh = f.GetHeight() * 1.15;
+        double totalH = lineas.Count * lh;
+        double y = (h - totalH) / 2;
+        foreach (var ln in lineas)
+        {
+            gfx.DrawString(ln, f, blanco, new XRect(0, y, w, lh), XStringFormats.TopCenter);
+            y += lh;
+        }
+    }
+
+    // Dibuja un párrafo envuelto y devuelve la Y siguiente.
+    private static double DibujarParrafo(XGraphics gfx, string texto, XFont f, XBrush brush, double x, double y, double maxW, double lh)
+    {
+        foreach (var ln in Envolver(gfx, texto ?? "", f, maxW))
+        {
+            gfx.DrawString(ln, f, brush, new XRect(x, y, maxW, lh), XStringFormats.TopLeft);
+            y += lh;
+        }
+        return y;
+    }
+
+    // Word-wrap simple usando MeasureString.
+    private static List<string> Envolver(XGraphics gfx, string texto, XFont f, double maxW)
+    {
+        var res = new List<string>();
+        if (string.IsNullOrWhiteSpace(texto)) { res.Add(""); return res; }
+        var palabras = texto.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var actual = "";
+        foreach (var p in palabras)
+        {
+            var prueba = actual.Length == 0 ? p : actual + " " + p;
+            if (gfx.MeasureString(prueba, f).Width > maxW && actual.Length > 0)
+            {
+                res.Add(actual);
+                actual = p;
+            }
+            else actual = prueba;
+        }
+        if (actual.Length > 0) res.Add(actual);
+        return res;
+    }
+}

@@ -21,6 +21,8 @@ public interface ICatalogosService
     Task<bool> EliminarAsync(int id, string aud, CancellationToken ct = default);
     /// <summary>PDF del catálogo: archivo físico en el server (preferido); si no está, el que dejó el .Net en la base.</summary>
     Task<byte[]?> ObtenerPdfAsync(int id, CancellationToken ct = default);
+    /// <summary>Genera el PDF (tarjetas) y lo guarda como archivo físico en el server. Devuelve los bytes.</summary>
+    Task<byte[]?> GenerarPdfAsync(int id, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -112,6 +114,104 @@ ORDER BY c.ID DESC;";
         var bytes = await cn.ExecuteScalarAsync<byte[]?>(new CommandDefinition(
             "SELECT ArchivoPDF FROM dbo.Catalogos WHERE ID=@id AND Eliminado=0;", new { id }, cancellationToken: ct));
         return bytes is { Length: > 0 } ? bytes : null;
+    }
+
+    // Datos de una tarjeta de artículo (misma consulta que ObtenerDatosDesdeSQL del .Net).
+    private sealed class CartaRow
+    {
+        public string Codigo { get; set; } = "";
+        public string Descripcion { get; set; } = "";
+        public string Categoria { get; set; } = "";
+        public string Talles { get; set; } = "";
+        public string Materiales { get; set; } = "";
+        public string Subfamilia { get; set; } = "";
+        public string Familia { get; set; } = "";
+        public string Linea { get; set; } = "";
+        public string Combo { get; set; } = "";
+        public decimal? Peso { get; set; }
+        public decimal? Stock { get; set; }
+        public decimal? Precio { get; set; }
+        public string Colores { get; set; } = "";
+        public byte[]? Foto { get; set; }
+    }
+
+    public async Task<byte[]?> GenerarPdfAsync(int id, CancellationToken ct = default)
+    {
+        var det = await DetalleAsync(id, ct);
+        if (det is null) return null;
+
+        // Datos de artículos (una sola consulta a Dragon para todos los códigos del catálogo).
+        var codigos = det.Items
+            .Where(i => i.Tipo != "TEXTO" && !string.IsNullOrWhiteSpace(i.Codigo))
+            .Select(i => i.Codigo.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        var datos = new Dictionary<string, CartaRow>(StringComparer.OrdinalIgnoreCase);
+        if (codigos.Count > 0)
+        {
+            using var cn = _db.Create();
+            if (cn.State != System.Data.ConnectionState.Open) await cn.OpenAsync(ct);
+            var sql = $@"
+SELECT RTRIM(ART.ARTCOD) AS Codigo, LTRIM(RTRIM(ISNULL(ART.ARTDES,''))) AS Descripcion,
+       ISNULL(CATE.DESCRIP,'') AS Categoria, ISNULL(CTA.DESCRIP,'') AS Talles,
+       ISNULL(MAT.MATDES,'') AS Materiales, ISNULL(GRU.DESCRIP,'') AS Subfamilia,
+       ISNULL(FAM.DESCRIP,'') AS Familia, ISNULL(TIPO.DESCRIP,'') AS Linea, ISNULL(ART.CLASIFART,'') AS Combo,
+       ART.ARTPESO AS Peso,
+       (SELECT TOP 1 COCANT FROM {DbDragon}.COMB C WHERE C.COART=ART.ARTCOD) AS Stock,
+       (SELECT TOP 1 PDIRECTO FROM {DbDragon}.PRECIOAR P WHERE P.ARTICULO=ART.ARTCOD AND LISTAPRE='LISTA0' ORDER BY FALTAFW DESC, HMODIFW DESC) AS Precio,
+       ISNULL(STUFF((SELECT DISTINCT ', ' + RTRIM(RC.FCOLO) FROM {DbDragon}.REMCOMPRADET RC
+                     WHERE RC.FART=ART.ARTCOD AND RC.FCOTXT IS NOT NULL AND RC.FCOLO<>'' FOR XML PATH('')),1,2,''),'') AS Colores,
+       CASE WHEN (SELECT TOP 1 F.FOTOIA FROM dbo.GoogleDriveFotosArticulos F WHERE F.Codigo=RTRIM(ART.ARTCOD) AND FotoIA IS NOT NULL) IS NOT NULL
+            THEN (SELECT TOP 1 F.FOTOIA FROM dbo.GoogleDriveFotosArticulos F WHERE F.Codigo=RTRIM(ART.ARTCOD) AND FotoIA IS NOT NULL)
+            ELSE (SELECT TOP 1 F.FotoDrive FROM dbo.GoogleDriveFotosArticulos F WHERE F.Codigo=RTRIM(ART.ARTCOD) AND FotoDrive IS NOT NULL) END AS Foto
+FROM {DbDragon}.ART ART WITH(NOLOCK)
+LEFT JOIN {DbDragon}.TIPOART TIPO ON TIPO.COD=ART.TIPOARTI
+LEFT JOIN {DbDragon}.FAMILIA FAM ON FAM.COD=ART.FAMILIA
+LEFT JOIN {DbDragon}.CATEGART CATE ON CATE.COD=ART.CATEARTI
+LEFT JOIN {DbDragon}.CTALLE CTA ON CTA.CODIGO=ART.CURTALL
+LEFT JOIN {DbDragon}.MAT MAT ON MAT.MATCOD=ART.MAT
+LEFT JOIN {DbDragon}.GRUPO GRU ON GRU.COD=ART.GRUPO
+WHERE RTRIM(ART.ARTCOD) IN @codes;";
+            var rows = await cn.QueryAsync<CartaRow>(new CommandDefinition(sql, new { codes = codigos }, cancellationToken: ct));
+            foreach (var r in rows) datos[r.Codigo.Trim()] = r;
+        }
+
+        static string N0(decimal? v) => v is null ? "" : v.Value.ToString("N0");
+
+        var cartas = new List<CatalogosPdf.Carta>();
+        foreach (var it in det.Items)
+        {
+            if (it.Tipo == "TEXTO")
+            {
+                cartas.Add(new CatalogosPdf.Carta { EsTexto = true, Texto = it.Descripcion });
+                continue;
+            }
+            datos.TryGetValue((it.Codigo ?? "").Trim(), out var d);
+            cartas.Add(new CatalogosPdf.Carta
+            {
+                Codigo = it.Codigo,
+                Descripcion = d?.Descripcion is { Length: > 0 } ? d!.Descripcion : it.Descripcion,
+                Categoria = d?.Categoria ?? it.Categoria,
+                Talles = d?.Talles ?? "",
+                Materiales = d?.Materiales ?? "",
+                Subfamilia = d?.Subfamilia ?? "",
+                Familia = d?.Familia ?? "",
+                Linea = d?.Linea ?? "",
+                Combo = d?.Combo ?? "",
+                Peso = N0(d?.Peso),
+                Stock = N0(d?.Stock),
+                Precio = N0(d?.Precio),
+                Colores = d?.Colores ?? "",
+                Foto = d?.Foto
+            });
+        }
+
+        var pdf = new CatalogosPdf().Construir(det.Nombre, det.Temporada, det.Anio, cartas);
+
+        // Guardar como archivo físico en el server (no en la base).
+        var path = PdfPath(id);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, pdf, ct);
+        return pdf;
     }
 
     public async Task<CatalogoDetalleDto?> DetalleAsync(int id, CancellationToken ct = default)

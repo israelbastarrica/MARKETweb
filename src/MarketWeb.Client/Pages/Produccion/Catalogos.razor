@@ -2,6 +2,7 @@
 @using MarketWeb.Shared.Produccion
 @inject CatalogosApi Api
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject MarketWeb.Client.Services.UiService Ui
 
 <PageTitle>Catálogos</PageTitle>
@@ -60,6 +61,9 @@
                             </td>
                             <td class="text-center text-nowrap" @onclick:stopPropagation="true">
                                 <button class="btn btn-sm btn-outline-primary me-1" title="Abrir" @onclick="() => Abrir(c.Id)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-success me-1" title="@(c.TienePdf ? "Regenerar PDF" : "Generar PDF")" @onclick="() => Generar(c)" disabled="@(_generandoId == c.Id)">
+                                    @if (_generandoId == c.Id) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-file-pdf"></i> }
+                                </button>
                                 <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(c)"><i class="fa-solid fa-trash"></i></button>
                             </td>
                         </tr>
@@ -78,6 +82,7 @@
 @code {
     private List<CatalogoDto> _lista = new();
     private bool _cargando = true;
+    private int _generandoId;
 
     protected override async Task OnInitializedAsync() => await Cargar();
 
@@ -91,6 +96,21 @@
 
     private void Nuevo() => Nav.NavigateTo("/produccion/catalogos/nuevo");
     private void Abrir(int id) => Nav.NavigateTo($"/produccion/catalogos/{id}");
+
+    private async Task Generar(CatalogoDto c)
+    {
+        _generandoId = c.Id; StateHasChanged();
+        try
+        {
+            var ok = await Api.GenerarPdfAsync(c.Id);
+            if (!ok) { Ui.Error("No se pudo generar el PDF."); return; }
+            c.TienePdf = true;
+            Ui.Exito("PDF generado.");
+            await JS.InvokeVoidAsync("open", $"api/catalogos/{c.Id}/pdf", "_blank");
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _generandoId = 0; }
+    }
 
     private async Task Eliminar(CatalogoDto c)
     {
