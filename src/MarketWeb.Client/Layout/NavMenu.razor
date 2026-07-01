@@ -39,11 +39,12 @@
                         {
                             var subKey = modulo.Titulo + "/" + item.Etiqueta;
                             <div class="market-subgroup @(_subsAbiertos.Contains(subKey) ? "open" : "")">
-                                <button type="button" class="market-subgroup-header" @onclick="() => ToggleSub(subKey)">
+                                <div class="market-subgroup-header" role="button" tabindex="0" @onclick="() => ClickSubgrupo(subKey, item.Href)">
                                     <i class="@item.Icono ico"></i>
                                     <span>@item.Etiqueta</span>
-                                    <i class="fa-solid fa-chevron-down market-caret-sub"></i>
-                                </button>
+                                    @if (!item.Implementado) { <span class="market-wip" title="Pendiente de migrar"></span> }
+                                    <i class="fa-solid fa-chevron-down market-caret-sub" @onclick:stopPropagation="true" @onclick="() => ToggleSub(subKey)"></i>
+                                </div>
                                 <div class="market-subsubmenu">
                                     @foreach (var sub in item.Sub)
                                     {
@@ -123,8 +124,17 @@
         if (!_subsAbiertos.Remove(key)) _subsAbiertos.Add(key);
     }
 
-    // Hojas (links navegables) de un módulo, aplanando los subgrupos.
-    private static IEnumerable<Item> Hojas(Modulo m) => m.Items.SelectMany(i => i.Sub ?? new[] { i });
+    // Click en el encabezado de un subgrupo: si tiene ruta propia navega y lo despliega; si no, sólo despliega.
+    private void ClickSubgrupo(string key, string? href)
+    {
+        if (!string.IsNullOrEmpty(href)) { _subsAbiertos.Add(key); Nav.NavigateTo(href); }
+        else ToggleSub(key);
+    }
+
+    // Hojas (links navegables) de un módulo: las del subgrupo + el propio header si tiene ruta.
+    private static IEnumerable<Item> Hojas(Modulo m) => m.Items.SelectMany(i =>
+        i.Sub is null ? new[] { i }
+        : (string.IsNullOrEmpty(i.Href) ? i.Sub : i.Sub.Prepend(i)));
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,9 +192,9 @@
         var modulo = Modulos.FirstOrDefault(m => Hojas(m).Any(Coincide));
         if (modulo is null) return;
         _abierto = modulo.Titulo;
-        // Abrir también el subgrupo que contenga la ruta actual.
+        // Abrir también el subgrupo que contenga la ruta actual (por una hoja o por la ruta del propio header).
         foreach (var item in modulo.Items.Where(i => i.Sub is not null))
-            if (item.Sub!.Any(Coincide))
+            if (Coincide(item) || item.Sub!.Any(Coincide))
                 _subsAbiertos.Add(modulo.Titulo + "/" + item.Etiqueta);
     }
 
@@ -272,7 +282,11 @@
         }),
         new("Producción", "fa-solid fa-boxes-stacked", new[]
         {
-            new Item("Órdenes de Pedido", "fa-solid fa-bag-shopping", "/diseno/ordenes", Implementado: true),
+            new Item("Órdenes de Pedido", "fa-solid fa-bag-shopping", "/diseno/ordenes", Implementado: true, Sub: new[]
+            {
+                new Item("Producción", "fa-solid fa-industry", "/produccion/ordenes-produccion", Implementado: true),
+                new Item("Producto terminado", "fa-solid fa-box-open", "/produccion/ordenes-terminado", Implementado: true),
+            }),
             new Item("Viajes", "fa-solid fa-plane-departure", "/produccion/viajes", Implementado: true),
             new Item("Packs", "fa-solid fa-boxes-stacked", "/produccion/packs", Implementado: true),
             new Item("Telas", "fa-solid fa-scroll", "/produccion/telas", Implementado: true),

@@ -1,0 +1,207 @@
+@page "/produccion/ordenes-produccion"
+@page "/produccion/ordenes-terminado"
+@using MarketWeb.Shared.Produccion
+@inject OrdenesApi Api
+@inject NavigationManager Nav
+
+<PageTitle>@_titulo</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Producción" Titulo="@_titulo" Icono="@_icono" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        @(_tipo == "IMPORTADO"
+            ? "Producto terminado (órdenes importadas)."
+            : "Producción (órdenes nacionales).")
+        El <strong>estado de orden</strong> se calcula del estado
+        (🟡 etiquetas pedidas · 🟢 entregado/despachado · 🔴 anulada). <span class="text-muted">Provisorio hasta cargar las fechas reales de etiquetas/entrega.</span>
+    </p>
+
+    <div class="market-card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1">Buscar (N° / proveedor / estado)</label>
+                <input class="form-control form-control-sm" @bind="_q" @bind:event="oninput" placeholder="Escribí para filtrar..." />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1">Estado de orden</label>
+                <select class="form-select form-select-sm" @bind="_fSem">
+                    <option value="">Todos</option>
+                    <option value="amarillo">🟡 Etiquetas pedidas</option>
+                    <option value="verde">🟢 Entregado</option>
+                    <option value="rojo">🔴 Anulada</option>
+                    <option value="gris">⚪ En proceso</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3 d-flex gap-2">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
+                    <button type="button" class="btn @(_vista == "lista" ? "btn-secondary" : "btn-outline-secondary")" @onclick='() => _vista = "lista"'><i class="fa-solid fa-list me-1"></i>Lista</button>
+                    <button type="button" class="btn @(_vista == "tablero" ? "btn-secondary" : "btn-outline-secondary")" @onclick='() => _vista = "tablero"'><i class="fa-solid fa-table-columns me-1"></i>Tablero</button>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" title="Actualizar" @onclick="Cargar"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else
+    {
+        var lista = Filtradas();
+        @if (lista.Count == 0)
+        {
+            <div class="market-empty"><i class="fa-solid fa-industry"></i><p>No hay órdenes para mostrar con esos filtros.</p></div>
+        }
+        else if (_vista == "tablero")
+        {
+            <p class="text-muted small mb-2">@lista.Count orden(es) · arrastrá con el mouse para ver más columnas.</p>
+            <div class="prod-board">
+                @foreach (var grupo in lista.GroupBy(o => string.IsNullOrWhiteSpace(o.Estado) ? "(sin estado)" : o.Estado).OrderBy(g => RankEstado(g.Key)).ThenBy(g => g.Key))
+                {
+                    <div class="prod-col">
+                        <div class="prod-col-h">@grupo.Key <span class="badge bg-secondary ms-1">@grupo.Count()</span></div>
+                        @foreach (var o in grupo)
+                        {
+                            var sem = Semaforo(o);
+                            <div class="prod-cardk sem-l-@sem" @onclick="() => Abrir(o.Id)">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="sem-dot sem-@sem"></span>
+                                    <span class="fw-semibold">N° @o.NroOrden</span>
+                                    <span class="small text-muted ms-auto">@o.CantRenglones art.</span>
+                                </div>
+                                <div class="small text-muted mt-1">@(string.IsNullOrWhiteSpace(o.ProveedorNombre) ? "—" : o.ProveedorNombre)</div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small mb-2">@lista.Count orden(es).</p>
+            <div class="market-card table-responsive">
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:120px">Estado de orden</th>
+                            <th>N° orden</th><th>Proveedor</th><th>Estado</th>
+                            <th class="text-end">Renglones</th><th class="text-center" style="width:70px">Abrir</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var o in lista)
+                        {
+                            var sem = Semaforo(o);
+                            <tr class="prod-row" @onclick="() => Abrir(o.Id)">
+                                <td><span class="sem-dot sem-@sem me-1"></span><span class="small">@SemLabel(sem)</span></td>
+                                <td class="fw-semibold">@o.NroOrden</td>
+                                <td>@(string.IsNullOrWhiteSpace(o.ProveedorNombre) ? "—" : o.ProveedorNombre)</td>
+                                <td><span class="badge bg-secondary">@o.Estado</span></td>
+                                <td class="text-end fw-bold">@o.CantRenglones</td>
+                                <td class="text-center" @onclick:stopPropagation="true">
+                                    <button class="btn btn-sm btn-outline-primary" title="Abrir" @onclick="() => Abrir(o.Id)"><i class="fa-solid fa-pen"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .prod-row { cursor: pointer; }
+    .prod-row:hover td { background: var(--mk-row-hover); }
+    .sem-dot { display:inline-block; width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,.2); }
+    .sem-amarillo { background:#f1c40f; }
+    .sem-verde { background:#27ae60; }
+    .sem-rojo { background:#e74c3c; }
+    .sem-gris { background:#cfd3d6; }
+    /* Tablero (kanban) */
+    .prod-board { display:flex; gap:12px; overflow-x:auto; padding-bottom:10px; align-items:flex-start; }
+    .prod-col { flex:0 0 260px; background:rgba(128,128,128,.10); border-radius:8px; padding:8px; max-height:72vh; overflow-y:auto; }
+    .prod-col-h { font-weight:600; font-size:.82rem; padding:2px 4px 8px; position:sticky; top:0; }
+    .prod-cardk { background:var(--bs-body-bg,#fff); border:1px solid var(--bs-border-color,#dee2e6); border-left-width:4px; border-radius:6px; padding:8px; margin-bottom:8px; cursor:pointer; }
+    .prod-cardk:hover { box-shadow:0 1px 6px rgba(0,0,0,.15); }
+    .sem-l-amarillo { border-left-color:#f1c40f; }
+    .sem-l-verde { border-left-color:#27ae60; }
+    .sem-l-rojo { border-left-color:#e74c3c; }
+    .sem-l-gris { border-left-color:#cfd3d6; }
+</style>
+
+@code {
+    private List<OrdenDto> _ordenes = new();
+    private bool _cargando = true;
+    private string _q = "", _fSem = "", _vista = "lista";
+
+    // El tipo lo fija la ruta: /ordenes-terminado = IMPORTADO (Producto terminado); si no, NACIONAL (Producción).
+    private string _tipo = "NACIONAL";
+    private string _titulo => _tipo == "IMPORTADO" ? "Producto terminado" : "Producción";
+    private string _icono => _tipo == "IMPORTADO" ? "fa-solid fa-box-open" : "fa-solid fa-industry";
+
+    protected override void OnParametersSet()
+        => _tipo = Nav.Uri.ToLowerInvariant().Contains("ordenes-terminado") ? "IMPORTADO" : "NACIONAL";
+
+    // Orden de las columnas del tablero, siguiendo el flujo del tablero de Asana.
+    private static int RankEstado(string e)
+    {
+        var s = (e ?? "").ToLowerInvariant();
+        if (s.Contains("orden de pedido")) return 0;
+        if (s.Contains("tela")) return 1;
+        if (s.Contains("esperando") && s.Contains("etiqueta")) return 2;
+        if (s.Contains("enviar") && s.Contains("etiqueta")) return 3;
+        if (s.Contains("esperando")) return 4;
+        if (s.Contains("desaprob")) return 6;
+        if (s.Contains("aprob")) return 7;
+        if (s.Contains("terminado")) return 8;
+        if (s.Contains("entregado")) return 5;
+        if (s.Contains("anul")) return 9;
+        return 100;
+    }
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _ordenes = await Api.ListarAsync(); }
+        catch { _ordenes = new(); }
+        finally { _cargando = false; }
+    }
+
+    private List<OrdenDto> Filtradas()
+    {
+        IEnumerable<OrdenDto> q = _ordenes.Where(o => o.Tipo == _tipo);
+        if (!string.IsNullOrWhiteSpace(_fSem)) q = q.Where(o => Semaforo(o) == _fSem);
+        if (!string.IsNullOrWhiteSpace(_q))
+        {
+            var t = _q.Trim().ToLowerInvariant();
+            q = q.Where(o => o.NroOrden.ToString().Contains(t)
+                          || (o.ProveedorNombre ?? "").ToLowerInvariant().Contains(t)
+                          || (o.Estado ?? "").ToLowerInvariant().Contains(t));
+        }
+        return q.OrderByDescending(o => o.NroOrden).ToList();
+    }
+
+    // Semáforo provisorio derivado del estado (se hará exacto con las fechas de etiquetas/entrega).
+    private static string Semaforo(OrdenDto o)
+    {
+        var e = (o.Estado ?? "").ToLowerInvariant();
+        if (e.Contains("anul")) return "rojo";
+        if (e.Contains("entregado") || e.Contains("terminado")) return "verde";
+        if (e.Contains("etiqueta")) return "amarillo";
+        return "gris";
+    }
+
+    private static string SemLabel(string s) => s switch
+    {
+        "amarillo" => "Etiquetas pedidas",
+        "verde" => "Entregado / despachado",
+        "rojo" => "Anulada",
+        _ => "En proceso"
+    };
+
+    private void Abrir(int id) => Nav.NavigateTo($"/diseno/ordenes/{id}");
+}

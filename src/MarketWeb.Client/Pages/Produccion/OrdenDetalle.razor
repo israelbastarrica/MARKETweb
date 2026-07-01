@@ -52,7 +52,11 @@
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small text-muted mb-1">Etiquetador</label>
-                    <input class="form-control" @bind="_o.Etiquetador" placeholder="PROV / Telera" />
+                    <select class="form-select" @bind="_o.Etiquetador">
+                        <option value="">—</option>
+                        @if (!string.IsNullOrEmpty(_o.Etiquetador) && !Etiquetadores.Contains(_o.Etiquetador)) { <option value="@_o.Etiquetador">@_o.Etiquetador</option> }
+                        @foreach (var v in Etiquetadores) { <option value="@v">@v</option> }
+                    </select>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small text-muted mb-1">Temporada</label>
@@ -68,27 +72,24 @@
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small text-muted mb-1">Material</label>
-                    <select class="form-select" @bind="_o.Material">
-                        <option value="">—</option>
-                        @if (!string.IsNullOrEmpty(_o.Material) && !_combosCab.Materiales.Contains(_o.Material)) { <option value="@_o.Material">@_o.Material</option> }
-                        @foreach (var v in _combosCab.Materiales) { <option value="@v">@v</option> }
-                    </select>
+                    <input class="form-control" list="dl-material" @bind="_o.Material" placeholder="Buscar..." />
+                    <datalist id="dl-material">
+                        @foreach (var v in _combosCab.Materiales) { <option value="@v" /> }
+                    </datalist>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small text-muted mb-1">Familia</label>
-                    <select class="form-select" @bind="_o.Familia">
-                        <option value="">—</option>
-                        @if (!string.IsNullOrEmpty(_o.Familia) && !_combosCab.Familias.Contains(_o.Familia)) { <option value="@_o.Familia">@_o.Familia</option> }
-                        @foreach (var v in _combosCab.Familias) { <option value="@v">@v</option> }
-                    </select>
+                    <input class="form-control" list="dl-familia" @bind="_o.Familia" placeholder="Buscar..." />
+                    <datalist id="dl-familia">
+                        @foreach (var v in _combosCab.Familias) { <option value="@v" /> }
+                    </datalist>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small text-muted mb-1">Subfamilia <span class="text-muted">(Grupo)</span></label>
-                    <select class="form-select" @bind="_o.Subfamilia">
-                        <option value="">—</option>
-                        @if (!string.IsNullOrEmpty(_o.Subfamilia) && !_combosCab.Subfamilias.Contains(_o.Subfamilia)) { <option value="@_o.Subfamilia">@_o.Subfamilia</option> }
-                        @foreach (var v in _combosCab.Subfamilias) { <option value="@v">@v</option> }
-                    </select>
+                    <input class="form-control" list="dl-subfamilia" @bind="_o.Subfamilia" placeholder="Buscar..." />
+                    <datalist id="dl-subfamilia">
+                        @foreach (var v in _combosCab.Subfamilias) { <option value="@v" /> }
+                    </datalist>
                 </div>
             </div>
             <div class="d-flex justify-content-end mt-3">
@@ -315,6 +316,7 @@
     private static readonly string[] EstadosImportado = { "Borrador", "Confirmada", "Generada en Dragon" };
     private static readonly string[] EstadosNacional = { "Borrador", "Ficha enviada", "En producción", "Pack armado", "Generada en Dragon" };
     private string[] Estados => _o?.Tipo == "NACIONAL" ? EstadosNacional : EstadosImportado;
+    private static readonly string[] Etiquetadores = { "Proveedor", "Externo", "Propio" };
 
     protected override async Task OnInitializedAsync() => await Cargar();
 
