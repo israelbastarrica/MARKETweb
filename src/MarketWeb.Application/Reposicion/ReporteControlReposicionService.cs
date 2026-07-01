@@ -178,6 +178,8 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         {
             if (string.IsNullOrWhiteSpace(r.RemitoId)) continue;
             if (r.FechaRemito is DateTime f && (f < desde || f > hasta)) continue;
+            // Solo remitos con su RemitoEscaneado (recibidos): sino se cuentan duplicados/no recibidos y el enviado se infla.
+            if (r.FechaEscaneo is null) continue;
             var loc = Match(r.Destino);
             if (loc is null) continue;
             codeLocal[r.RemitoId.Trim()] = loc;
@@ -320,6 +322,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
 
         // 3) Control repo vs enviado
         sb.Append("<h3 style='margin:22px 0 6px'>3 · Control repo vs enviado</h3>");
+        sb.Append("<div style='color:#777;font-size:12px;margin-bottom:6px'>«Enviado» = unidades de los remitos que tienen escaneo de recepción (RemitoEscaneado).</div>");
 
         // 3a) OK por local
         sb.Append("<div style='font-weight:bold;margin:10px 0 4px'>OK por local <span style='font-weight:normal;color:#777;font-size:12px'>(se envió lo que pidió)</span></div>");
