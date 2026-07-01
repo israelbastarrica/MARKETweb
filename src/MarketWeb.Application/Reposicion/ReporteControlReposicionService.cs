@@ -1,4 +1,3 @@
-using System.Data;
 using System.Net;
 using System.Text;
 using MarketWeb.Application.Data;
@@ -7,11 +6,14 @@ using Microsoft.Data.SqlClient;
 namespace MarketWeb.Application.Reposicion;
 
 /// <summary>
-/// Reporte diario de control de Reposición (para enviar por mail a la mañana):
-///  1) Por local: conteo de remitos generados/despachados/recibidos/aceptados (SP_RemitosControlEstado).
-///  2) Enviado "por afuera": refuerzos cargados como evento (EventosReposicion, Accion='ENVIAR REFUERZO').
-///  3) Reemplazos: cargados (propuestos) vs enviados (Procesado=1) — RepoReemplazos.
-/// Como corre ~9 AM, se asume que el ciclo de anoche ya está todo despachado/recibido.
+/// Reporte diario de control de Reposición (para enviar por mail a la mañana), ventana horaria del ciclo
+/// (corrida de anoche ~21:00 → ahora ~9:00):
+///  1) Repo — packs pedidos por local (snapshot Reposicion/ReposicionDetalle).
+///  2) Reemplazos: cargados (propuestos) vs enviados (Procesado=1).
+///  3) Control repo vs enviado: (a) por local, packs/prendas OK (coinciden con lo enviado);
+///     (b) diferencias del lado de la repo (lo que se pidió y no se envió igual);
+///     (c) lo que se mandó sin pedir, marcando si corresponde a un reemplazo.
+/// El "enviado" sale del contenido real de los remitos (Dragon COMPROBANTEVDET).
 /// </summary>
 public interface IReporteControlReposicionService
 {
@@ -29,20 +31,22 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         _control = control;
     }
 
-    private sealed class RemitoLocal
-    {
-        public string Local = "";
-        public int Generados, Despachados, Recibidos, NoRecibidos, Aceptados, Rechazados;
-    }
-    private sealed class RefuerzoLocal { public string Local = ""; public int Eventos; public int Packs; }
     private sealed class ReempTotales { public int Cargados; public int Enviados; }
     private sealed class PedidoLocal { public string Local = ""; public int Articulos; public int Packs; public int Prendas; }
+    private sealed class LocalOk { public string Local = ""; public int ArticulosOk; public int PacksOk; public int PrendasOk; public int ArticulosDif; }
     private sealed class DiffRow
     {
         public string Local = ""; public string Art = ""; public string Des = "";
         public int PacksPed; public int CantPack; public int Pedido; public int Enviado;
         public double PacksEnv => CantPack > 0 ? (double)Enviado / CantPack : 0;
         public int Dif => Pedido - Enviado;
+    }
+    private sealed class AfueraRow { public string Local = ""; public string Art = ""; public string Des = ""; public int Enviado; public bool EsReemplazo; }
+    private sealed class DiffResult
+    {
+        public List<LocalOk> Ok = new();
+        public List<DiffRow> Repo = new();
+        public List<AfueraRow> Afuera = new();
     }
 
     private static string DragonDb(string origen) => (origen ?? "").ToUpperInvariant() switch
@@ -52,17 +56,79 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         _ => "DRAGONFISH_CENTRAL",
     };
 
-    // Detalle de diferencias repo vs enviado, por local+artículo (solo locales con corrida de repo en el período).
-    // Pedido = SUM(PacksAReponer*CantPack) prendas del snapshot. Enviado = SUM(FCANT) de los remitos al local (Dragon).
-    private async Task<List<DiffRow>> DiferenciasAsync(DateTime desde, DateTime hasta, CancellationToken ct)
+    public async Task<(string Html, string Resumen)> ConstruirAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
     {
-        // 1) Pedido por (local, artículo) de la/s corrida/s dentro de la ventana horaria [desde, hasta].
-        var pedido = new Dictionary<string, (int Packs, int CantPack, int Prendas, string Des)>(StringComparer.OrdinalIgnoreCase);
-        var locales = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pedidos = new List<PedidoLocal>();
+        var reemp = new ReempTotales();
         await using (var cn = _db.Create())
         {
             await cn.OpenAsync(ct);
-            await using var cmd = new SqlCommand(
+
+            // 1) Repo: lo que se PIDIÓ por local (snapshot de la corrida del ciclo).
+            await using (var cmd = new SqlCommand(
+                @"SELECT ISNULL(rd.LocalDestino,'') AS Local,
+                         COUNT(DISTINCT rd.ARTCOD) AS Articulos,
+                         ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
+                         ISNULL(SUM(rd.PacksAReponer * ISNULL(rd.CantPack,1)),0) AS Prendas
+                  FROM MARKET.dbo.ReposicionDetalle rd
+                  JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
+                  WHERE ISNULL(r.Eliminado,0) = 0 AND r.FechaHoraCorrida >= @desde AND r.FechaHoraCorrida <= @hasta
+                  GROUP BY rd.LocalDestino ORDER BY rd.LocalDestino", cn) { CommandTimeout = 60 })
+            {
+                cmd.Parameters.AddWithValue("@desde", desde);
+                cmd.Parameters.AddWithValue("@hasta", hasta);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                    pedidos.Add(new PedidoLocal
+                    {
+                        Local = rdr["Local"]?.ToString() ?? "",
+                        Articulos = Convert.ToInt32(rdr["Articulos"]),
+                        Packs = Convert.ToInt32(rdr["Packs"]),
+                        Prendas = Convert.ToInt32(rdr["Prendas"])
+                    });
+            }
+
+            // 2) Reemplazos: cargados (propuestos) vs enviados (visados).
+            await using (var cmd = new SqlCommand(
+                @"SELECT
+                    SUM(CASE WHEN ISNULL(ARTCODReemplazo,'') <> '' THEN 1 ELSE 0 END) AS Cargados,
+                    SUM(CASE WHEN ISNULL(ARTCODReemplazo,'') <> '' AND Procesado = 1 THEN 1 ELSE 0 END) AS Enviados
+                  FROM MARKET.dbo.RepoReemplazos
+                  WHERE Eliminado = 0 AND Fecha >= @desde AND Fecha <= @hasta", cn) { CommandTimeout = 60 })
+            {
+                cmd.Parameters.AddWithValue("@desde", desde);
+                cmd.Parameters.AddWithValue("@hasta", hasta);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                if (await rdr.ReadAsync(ct))
+                {
+                    reemp.Cargados = rdr["Cargados"] is DBNull ? 0 : Convert.ToInt32(rdr["Cargados"]);
+                    reemp.Enviados = rdr["Enviados"] is DBNull ? 0 : Convert.ToInt32(rdr["Enviados"]);
+                }
+            }
+        }
+
+        var diff = await DiferenciasAsync(desde, hasta, ct);
+
+        var html = Render(desde, hasta, pedidos, reemp, diff);
+        var resumen = $"repo pidió {pedidos.Sum(p => p.Packs)} packs · {diff.Ok.Sum(o => o.PacksOk)} packs OK · " +
+                      $"{diff.Repo.Count} art. con dif · {diff.Afuera.Count} sin pedir · {reemp.Enviados}/{reemp.Cargados} reemplazos";
+        return (html, resumen);
+    }
+
+    // Reconciliación repo vs enviado por local+artículo. Pedido = PacksAReponer*CantPack (prendas) del snapshot.
+    // Enviado = SUM(FCANT) de los remitos al local dentro del ciclo (Dragon COMPROBANTEVDET).
+    private async Task<DiffResult> DiferenciasAsync(DateTime desde, DateTime hasta, CancellationToken ct)
+    {
+        var res = new DiffResult();
+
+        // Pedido por (local, artículo) de la corrida del ciclo.
+        var pedido = new Dictionary<string, (int Packs, int CantPack, int Prendas, string Des)>(StringComparer.OrdinalIgnoreCase);
+        var locales = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reempSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // ARTCODReemplazo del ciclo
+        await using (var cn = _db.Create())
+        {
+            await cn.OpenAsync(ct);
+            await using (var cmd = new SqlCommand(
                 @"SELECT UPPER(LTRIM(RTRIM(rd.LocalDestino))) AS Local, RTRIM(rd.ARTCOD) AS Art,
                          MAX(rd.ARTDES) AS Des, ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
                          MAX(ISNULL(rd.CantPack,1)) AS CantPack,
@@ -70,34 +136,47 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                   FROM MARKET.dbo.ReposicionDetalle rd
                   JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
                   WHERE ISNULL(r.Eliminado,0)=0 AND r.FechaHoraCorrida >= @desde AND r.FechaHoraCorrida <= @hasta
-                  GROUP BY UPPER(LTRIM(RTRIM(rd.LocalDestino))), RTRIM(rd.ARTCOD)", cn) { CommandTimeout = 90 };
-            cmd.Parameters.AddWithValue("@desde", desde);
-            cmd.Parameters.AddWithValue("@hasta", hasta);
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
+                  GROUP BY UPPER(LTRIM(RTRIM(rd.LocalDestino))), RTRIM(rd.ARTCOD)", cn) { CommandTimeout = 90 })
             {
-                var loc = rdr["Local"]?.ToString() ?? "";
-                var art = (rdr["Art"]?.ToString() ?? "").Trim();
-                locales.Add(loc);
-                pedido[loc + "|" + art] = (Convert.ToInt32(rdr["Packs"]), Convert.ToInt32(rdr["CantPack"]),
-                    Convert.ToInt32(rdr["Prendas"]), (rdr["Des"]?.ToString() ?? "").Trim());
+                cmd.Parameters.AddWithValue("@desde", desde);
+                cmd.Parameters.AddWithValue("@hasta", hasta);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                {
+                    var loc = rdr["Local"]?.ToString() ?? "";
+                    var art = (rdr["Art"]?.ToString() ?? "").Trim();
+                    locales.Add(loc);
+                    pedido[loc + "|" + art] = (Convert.ToInt32(rdr["Packs"]), Convert.ToInt32(rdr["CantPack"]),
+                        Convert.ToInt32(rdr["Prendas"]), (rdr["Des"]?.ToString() ?? "").Trim());
+                }
+            }
+
+            // Artículos de reemplazo del ciclo (para marcar los envíos "sin pedir" que son reemplazos).
+            await using (var cmd = new SqlCommand(
+                @"SELECT DISTINCT UPPER(LTRIM(RTRIM(ARTCODReemplazo))) AS Art
+                  FROM MARKET.dbo.RepoReemplazos
+                  WHERE Eliminado = 0 AND ISNULL(ARTCODReemplazo,'') <> '' AND Fecha >= @desde AND Fecha <= @hasta", cn) { CommandTimeout = 60 })
+            {
+                cmd.Parameters.AddWithValue("@desde", desde);
+                cmd.Parameters.AddWithValue("@hasta", hasta);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct)) reempSet.Add(rdr["Art"]?.ToString() ?? "");
             }
         }
-        if (locales.Count == 0) return new();
+        if (locales.Count == 0) return res;
 
-        // 2) Remitos dentro de la ventana horaria [desde, hasta]; solo los que van a un local de la repo.
+        // Remitos del ciclo hacia locales de la repo (recorte por FechaRemito real).
         var remitos = await _control.ListadoAsync(desde, hasta, 0, "TODOS", ct);
         string? Match(string destino)
         {
             var d = (destino ?? "").ToUpperInvariant();
             return locales.FirstOrDefault(l => d == l || d.Contains(l) || l.Contains(d));
         }
-        var codeLocal = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // remitoId -> local
+        var codeLocal = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var porOrigen = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var r in remitos)
         {
             if (string.IsNullOrWhiteSpace(r.RemitoId)) continue;
-            // La ventana real es HORARIA (ciclo 21h→9h): recortamos por la fecha/hora del remito.
             if (r.FechaRemito is DateTime f && (f < desde || f > hasta)) continue;
             var loc = Match(r.Destino);
             if (loc is null) continue;
@@ -107,7 +186,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             l.Add(r.RemitoId.Trim());
         }
 
-        // 3) Enviado (unidades) por (local, artículo) leyendo COMPROBANTEVDET de la base Dragon del origen.
+        // Enviado (unidades) por (local, artículo).
         var enviado = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (codeLocal.Count > 0)
         {
@@ -143,136 +222,84 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             }
         }
 
-        // 4) Diferencias (solo donde pedido != enviado).
-        var rows = new List<DiffRow>();
-        foreach (var key in pedido.Keys.Union(enviado.Keys, StringComparer.OrdinalIgnoreCase))
+        // OK por local + diferencias del lado de la repo.
+        var okPorLocal = new Dictionary<string, LocalOk>(StringComparer.OrdinalIgnoreCase);
+        LocalOk Ok(string loc) => okPorLocal.TryGetValue(loc, out var o) ? o : (okPorLocal[loc] = new LocalOk { Local = loc });
+        foreach (var (key, p) in pedido)
         {
             var sep = key.IndexOf('|');
             var loc = sep >= 0 ? key[..sep] : key;
             var art = sep >= 0 ? key[(sep + 1)..] : "";
-            var hayPed = pedido.TryGetValue(key, out var p);
-            int ped = hayPed ? p.Prendas : 0;
             int env = enviado.TryGetValue(key, out var e) ? e : 0;
-            if (ped == env) continue;
-            rows.Add(new DiffRow
+            var o = Ok(loc);
+            if (p.Prendas == env)
             {
-                Local = loc, Art = art, Des = hayPed ? p.Des : "",
-                PacksPed = hayPed ? p.Packs : 0, CantPack = hayPed ? p.CantPack : 0,
-                Pedido = ped, Enviado = env
-            });
+                o.ArticulosOk++; o.PacksOk += p.Packs; o.PrendasOk += p.Prendas;
+            }
+            else
+            {
+                o.ArticulosDif++;
+                res.Repo.Add(new DiffRow { Local = loc, Art = art, Des = p.Des, PacksPed = p.Packs, CantPack = p.CantPack, Pedido = p.Prendas, Enviado = env });
+            }
         }
-        return rows.OrderBy(r => r.Local).ThenByDescending(r => Math.Abs(r.Dif)).ToList();
-    }
+        res.Ok = okPorLocal.Values.OrderBy(x => x.Local).ToList();
+        res.Repo = res.Repo.OrderBy(r => r.Local).ThenByDescending(r => Math.Abs(r.Dif)).ToList();
 
-    public async Task<(string Html, string Resumen)> ConstruirAsync(DateTime desde, DateTime hasta, CancellationToken ct = default)
-    {
-        // 1) Remitos por local (agrega las filas del período por local).
-        var estado = await _control.EstadoAsync(desde, hasta, ct);
-        var porLocal = new Dictionary<string, RemitoLocal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var e in estado)
+        // Enviado SIN pedir (por afuera): claves de enviado que no están en pedido.
+        var afueraCods = new List<AfueraRow>();
+        foreach (var (key, env) in enviado)
         {
-            if (!porLocal.TryGetValue(e.LocalDestino, out var r))
-                porLocal[e.LocalDestino] = r = new RemitoLocal { Local = e.LocalDestino };
-            r.Generados += e.Generados; r.Despachados += e.Despachados; r.Recibidos += e.Recibidos;
-            r.NoRecibidos += e.NoRecibidos; r.Aceptados += e.Aceptados; r.Rechazados += e.Rechazados;
+            if (env <= 0 || pedido.ContainsKey(key)) continue;
+            var sep = key.IndexOf('|');
+            var loc = sep >= 0 ? key[..sep] : key;
+            var art = sep >= 0 ? key[(sep + 1)..] : "";
+            afueraCods.Add(new AfueraRow { Local = loc, Art = art, Enviado = env, EsReemplazo = reempSet.Contains(art.ToUpperInvariant()) });
         }
-        var remitos = porLocal.Values.OrderBy(x => x.Local).ToList();
-
-        // Packs que pidió la repo por local (snapshot de la/las corrida/s del período), refuerzos y reemplazos.
-        var pedidos = new List<PedidoLocal>();
-        var refuerzos = new List<RefuerzoLocal>();
-        var reemp = new ReempTotales();
-        await using (var cn = _db.Create())
+        // Descripción de los "sin pedir" desde Dragon (lote único).
+        if (afueraCods.Count > 0)
         {
+            var cods = afueraCods.Select(a => a.Art).Where(a => a.Length > 0).Distinct().ToList();
+            var des = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            await using var cn = _db.Create();
             await cn.OpenAsync(ct);
-            // Ventana HORARIA (ciclo 21h→9h), no por día completo.
-            var d0 = desde;
-            var d1 = hasta;
-
-            // Repo: lo que se PIDIÓ por local (independiente de remitos). PacksAReponer = packs recomendados.
-            await using (var cmd = new SqlCommand(
-                @"SELECT ISNULL(rd.LocalDestino,'') AS Local,
-                         COUNT(DISTINCT rd.ARTCOD) AS Articulos,
-                         ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
-                         ISNULL(SUM(rd.Pendiente),0) AS Prendas
-                  FROM MARKET.dbo.ReposicionDetalle rd
-                  JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
-                  WHERE ISNULL(r.Eliminado,0) = 0 AND r.FechaHoraCorrida >= @d0 AND r.FechaHoraCorrida <= @d1
-                  GROUP BY rd.LocalDestino ORDER BY rd.LocalDestino", cn) { CommandTimeout = 60 })
+            for (int off = 0; off < cods.Count; off += 200)
             {
-                cmd.Parameters.AddWithValue("@d0", d0);
-                cmd.Parameters.AddWithValue("@d1", d1);
-                await using var rdr = await cmd.ExecuteReaderAsync(ct);
-                while (await rdr.ReadAsync(ct))
-                    pedidos.Add(new PedidoLocal
-                    {
-                        Local = rdr["Local"]?.ToString() ?? "",
-                        Articulos = Convert.ToInt32(rdr["Articulos"]),
-                        Packs = Convert.ToInt32(rdr["Packs"]),
-                        Prendas = Convert.ToInt32(rdr["Prendas"])
-                    });
-            }
-
-            await using (var cmd = new SqlCommand(
-                @"SELECT ISNULL(Local,'') AS Local, COUNT(*) AS Eventos, ISNULL(SUM(ISNULL(CantidadPacks,0)),0) AS Packs
-                  FROM MARKET.dbo.EventosReposicion
-                  WHERE Eliminado = 0 AND Accion LIKE 'ENVIAR REFUERZO%'
-                        AND FechaEvento >= @d0 AND FechaEvento <= @d1
-                  GROUP BY Local ORDER BY Local", cn) { CommandTimeout = 60 })
-            {
-                cmd.Parameters.AddWithValue("@d0", d0);
-                cmd.Parameters.AddWithValue("@d1", d1);
-                await using var rdr = await cmd.ExecuteReaderAsync(ct);
-                while (await rdr.ReadAsync(ct))
-                    refuerzos.Add(new RefuerzoLocal
-                    {
-                        Local = rdr["Local"]?.ToString() ?? "",
-                        Eventos = Convert.ToInt32(rdr["Eventos"]),
-                        Packs = Convert.ToInt32(rdr["Packs"])
-                    });
-            }
-
-            await using (var cmd = new SqlCommand(
-                @"SELECT
-                    SUM(CASE WHEN ISNULL(ARTCODReemplazo,'') <> '' THEN 1 ELSE 0 END) AS Cargados,
-                    SUM(CASE WHEN ISNULL(ARTCODReemplazo,'') <> '' AND Procesado = 1 THEN 1 ELSE 0 END) AS Enviados
-                  FROM MARKET.dbo.RepoReemplazos
-                  WHERE Eliminado = 0 AND Fecha >= @d0 AND Fecha <= @d1", cn) { CommandTimeout = 60 })
-            {
-                cmd.Parameters.AddWithValue("@d0", d0);
-                cmd.Parameters.AddWithValue("@d1", d1);
-                await using var rdr = await cmd.ExecuteReaderAsync(ct);
-                if (await rdr.ReadAsync(ct))
+                var lote = cods.Skip(off).Take(200).ToList();
+                var ps = lote.Select((_, i) => "@c" + i).ToList();
+                try
                 {
-                    reemp.Cargados = rdr["Cargados"] is DBNull ? 0 : Convert.ToInt32(rdr["Cargados"]);
-                    reemp.Enviados = rdr["Enviados"] is DBNull ? 0 : Convert.ToInt32(rdr["Enviados"]);
+                    await using var cmd = new SqlCommand(
+                        $@"SELECT RTRIM(ARTCOD) AS Art, LTRIM(RTRIM(ISNULL(ARTDES,''))) AS Des
+                           FROM DRAGONFISH_CENTRAL.ZooLogic.ART WITH(NOLOCK)
+                           WHERE RTRIM(ARTCOD) IN ({string.Join(",", ps)})", cn) { CommandTimeout = 60 };
+                    for (int i = 0; i < lote.Count; i++) cmd.Parameters.AddWithValue(ps[i], lote[i]);
+                    await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                    while (await rdr.ReadAsync(ct)) des[(rdr["Art"]?.ToString() ?? "").Trim()] = rdr["Des"]?.ToString() ?? "";
                 }
+                catch { }
             }
+            foreach (var a in afueraCods) if (des.TryGetValue(a.Art, out var d)) a.Des = d;
         }
+        res.Afuera = afueraCods.OrderBy(a => a.Local).ThenByDescending(a => a.Enviado).ToList();
 
-        var diffs = await DiferenciasAsync(desde, hasta, ct);
-
-        var html = Render(desde, hasta, pedidos, remitos, refuerzos, reemp, diffs);
-        var totalRecibidos = remitos.Sum(r => r.Recibidos);
-        var totalGenerados = remitos.Sum(r => r.Generados);
-        var resumen = $"repo pidió {pedidos.Sum(p => p.Packs)} packs · {totalRecibidos}/{totalGenerados} remitos recibidos · {refuerzos.Sum(r => r.Packs)} packs de refuerzo · {reemp.Enviados}/{reemp.Cargados} reemplazos enviados";
-        return (html, resumen);
+        return res;
     }
 
-    private static string Render(DateTime desde, DateTime hasta, List<PedidoLocal> pedidos, List<RemitoLocal> remitos, List<RefuerzoLocal> refuerzos, ReempTotales reemp, List<DiffRow> diffs)
+    private static string Render(DateTime desde, DateTime hasta, List<PedidoLocal> pedidos, ReempTotales reemp, DiffResult diff)
     {
         static string H(string? s) => WebUtility.HtmlEncode(s ?? "");
         var sb = new StringBuilder();
-        var per = desde.Date == hasta.Date ? desde.ToString("dd/MM/yyyy") : $"{desde:dd/MM/yyyy} – {hasta:dd/MM/yyyy}";
+        var mismaFecha = desde.Date == hasta.Date;
+        var per = mismaFecha ? $"{desde:dd/MM/yyyy} {desde:HH:mm}–{hasta:HH:mm}" : $"{desde:dd/MM HH:mm} – {hasta:dd/MM HH:mm}";
 
         sb.Append("<div style='font-family:Arial,Helvetica,sans-serif;color:#222;max-width:820px'>");
-        sb.Append($"<h2 style='margin:0 0 2px'>Control de Reposición</h2>");
-        sb.Append($"<div style='color:#777;font-size:13px;margin-bottom:16px'>Período: {per}</div>");
+        sb.Append("<h2 style='margin:0 0 2px'>Control de Reposición</h2>");
+        sb.Append($"<div style='color:#777;font-size:13px;margin-bottom:16px'>Ciclo: {per}</div>");
 
-        // 1) Repo: packs pedidos por local (del snapshot, independiente de remitos)
+        // 1) Repo — pedido por local
         sb.Append("<h3 style='margin:18px 0 6px'>1 · Repo — pedido por local</h3>");
         if (pedidos.Count == 0)
-            sb.Append("<p style='color:#777'>No hay corridas de reposición en el período.</p>");
+            sb.Append("<p style='color:#777'>No hay corridas de reposición en el ciclo.</p>");
         else
         {
             sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
@@ -284,71 +311,69 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             sb.Append("</table>");
         }
 
-        // 2) Remitos por local
-        sb.Append("<h3 style='margin:22px 0 6px'>2 · Remitos por local (enviado vs llegado)</h3>");
-        if (remitos.Count == 0)
-            sb.Append("<p style='color:#777'>Sin remitos en el período.</p>");
-        else
-        {
-            sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
-            sb.Append("<tr style='background:#f2f2f2'>" +
-                Th("Local") + Th("Generados", true) + Th("Despachados", true) + Th("Recibidos", true) +
-                Th("No recib.", true) + Th("Aceptados", true) + Th("Rechazados", true) + "</tr>");
-            foreach (var r in remitos)
-                sb.Append("<tr>" + Td(H(r.Local)) + TdN(r.Generados) + TdN(r.Despachados) + TdN(r.Recibidos) +
-                    TdN(r.NoRecibidos) + TdN(r.Aceptados) + TdN(r.Rechazados) + "</tr>");
-            sb.Append("<tr style='font-weight:bold;background:#fafafa'>" + Td("TOTAL") +
-                TdN(remitos.Sum(x => x.Generados)) + TdN(remitos.Sum(x => x.Despachados)) + TdN(remitos.Sum(x => x.Recibidos)) +
-                TdN(remitos.Sum(x => x.NoRecibidos)) + TdN(remitos.Sum(x => x.Aceptados)) + TdN(remitos.Sum(x => x.Rechazados)) + "</tr>");
-            sb.Append("</table>");
-        }
-
-        // 2) Enviado por afuera (refuerzos)
-        sb.Append("<h3 style='margin:22px 0 6px'>3 · Enviado por afuera — refuerzos</h3>");
-        if (refuerzos.Count == 0)
-            sb.Append("<p style='color:#777'>No se cargaron refuerzos en el período.</p>");
-        else
-        {
-            sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
-            sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Refuerzos", true) + Th("Packs", true) + "</tr>");
-            foreach (var r in refuerzos)
-                sb.Append("<tr>" + Td(H(r.Local)) + TdN(r.Eventos) + TdN(r.Packs) + "</tr>");
-            sb.Append("<tr style='font-weight:bold;background:#fafafa'>" + Td("TOTAL") +
-                TdN(refuerzos.Sum(x => x.Eventos)) + TdN(refuerzos.Sum(x => x.Packs)) + "</tr>");
-            sb.Append("</table>");
-        }
-
-        // 3) Reemplazos
-        sb.Append("<h3 style='margin:22px 0 6px'>4 · Reemplazos</h3>");
+        // 2) Reemplazos
+        sb.Append("<h3 style='margin:22px 0 6px'>2 · Reemplazos</h3>");
         sb.Append("<table style='border-collapse:collapse;font-size:13px'>");
         sb.Append("<tr>" + Td("Cargados (propuestos)") + TdN(reemp.Cargados) + "</tr>");
         sb.Append("<tr>" + Td("Enviados (visados)") + TdN(reemp.Enviados) + "</tr>");
         sb.Append("</table>");
 
-        // 5) Detalle de diferencias repo vs enviado (por local/artículo)
-        sb.Append("<h3 style='margin:22px 0 6px'>5 · Diferencias repo vs enviado <span style='font-weight:normal;color:#777;font-size:12px'>(prendas)</span></h3>");
-        if (diffs.Count == 0)
-            sb.Append("<p style='color:#777'>Sin diferencias: se envió exactamente lo que pidió la repo.</p>");
+        // 3) Control repo vs enviado
+        sb.Append("<h3 style='margin:22px 0 6px'>3 · Control repo vs enviado</h3>");
+
+        // 3a) OK por local
+        sb.Append("<div style='font-weight:bold;margin:10px 0 4px'>OK por local <span style='font-weight:normal;color:#777;font-size:12px'>(se envió lo que pidió)</span></div>");
+        if (diff.Ok.Count == 0)
+            sb.Append("<p style='color:#777'>Sin datos.</p>");
         else
         {
-            sb.Append("<div style='color:#777;font-size:12px;margin-bottom:6px'>Pedido y Enviado en prendas (packs × cant/pack). Dif = pedido − enviado: <b>positivo</b> = faltó enviar · <b>negativo</b> = se envió de más / por afuera.</div>");
+            sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
+            sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Art. OK", true) + Th("Packs OK", true) + Th("Prendas OK", true) + Th("Art. c/dif", true) + "</tr>");
+            foreach (var o in diff.Ok)
+                sb.Append("<tr>" + Td(H(o.Local)) + TdN(o.ArticulosOk) + TdN(o.PacksOk) + TdN(o.PrendasOk) + TdN(o.ArticulosDif) + "</tr>");
+            sb.Append("</table>");
+        }
+
+        // 3b) Diferencias del lado de la repo
+        sb.Append("<div style='font-weight:bold;margin:16px 0 4px'>Diferencias (lado repo) <span style='font-weight:normal;color:#777;font-size:12px'>(pidió y no se envió igual · prendas)</span></div>");
+        if (diff.Repo.Count == 0)
+            sb.Append("<p style='color:#777'>Sin diferencias: se envió todo lo pedido.</p>");
+        else
+        {
             sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
             sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Código") + Th("Descripción") +
-                Th("Packs", true) + Th("Cant/pack", true) + Th("Pedido", true) +
-                Th("Packs env.", true) + Th("Enviado", true) + Th("Dif.", true) + "</tr>");
-            foreach (var r in diffs)
+                Th("Packs", true) + Th("Cant/pack", true) + Th("Pedido", true) + Th("Packs env.", true) + Th("Enviado", true) + Th("Dif.", true) + "</tr>");
+            foreach (var r in diff.Repo)
             {
                 var color = r.Dif > 0 ? "#b00" : "#0a7";
                 var packsEnv = r.CantPack > 0 ? r.PacksEnv.ToString("0.#") : "—";
                 sb.Append("<tr>" + Td(H(r.Local)) + Td(H(r.Art)) + Td(H(r.Des)) +
-                    TdN(r.PacksPed) + TdN(r.CantPack) + TdN(r.Pedido) +
-                    TdT(packsEnv) + TdN(r.Enviado) +
+                    TdN(r.PacksPed) + TdN(r.CantPack) + TdN(r.Pedido) + TdT(packsEnv) + TdN(r.Enviado) +
                     $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right;color:{color};font-weight:bold'>{r.Dif:N0}</td></tr>");
             }
             sb.Append("</table>");
         }
 
-        sb.Append("<p style='color:#999;font-size:12px;margin-top:20px'>Generado automáticamente por MARKET Web (programador de tareas).</p>");
+        // 3c) Se mandó sin pedir (por afuera) + ¿reemplazo?
+        sb.Append("<div style='font-weight:bold;margin:16px 0 4px'>Se mandó sin pedir <span style='font-weight:normal;color:#777;font-size:12px'>(no estaba en la repo · prendas)</span></div>");
+        if (diff.Afuera.Count == 0)
+            sb.Append("<p style='color:#777'>Nada: no se envió nada fuera de lo pedido.</p>");
+        else
+        {
+            sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
+            sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Código") + Th("Descripción") + Th("Enviado", true) + Th("¿Reemplazo?") + "</tr>");
+            foreach (var a in diff.Afuera)
+            {
+                var tag = a.EsReemplazo
+                    ? "<span style='color:#0a7;font-weight:bold'>Reemplazo</span>"
+                    : "<span style='color:#b00;font-weight:bold'>Por afuera</span>";
+                sb.Append("<tr>" + Td(H(a.Local)) + Td(H(a.Art)) + Td(H(a.Des)) + TdN(a.Enviado) +
+                    $"<td style='border:1px solid #ddd;padding:6px 8px'>{tag}</td></tr>");
+            }
+            sb.Append("</table>");
+        }
+
+        sb.Append("<p style='color:#999;font-size:12px;margin-top:20px'>Generado automáticamente por MARKET Web.</p>");
         sb.Append("</div>");
         return sb.ToString();
     }
