@@ -164,34 +164,33 @@ public sealed class CatalogosPdf
         yield return ("Stock", c.Stock);
     }
 
-    // Portada / separador (tarjeta TEXTO): marca "MARKET" fija arriba + título grande auto-ajustado.
+    // Portada / separador (tarjeta TEXTO): marca "MARKET" discreta arriba + título con aire, centrado.
     private static void DibujarTexto(XGraphics gfx, string texto, double w, double h, XBrush blanco)
     {
-        var gris = new XSolidBrush(XColor.FromArgb(160, 160, 160));
+        // Marca MARKET: chica, con bastante tracking (aire editorial). Gris claro, no blanco puro.
+        var marca = new XSolidBrush(XColor.FromArgb(210, 210, 210));
+        var fMarca = new XFont("Arial", 13, XFontStyle.Bold);
+        double marcaY = h * 0.12;
+        DibujarConTracking(gfx, "MARKET", fMarca, marca, w, marcaY, 7);
+        // Hairline corta debajo.
+        double lineY = marcaY + fMarca.GetHeight() + 7;
+        gfx.DrawLine(new XPen(XColor.FromArgb(80, 80, 80), 0.8), w * 0.42, lineY, w * 0.58, lineY);
 
-        // Marca MARKET fija (arriba, centrada, con tracking).
-        var fMarca = new XFont("Arial", 30, XFontStyle.Bold);
-        DibujarConTracking(gfx, "MARKET", fMarca, blanco, w, h * 0.14, 8);
-        // Línea fina debajo de la marca.
-        double lineY = h * 0.14 + fMarca.GetHeight() + 6;
-        var pen = new XPen(XColor.FromArgb(90, 90, 90), 1);
-        gfx.DrawLine(pen, w * 0.34, lineY, w * 0.66, lineY);
-
-        // Título de portada: elegir el tamaño más grande que entre en el ancho y el alto disponibles.
-        double maxW = w * 0.84;
-        double topRegion = h * 0.30, botRegion = h * 0.90;
+        // Título: tamaño moderado. Se elige el mayor que entre, pero con tope prudente (nada gigante).
+        double maxW = w * 0.72;
+        double topRegion = h * 0.34, botRegion = h * 0.84;
         double availH = botRegion - topRegion;
-        var candidatos = new[] { 92, 84, 76, 68, 60, 52, 44, 38, 32 };
+        var candidatos = new[] { 46, 42, 38, 34, 30, 26, 22 };
         XFont f = new("Arial", candidatos[^1], XFontStyle.Bold);
         List<string> lineas = Envolver(gfx, texto ?? "", f, maxW);
         foreach (var size in candidatos)
         {
             var ff = new XFont("Arial", size, XFontStyle.Bold);
             var ls = Envolver(gfx, texto ?? "", ff, maxW);
-            if (ls.Count * ff.GetHeight() * 1.12 <= availH) { f = ff; lineas = ls; break; }
+            if (ls.Count * ff.GetHeight() * 1.3 <= availH) { f = ff; lineas = ls; break; }
         }
 
-        double lh = f.GetHeight() * 1.12;
+        double lh = f.GetHeight() * 1.3;  // interlineado holgado
         double totalH = lineas.Count * lh;
         double y = topRegion + (availH - totalH) / 2;
         foreach (var ln in lineas)
