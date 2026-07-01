@@ -49,9 +49,9 @@ public sealed class ReposicionService : IReposicionService
             await using var rdr = await cmd.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
             {
-                var esVirtual = Convert.ToBoolean(rdr["EsVirtual"]);
+                var esVirtual = Bool(rdr, "EsVirtual");
                 var ultNro = (rdr["UltRemitoNro"]?.ToString() ?? "").Trim();
-                var ultFecha = Convert.ToDateTime(rdr["UltRemitoFecha"]);
+                var ultFecha = DtOr(rdr, "UltRemitoFecha", inicioRun);
                 var ultHora = (rdr["UltRemitoHora"]?.ToString() ?? "").Trim();
 
                 string ultTexto;
@@ -68,14 +68,14 @@ public sealed class ReposicionService : IReposicionService
                 filas.Add(new ReposicionFilaDto
                 {
                     EsVirtual = esVirtual,
-                    CantPack = Convert.ToInt32(rdr["CantPack"]),
-                    Pendiente = Convert.ToInt32(rdr["Pendiente"]),
-                    Packs = Convert.ToInt32(rdr["PacksAReponer"]),
+                    CantPack = Int(rdr, "CantPack"),
+                    Pendiente = Int(rdr, "Pendiente"),
+                    Packs = Int(rdr, "PacksAReponer"),
                     UltRemitoNro = ultNro,
                     UltRemitoFecha = ultFecha,
                     UltRemitoHora = ultHora,
                     UltRemitoTexto = ultTexto,
-                    EsHuerfano = Convert.ToBoolean(rdr["EsHuerfano"]),
+                    EsHuerfano = Bool(rdr, "EsHuerfano"),
                     LocalDestino = (rdr["LocalDestino"]?.ToString() ?? "").Trim(),
                     ArtCod = (rdr["ARTCOD"]?.ToString() ?? "").Trim(),
                     ArtDes = rdr["ARTDES"]?.ToString() ?? "",
@@ -130,6 +130,10 @@ public sealed class ReposicionService : IReposicionService
 
     private static string Str(SqlDataReader r, string col)
         => r[col] is DBNull or null ? "" : r[col].ToString()!.Trim();
+    // Lecturas seguras: un NULL de la base no debe tumbar la corrida (tiraba "cannot cast DBNull").
+    private static int Int(SqlDataReader r, string col) => r[col] is DBNull or null ? 0 : Convert.ToInt32(r[col]);
+    private static bool Bool(SqlDataReader r, string col) => r[col] is not (DBNull or null) && Convert.ToBoolean(r[col]);
+    private static DateTime DtOr(SqlDataReader r, string col, DateTime fallback) => r[col] is DBNull or null ? fallback : Convert.ToDateTime(r[col]);
 
     public async Task<IReadOnlyList<CorridaDto>> ListarCorridasAsync(CancellationToken ct = default)
     {
@@ -146,12 +150,12 @@ public sealed class ReposicionService : IReposicionService
         {
             lista.Add(new CorridaDto
             {
-                Id = Convert.ToInt32(rdr["ID"]),
-                FechaHoraCorrida = Convert.ToDateTime(rdr["FechaHoraCorrida"]),
+                Id = Int(rdr, "ID"),
+                FechaHoraCorrida = DtOr(rdr, "FechaHoraCorrida", DateTime.Now),
                 LocalParam = rdr["LocalParam"]?.ToString() ?? "",
-                TotalArticulos = Convert.ToInt32(rdr["TotalArticulos"]),
-                TotalPacks = Convert.ToInt32(rdr["TotalPacks"]),
-                TotalPrendas = Convert.ToInt32(rdr["TotalPrendas"]),
+                TotalArticulos = Int(rdr, "TotalArticulos"),
+                TotalPacks = Int(rdr, "TotalPacks"),
+                TotalPrendas = Int(rdr, "TotalPrendas"),
                 MachineName = rdr["MachineName"] is DBNull or null ? "" : rdr["MachineName"].ToString()!
             });
         }
@@ -172,7 +176,7 @@ public sealed class ReposicionService : IReposicionService
             cmdCab.Parameters.Add("@ID", SqlDbType.Int).Value = idReposicion;
             await using var rc = await cmdCab.ExecuteReaderAsync(ct);
             if (!await rc.ReadAsync(ct)) return null;
-            fechaCorrida = Convert.ToDateTime(rc["FechaHoraCorrida"]);
+            fechaCorrida = DtOr(rc, "FechaHoraCorrida", DateTime.Now);
             localParam = rc["LocalParam"]?.ToString() ?? "";
         }
 
@@ -198,9 +202,9 @@ public sealed class ReposicionService : IReposicionService
             await using var rdr = await cmd.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
             {
-                var esVirtual = Convert.ToBoolean(rdr["EsVirtual"]);
+                var esVirtual = Bool(rdr, "EsVirtual");
                 var ultNro = (rdr["UltRemitoNro"]?.ToString() ?? "").Trim();
-                var ultFecha = Convert.ToDateTime(rdr["UltRemitoFecha"]);
+                var ultFecha = DtOr(rdr, "UltRemitoFecha", fechaCorrida);
                 var ultHora = (rdr["UltRemitoHora"]?.ToString() ?? "").Trim();
                 string ultTexto = esVirtual
                     ? "(virtual) " + ultFecha.ToString("dd/MM/yyyy")
@@ -219,9 +223,9 @@ public sealed class ReposicionService : IReposicionService
                     Categoria = Str(rdr, "Categoria"),
                     Combo = Str(rdr, "Combo"),
                     Mobiliario = Str(rdr, "Mobiliario"),
-                    CantPack = Convert.ToInt32(rdr["CantPack"]),
-                    Pendiente = Convert.ToInt32(rdr["Pendiente"]),
-                    Packs = Convert.ToInt32(rdr["PacksAReponer"]),
+                    CantPack = Int(rdr, "CantPack"),
+                    Pendiente = Int(rdr, "Pendiente"),
+                    Packs = Int(rdr, "PacksAReponer"),
                     UltRemitoNro = ultNro,
                     UltRemitoFecha = ultFecha,
                     UltRemitoHora = ultHora,
