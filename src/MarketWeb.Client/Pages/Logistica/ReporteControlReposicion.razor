@@ -14,12 +14,12 @@
     <div class="market-card p-3 mb-3">
         <div class="row g-2 align-items-end">
             <div class="col-6 col-md-3">
-                <label class="form-label small text-muted mb-1">Desde</label>
-                <input type="date" class="form-control form-control-sm" @bind="_desde" />
+                <label class="form-label small text-muted mb-1">Desde (corrida)</label>
+                <input type="datetime-local" class="form-control form-control-sm" @bind="_desde" />
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label small text-muted mb-1">Hasta</label>
-                <input type="date" class="form-control form-control-sm" @bind="_hasta" />
+                <input type="datetime-local" class="form-control form-control-sm" @bind="_hasta" />
             </div>
             <div class="col-12 col-md-auto d-flex gap-2">
                 <button class="btn btn-primary btn-sm" @onclick="Ver" disabled="@_cargando">
@@ -46,14 +46,14 @@
 </div>
 
 @code {
-    private DateTime _desde = DateTime.Today.AddDays(-1);
-    private DateTime _hasta = DateTime.Today;
+    private DateTime _desde = DateTime.Today.AddDays(-1).AddHours(21);
+    private DateTime _hasta = DateTime.Now;
     private string? _html;
     private bool _cargando;
 
     protected override async Task OnInitializedAsync() => await Ver();
 
-    private string Url => $"api/control-remitos/reporte?desde={_desde:yyyy-MM-dd}&hasta={_hasta:yyyy-MM-dd}";
+    private string Url => $"api/control-remitos/reporte?desde={_desde:yyyy-MM-ddTHH:mm}&hasta={_hasta:yyyy-MM-ddTHH:mm}";
 
     private async Task Ver()
     {

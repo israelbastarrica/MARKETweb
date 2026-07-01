@@ -37,7 +37,13 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
     private sealed class RefuerzoLocal { public string Local = ""; public int Eventos; public int Packs; }
     private sealed class ReempTotales { public int Cargados; public int Enviados; }
     private sealed class PedidoLocal { public string Local = ""; public int Articulos; public int Packs; public int Prendas; }
-    private sealed class DiffRow { public string Local = ""; public string Art = ""; public string Des = ""; public int Pedido; public int Enviado; public int Dif => Pedido - Enviado; }
+    private sealed class DiffRow
+    {
+        public string Local = ""; public string Art = ""; public string Des = "";
+        public int PacksPed; public int CantPack; public int Pedido; public int Enviado;
+        public double PacksEnv => CantPack > 0 ? (double)Enviado / CantPack : 0;
+        public int Dif => Pedido - Enviado;
+    }
 
     private static string DragonDb(string origen) => (origen ?? "").ToUpperInvariant() switch
     {
@@ -50,35 +56,36 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
     // Pedido = SUM(PacksAReponer*CantPack) prendas del snapshot. Enviado = SUM(FCANT) de los remitos al local (Dragon).
     private async Task<List<DiffRow>> DiferenciasAsync(DateTime desde, DateTime hasta, CancellationToken ct)
     {
-        var d0 = desde.Date; var d1 = hasta.Date.AddDays(1);
-
-        // 1) Pedido por (local, artículo).
-        var pedido = new Dictionary<string, (int Prendas, string Des)>(StringComparer.OrdinalIgnoreCase);
+        // 1) Pedido por (local, artículo) de la/s corrida/s dentro de la ventana horaria [desde, hasta].
+        var pedido = new Dictionary<string, (int Packs, int CantPack, int Prendas, string Des)>(StringComparer.OrdinalIgnoreCase);
         var locales = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await using (var cn = _db.Create())
         {
             await cn.OpenAsync(ct);
             await using var cmd = new SqlCommand(
                 @"SELECT UPPER(LTRIM(RTRIM(rd.LocalDestino))) AS Local, RTRIM(rd.ARTCOD) AS Art,
-                         MAX(rd.ARTDES) AS Des, ISNULL(SUM(rd.PacksAReponer * ISNULL(rd.CantPack,1)),0) AS Prendas
+                         MAX(rd.ARTDES) AS Des, ISNULL(SUM(rd.PacksAReponer),0) AS Packs,
+                         MAX(ISNULL(rd.CantPack,1)) AS CantPack,
+                         ISNULL(SUM(rd.PacksAReponer * ISNULL(rd.CantPack,1)),0) AS Prendas
                   FROM MARKET.dbo.ReposicionDetalle rd
                   JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
-                  WHERE ISNULL(r.Eliminado,0)=0 AND r.FechaHoraCorrida >= @d0 AND r.FechaHoraCorrida < @d1
+                  WHERE ISNULL(r.Eliminado,0)=0 AND r.FechaHoraCorrida >= @desde AND r.FechaHoraCorrida <= @hasta
                   GROUP BY UPPER(LTRIM(RTRIM(rd.LocalDestino))), RTRIM(rd.ARTCOD)", cn) { CommandTimeout = 90 };
-            cmd.Parameters.AddWithValue("@d0", d0);
-            cmd.Parameters.AddWithValue("@d1", d1);
+            cmd.Parameters.AddWithValue("@desde", desde);
+            cmd.Parameters.AddWithValue("@hasta", hasta);
             await using var rdr = await cmd.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
             {
                 var loc = rdr["Local"]?.ToString() ?? "";
                 var art = (rdr["Art"]?.ToString() ?? "").Trim();
                 locales.Add(loc);
-                pedido[loc + "|" + art] = (Convert.ToInt32(rdr["Prendas"]), (rdr["Des"]?.ToString() ?? "").Trim());
+                pedido[loc + "|" + art] = (Convert.ToInt32(rdr["Packs"]), Convert.ToInt32(rdr["CantPack"]),
+                    Convert.ToInt32(rdr["Prendas"]), (rdr["Des"]?.ToString() ?? "").Trim());
             }
         }
         if (locales.Count == 0) return new();
 
-        // 2) Remitos del período; nos quedamos con los que van a un local de la repo.
+        // 2) Remitos dentro de la ventana horaria [desde, hasta]; solo los que van a un local de la repo.
         var remitos = await _control.ListadoAsync(desde, hasta, 0, "TODOS", ct);
         string? Match(string destino)
         {
@@ -90,6 +97,8 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         foreach (var r in remitos)
         {
             if (string.IsNullOrWhiteSpace(r.RemitoId)) continue;
+            // La ventana real es HORARIA (ciclo 21h→9h): recortamos por la fecha/hora del remito.
+            if (r.FechaRemito is DateTime f && (f < desde || f > hasta)) continue;
             var loc = Match(r.Destino);
             if (loc is null) continue;
             codeLocal[r.RemitoId.Trim()] = loc;
@@ -141,10 +150,16 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             var sep = key.IndexOf('|');
             var loc = sep >= 0 ? key[..sep] : key;
             var art = sep >= 0 ? key[(sep + 1)..] : "";
-            int ped = pedido.TryGetValue(key, out var p) ? p.Prendas : 0;
+            var hayPed = pedido.TryGetValue(key, out var p);
+            int ped = hayPed ? p.Prendas : 0;
             int env = enviado.TryGetValue(key, out var e) ? e : 0;
             if (ped == env) continue;
-            rows.Add(new DiffRow { Local = loc, Art = art, Des = pedido.TryGetValue(key, out var pp) ? pp.Des : "", Pedido = ped, Enviado = env });
+            rows.Add(new DiffRow
+            {
+                Local = loc, Art = art, Des = hayPed ? p.Des : "",
+                PacksPed = hayPed ? p.Packs : 0, CantPack = hayPed ? p.CantPack : 0,
+                Pedido = ped, Enviado = env
+            });
         }
         return rows.OrderBy(r => r.Local).ThenByDescending(r => Math.Abs(r.Dif)).ToList();
     }
@@ -170,8 +185,9 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         await using (var cn = _db.Create())
         {
             await cn.OpenAsync(ct);
-            var d0 = desde.Date;
-            var d1 = hasta.Date.AddDays(1);
+            // Ventana HORARIA (ciclo 21h→9h), no por día completo.
+            var d0 = desde;
+            var d1 = hasta;
 
             // Repo: lo que se PIDIÓ por local (independiente de remitos). PacksAReponer = packs recomendados.
             await using (var cmd = new SqlCommand(
@@ -181,7 +197,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                          ISNULL(SUM(rd.Pendiente),0) AS Prendas
                   FROM MARKET.dbo.ReposicionDetalle rd
                   JOIN MARKET.dbo.Reposicion r ON r.ID = rd.IDReposicion
-                  WHERE ISNULL(r.Eliminado,0) = 0 AND r.FechaHoraCorrida >= @d0 AND r.FechaHoraCorrida < @d1
+                  WHERE ISNULL(r.Eliminado,0) = 0 AND r.FechaHoraCorrida >= @d0 AND r.FechaHoraCorrida <= @d1
                   GROUP BY rd.LocalDestino ORDER BY rd.LocalDestino", cn) { CommandTimeout = 60 })
             {
                 cmd.Parameters.AddWithValue("@d0", d0);
@@ -201,7 +217,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                 @"SELECT ISNULL(Local,'') AS Local, COUNT(*) AS Eventos, ISNULL(SUM(ISNULL(CantidadPacks,0)),0) AS Packs
                   FROM MARKET.dbo.EventosReposicion
                   WHERE Eliminado = 0 AND Accion LIKE 'ENVIAR REFUERZO%'
-                        AND FechaEvento >= @d0 AND FechaEvento < @d1
+                        AND FechaEvento >= @d0 AND FechaEvento <= @d1
                   GROUP BY Local ORDER BY Local", cn) { CommandTimeout = 60 })
             {
                 cmd.Parameters.AddWithValue("@d0", d0);
@@ -221,7 +237,7 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
                     SUM(CASE WHEN ISNULL(ARTCODReemplazo,'') <> '' THEN 1 ELSE 0 END) AS Cargados,
                     SUM(CASE WHEN ISNULL(ARTCODReemplazo,'') <> '' AND Procesado = 1 THEN 1 ELSE 0 END) AS Enviados
                   FROM MARKET.dbo.RepoReemplazos
-                  WHERE Eliminado = 0 AND Fecha >= @d0 AND Fecha < @d1", cn) { CommandTimeout = 60 })
+                  WHERE Eliminado = 0 AND Fecha >= @d0 AND Fecha <= @d1", cn) { CommandTimeout = 60 })
             {
                 cmd.Parameters.AddWithValue("@d0", d0);
                 cmd.Parameters.AddWithValue("@d1", d1);
@@ -315,14 +331,18 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             sb.Append("<p style='color:#777'>Sin diferencias: se envió exactamente lo que pidió la repo.</p>");
         else
         {
-            sb.Append("<div style='color:#777;font-size:12px;margin-bottom:6px'>Dif = pedido − enviado. <b>Positivo</b> = faltó enviar · <b>negativo</b> = se envió de más / por afuera.</div>");
+            sb.Append("<div style='color:#777;font-size:12px;margin-bottom:6px'>Pedido y Enviado en prendas (packs × cant/pack). Dif = pedido − enviado: <b>positivo</b> = faltó enviar · <b>negativo</b> = se envió de más / por afuera.</div>");
             sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
             sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Código") + Th("Descripción") +
-                Th("Pedido", true) + Th("Enviado", true) + Th("Dif.", true) + "</tr>");
+                Th("Packs", true) + Th("Cant/pack", true) + Th("Pedido", true) +
+                Th("Packs env.", true) + Th("Enviado", true) + Th("Dif.", true) + "</tr>");
             foreach (var r in diffs)
             {
                 var color = r.Dif > 0 ? "#b00" : "#0a7";
-                sb.Append("<tr>" + Td(H(r.Local)) + Td(H(r.Art)) + Td(H(r.Des)) + TdN(r.Pedido) + TdN(r.Enviado) +
+                var packsEnv = r.CantPack > 0 ? r.PacksEnv.ToString("0.#") : "—";
+                sb.Append("<tr>" + Td(H(r.Local)) + Td(H(r.Art)) + Td(H(r.Des)) +
+                    TdN(r.PacksPed) + TdN(r.CantPack) + TdN(r.Pedido) +
+                    TdT(packsEnv) + TdN(r.Enviado) +
                     $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right;color:{color};font-weight:bold'>{r.Dif:N0}</td></tr>");
             }
             sb.Append("</table>");
@@ -339,4 +359,6 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
         => $"<td style='border:1px solid #ddd;padding:6px 8px'>{t}</td>";
     private static string TdN(int n)
         => $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right'>{n:N0}</td>";
+    private static string TdT(string s)
+        => $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right'>{WebUtility.HtmlEncode(s)}</td>";
 }

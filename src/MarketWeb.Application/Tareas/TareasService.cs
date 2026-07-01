@@ -335,9 +335,9 @@ IF COL_LENGTH('MARKET.dbo.TareasProgramadas','UltimaEjecucionAuto') IS NULL
         if (string.IsNullOrWhiteSpace(dest)) return (false, "La tarea no tiene destinatarios.");
         if (!_smtp.Configurado) return (false, "El SMTP no está configurado en el servidor.");
 
-        // Ventana: ciclo del día anterior hasta hoy (repo de anoche + despacho/recepción de esta mañana).
-        var desde = DateTime.Today.AddDays(-1);
-        var hasta = DateTime.Today;
+        // Ventana HORARIA del ciclo: desde la corrida de anoche (21:00) hasta ahora (~9:00).
+        var desde = DateTime.Today.AddDays(-1).AddHours(21);
+        var hasta = DateTime.Now;
         var (html, resumen) = await _reporteRepo.ConstruirAsync(desde, hasta, ct);
 
         var asunto = "Control de Reposición " + DateTime.Now.ToString("dd/MM/yyyy");

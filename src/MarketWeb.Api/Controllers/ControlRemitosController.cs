@@ -22,7 +22,7 @@ public sealed class ControlRemitosController : ControllerBase
     [HttpGet("reporte")]
     public async Task<IActionResult> Reporte([FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, CancellationToken ct = default)
     {
-        var (html, _) = await _reporte.ConstruirAsync(desde ?? DateTime.Today.AddDays(-1), hasta ?? DateTime.Today, ct);
+        var (html, _) = await _reporte.ConstruirAsync(desde ?? DateTime.Today.AddDays(-1).AddHours(21), hasta ?? DateTime.Now, ct);
         return Content(html, "text/html");
     }
 
