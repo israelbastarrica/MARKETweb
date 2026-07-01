@@ -50,9 +50,26 @@ public sealed class SmtpSender : ISmtpSender
 
         try
         {
-            using var smtp = new SmtpClient(Host, port) { EnableSsl = true, Credentials = new NetworkCredential(user, pass) };
-            await smtp.SendMailAsync(msg, ct);
-            return true;
+            // Reintentos ante fallos transitorios del SMTP (timeout/rechazo momentáneo). En el último intento, la excepción se propaga (queda en el log de la tarea).
+            const int intentos = 3;
+            for (int i = 1; ; i++)
+            {
+                try
+                {
+                    using var smtp = new SmtpClient(Host, port)
+                    {
+                        EnableSsl = true,
+                        Credentials = new NetworkCredential(user, pass),
+                        Timeout = 30000
+                    };
+                    await smtp.SendMailAsync(msg, ct);
+                    return true;
+                }
+                catch when (i < intentos && !ct.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                }
+            }
         }
         finally
         {
