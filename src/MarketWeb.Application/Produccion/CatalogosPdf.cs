@@ -78,7 +78,7 @@ public sealed class CatalogosPdf
 
             if (c.EsTexto)
             {
-                DibujarTexto(gfx, c.Texto, w, h, blanco);
+                DibujarTexto(gfx, c.Texto, temporada, anio, w, h, blanco);
                 continue;
             }
 
@@ -164,12 +164,20 @@ public sealed class CatalogosPdf
         yield return ("Stock", c.Stock);
     }
 
-    // Portada / separador (tarjeta TEXTO): título con aire centrado + marca "MARKET" fija ABAJO.
-    private static void DibujarTexto(XGraphics gfx, string texto, double w, double h, XBrush blanco)
+    // Portada / separador (tarjeta TEXTO): eyebrow temporada·año arriba + título centrado + marca "MARKET" fija ABAJO.
+    private static void DibujarTexto(XGraphics gfx, string texto, string temporada, int? anio, double w, double h, XBrush blanco)
     {
+        var gris = new XSolidBrush(XColor.FromArgb(150, 150, 150));
+
+        // Eyebrow (temporada · año), chico y con tracking, arriba.
+        var eyebrow = string.Join("  ·  ", new[] { temporada, anio?.ToString() ?? "" }
+            .Where(s => !string.IsNullOrWhiteSpace(s))).ToUpperInvariant();
+        if (eyebrow.Length > 0)
+            DibujarConTracking(gfx, eyebrow, new XFont("Arial", 11, XFontStyle.Regular), gris, w, h * 0.13, 4);
+
         // Título: tamaño moderado. Se elige el mayor que entre, con tope prudente (nada gigante).
         double maxW = w * 0.72;
-        double topRegion = h * 0.22, botRegion = h * 0.78;
+        double topRegion = h * 0.24, botRegion = h * 0.78;
         double availH = botRegion - topRegion;
         var candidatos = new[] { 46, 42, 38, 34, 30, 26, 22 };
         XFont f = new("Arial", candidatos[^1], XFontStyle.Bold);
