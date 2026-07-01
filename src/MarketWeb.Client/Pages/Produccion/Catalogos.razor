@@ -48,8 +48,14 @@
                             <td>@(string.IsNullOrWhiteSpace(c.Temporada) ? "—" : c.Temporada)</td>
                             <td class="text-center">@(c.Anio?.ToString() ?? "—")</td>
                             <td class="text-end fw-bold">@c.CantItems</td>
-                            <td class="text-center">
-                                @if (c.TienePdf) { <i class="fa-solid fa-file-pdf text-danger" title="Tiene PDF generado"></i> }
+                            <td class="text-center" @onclick:stopPropagation="true">
+                                @if (c.TienePdf)
+                                {
+                                    <a href="@($"api/catalogos/{c.Id}/pdf")" target="_blank" rel="noopener"
+                                       class="btn btn-sm btn-outline-danger" title="Abrir PDF">
+                                        <i class="fa-solid fa-file-pdf"></i>
+                                    </a>
+                                }
                                 else { <span class="text-muted">—</span> }
                             </td>
                             <td class="text-center text-nowrap" @onclick:stopPropagation="true">

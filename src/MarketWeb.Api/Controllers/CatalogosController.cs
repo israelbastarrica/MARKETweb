@@ -46,6 +46,15 @@ public sealed class CatalogosController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CatalogoRenglonDto>>> Proforma(int nro, CancellationToken ct)
         => Ok(await _service.ProformaAsync(nro, ct));
 
+    [HttpGet("{id:int}/pdf")]
+    public async Task<IActionResult> Pdf(int id, CancellationToken ct)
+    {
+        var bytes = await _service.ObtenerPdfAsync(id, ct);
+        if (bytes is null) return NotFound();
+        // Inline (sin nombre de archivo) → se abre en el navegador en vez de descargarse.
+        return File(bytes, "application/pdf");
+    }
+
     [HttpPost("guardar")]
     public async Task<ActionResult<int>> Guardar([FromBody] CatalogoGuardarRequest req, CancellationToken ct)
         => Ok(await _service.GuardarAsync(req, Aud, ct));

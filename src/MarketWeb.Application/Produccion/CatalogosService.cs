@@ -2,6 +2,7 @@ using Dapper;
 using MarketWeb.Application.Data;
 using MarketWeb.Shared.Produccion;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 
 namespace MarketWeb.Application.Produccion;
 
@@ -18,6 +19,8 @@ public interface ICatalogosService
     Task<IReadOnlyList<CatalogoRenglonDto>> ProformaAsync(int nroProforma, CancellationToken ct = default);
     Task<int> GuardarAsync(CatalogoGuardarRequest req, string aud, CancellationToken ct = default);
     Task<bool> EliminarAsync(int id, string aud, CancellationToken ct = default);
+    /// <summary>PDF del catálogo: archivo físico en el server (preferido); si no está, el que dejó el .Net en la base.</summary>
+    Task<byte[]?> ObtenerPdfAsync(int id, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -34,7 +37,26 @@ public sealed class CatalogosService : ICatalogosService
     private const string DbDragon = "DRAGONFISH_CENTRAL.ZooLogic";
 
     private readonly ISqlConnectionFactory _db;
-    public CatalogosService(ISqlConnectionFactory db) => _db = db;
+    private readonly IConfiguration _cfg;
+    public CatalogosService(ISqlConnectionFactory db, IConfiguration cfg) { _db = db; _cfg = cfg; }
+
+    /// <summary>
+    /// Carpeta física donde viven los PDF de catálogos (config "Catalogos:PdfDir").
+    /// Los archivos NO se guardan en la base para que no crezca; sólo el PDF en disco.
+    /// Default: subcarpeta "Catalogos" al lado del ejecutable del server.
+    /// </summary>
+    private string PdfDir
+    {
+        get
+        {
+            var dir = _cfg["Catalogos:PdfDir"];
+            if (string.IsNullOrWhiteSpace(dir))
+                dir = Path.Combine(AppContext.BaseDirectory, "Datos", "Catalogos");
+            return dir;
+        }
+    }
+
+    private string PdfPath(int id) => Path.Combine(PdfDir, $"Catalogo_{id}.pdf");
 
     // Las tablas ya existen (las usa el .Net). El DDL es un salvavidas idempotente por si la base está limpia.
     private const string SchemaDdl = @"
@@ -71,8 +93,25 @@ SELECT c.ID AS Id, ISNULL(c.Nombre,'') AS Nombre, c.[Año] AS Anio, ISNULL(c.Tem
 FROM dbo.Catalogos c
 WHERE c.Eliminado=0
 ORDER BY c.ID DESC;";
-        var rows = await cn.QueryAsync<CatalogoDto>(new CommandDefinition(sql, cancellationToken: ct));
-        return rows.ToList();
+        var rows = (await cn.QueryAsync<CatalogoDto>(new CommandDefinition(sql, cancellationToken: ct))).ToList();
+        // El PDF puede estar como archivo físico en el server (nuevo) o en la base (viejo, del .Net).
+        foreach (var r in rows)
+            if (!r.TienePdf && File.Exists(PdfPath(r.Id))) r.TienePdf = true;
+        return rows;
+    }
+
+    public async Task<byte[]?> ObtenerPdfAsync(int id, CancellationToken ct = default)
+    {
+        // 1) Archivo físico en el server (forma preferida, la base no crece).
+        var path = PdfPath(id);
+        if (File.Exists(path)) return await File.ReadAllBytesAsync(path, ct);
+
+        // 2) Fallback: el PDF que el .Net dejó guardado en la base.
+        using var cn = _db.Create();
+        if (cn.State != System.Data.ConnectionState.Open) await cn.OpenAsync(ct);
+        var bytes = await cn.ExecuteScalarAsync<byte[]?>(new CommandDefinition(
+            "SELECT ArchivoPDF FROM dbo.Catalogos WHERE ID=@id AND Eliminado=0;", new { id }, cancellationToken: ct));
+        return bytes is { Length: > 0 } ? bytes : null;
     }
 
     public async Task<CatalogoDetalleDto?> DetalleAsync(int id, CancellationToken ct = default)
