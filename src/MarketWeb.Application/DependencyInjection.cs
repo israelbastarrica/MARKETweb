@@ -55,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<ITelasService, TelasService>();
         services.AddScoped<IViajesService, ViajesService>();
         services.AddScoped<IOrdenesService, OrdenesService>();
+        services.AddScoped<ICatalogosService, CatalogosService>();
         services.AddScoped<MarketWeb.Application.Marketing.IMarketingService, MarketWeb.Application.Marketing.MarketingService>();
         services.AddScoped<MarketWeb.Application.Marketing.IMarketingCollector, MarketWeb.Application.Marketing.MarketingCollector>();
         services.AddSingleton<EstancadosCache>();

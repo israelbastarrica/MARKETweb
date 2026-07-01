@@ -1,0 +1,219 @@
+@page "/produccion/catalogos/nuevo"
+@page "/produccion/catalogos/{Id:int}"
+@using MarketWeb.Shared.Produccion
+@inject CatalogosApi Api
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>@(_esNuevo ? "Nuevo catálogo" : _nombre)</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Producción" Titulo="@(_esNuevo ? "Nuevo catálogo" : "Catálogo")" Icono="fa-solid fa-book-open" Compartible="false" />
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else
+    {
+        <!-- Datos de cabecera -->
+        <div class="market-card mb-3">
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label small text-muted mb-1">Nombre</label>
+                    <input class="form-control" @bind="_nombre" placeholder="Nombre del catálogo" />
+                </div>
+                <div class="col-6 col-md-4">
+                    <label class="form-label small text-muted mb-1">Temporada</label>
+                    <input class="form-control" list="temporadas" @bind="_temporada" placeholder="Temporada" />
+                    <datalist id="temporadas">
+                        @foreach (var t in _temporadas) { <option value="@t" /> }
+                    </datalist>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted mb-1">Año</label>
+                    <input type="number" class="form-control" @bind="_anio" placeholder="@DateTime.Now.Year.ToString()" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Agregar ítems -->
+        <div class="market-card mb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small text-muted mb-1">Agregar artículo (código)</label>
+                    <div class="input-group">
+                        <input class="form-control" @bind="_codigo" @bind:event="oninput" @onkeydown="CodigoKey" placeholder="Ej: IH051.229" />
+                        <button class="btn btn-outline-primary" @onclick="AgregarArticulo" disabled="@(_agregando || string.IsNullOrWhiteSpace(_codigo))">
+                            @if (_agregando) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-plus"></i> }
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small text-muted mb-1">Agregar texto (título / separador)</label>
+                    <div class="input-group">
+                        <input class="form-control" @bind="_texto" @bind:event="oninput" @onkeydown="TextoKey" placeholder="Texto libre" />
+                        <button class="btn btn-outline-secondary" @onclick="AgregarTexto" disabled="@string.IsNullOrWhiteSpace(_texto)">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-2 text-md-end">
+                    <span class="text-muted small">@_items.Count ítem(s)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grilla de ítems -->
+        <div class="market-card table-responsive mb-3">
+            @if (_items.Count == 0)
+            {
+                <p class="text-muted mb-0 p-2">Sin ítems. Agregá artículos por código o textos.</p>
+            }
+            else
+            {
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:50px" class="text-center">#</th>
+                            <th>Tipo</th><th>Código</th><th>Descripción</th><th>Categoría</th>
+                            <th class="text-center" style="width:140px">Orden</th>
+                            <th class="text-center" style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _items.Count; i++)
+                        {
+                            var idx = i;
+                            var it = _items[idx];
+                            <tr class="@(it.Tipo == "TEXTO" ? "cat-texto" : "")">
+                                <td class="text-center text-muted">@(idx + 1)</td>
+                                <td>
+                                    @if (it.Tipo == "TEXTO") { <span class="badge bg-secondary">TEXTO</span> }
+                                    else if (!it.ExisteEnDragon) { <span class="badge bg-danger" title="No existe en Dragon">ARTÍCULO</span> }
+                                    else { <span class="badge bg-primary">ARTÍCULO</span> }
+                                </td>
+                                <td class="fw-semibold">@it.Valor</td>
+                                <td>@it.Descripcion</td>
+                                <td class="small">@it.Categoria</td>
+                                <td class="text-center text-nowrap">
+                                    <button class="btn btn-sm btn-outline-secondary" title="Subir" @onclick="() => Subir(idx)" disabled="@(idx == 0)"><i class="fa-solid fa-arrow-up"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Bajar" @onclick="() => Bajar(idx)" disabled="@(idx == _items.Count - 1)"><i class="fa-solid fa-arrow-down"></i></button>
+                                </td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-danger" title="Quitar" @onclick="() => Quitar(idx)"><i class="fa-solid fa-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } else { <i class="fa-solid fa-floppy-disk me-1"></i> }
+                Guardar
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="Volver"><i class="fa-solid fa-arrow-left me-1"></i> Volver</button>
+        </div>
+    }
+</div>
+
+<style>
+    .cat-texto td { background: var(--mk-row-hover); font-style: italic; }
+</style>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private bool _esNuevo;
+    private bool _cargando = true, _guardando, _agregando;
+    private string _nombre = "";
+    private string _temporada = "";
+    private int? _anio = DateTime.Now.Year;
+    private string _codigo = "";
+    private string _texto = "";
+    private List<CatalogoRenglonDto> _items = new();
+    private List<string> _temporadas = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _esNuevo = Id is null or 0;
+        _cargando = true;
+        try
+        {
+            _temporadas = await Api.TemporadasAsync();
+            if (!_esNuevo)
+            {
+                var d = await Api.DetalleAsync(Id!.Value);
+                if (d is not null)
+                {
+                    _nombre = d.Nombre;
+                    _temporada = d.Temporada;
+                    _anio = d.Anio;
+                    _items = d.Items.ToList();
+                }
+            }
+        }
+        catch { }
+        finally { _cargando = false; }
+    }
+
+    private async Task CodigoKey(KeyboardEventArgs e) { if (e.Key == "Enter") await AgregarArticulo(); }
+    private void TextoKey(KeyboardEventArgs e) { if (e.Key == "Enter") AgregarTexto(); }
+
+    private async Task AgregarArticulo()
+    {
+        var cod = _codigo.Trim();
+        if (cod.Length == 0) return;
+        _agregando = true;
+        try
+        {
+            var it = await Api.ArticuloAsync(cod);
+            if (it is null) { Ui.Error("No se pudo consultar el artículo."); return; }
+            if (!it.ExisteEnDragon) Ui.Toast($"«{cod}» no existe en Dragon, se agrega igual.");
+            _items.Add(it);
+            _codigo = "";
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _agregando = false; }
+    }
+
+    private void AgregarTexto()
+    {
+        var t = _texto.Trim();
+        if (t.Length == 0) return;
+        _items.Add(new CatalogoRenglonDto { Tipo = "TEXTO", Valor = "", Descripcion = t, Categoria = "TEXTO", ExisteEnDragon = true });
+        _texto = "";
+    }
+
+    private void Subir(int i) { if (i > 0) (_items[i - 1], _items[i]) = (_items[i], _items[i - 1]); }
+    private void Bajar(int i) { if (i < _items.Count - 1) (_items[i + 1], _items[i]) = (_items[i], _items[i + 1]); }
+    private void Quitar(int i) => _items.RemoveAt(i);
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(_nombre)) { Ui.Error("Poné un nombre al catálogo."); return; }
+        _guardando = true;
+        try
+        {
+            var req = new CatalogoGuardarRequest
+            {
+                Id = Id ?? 0,
+                Nombre = _nombre.Trim(),
+                Temporada = _temporada?.Trim() ?? "",
+                Anio = _anio,
+                Items = _items
+            };
+            var id = await Api.GuardarAsync(req);
+            if (id <= 0) { Ui.Error("No se pudo guardar."); return; }
+            Ui.Exito("Catálogo guardado.");
+            Nav.NavigateTo("/produccion/catalogos");
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _guardando = false; }
+    }
+
+    private void Volver() => Nav.NavigateTo("/produccion/catalogos");
+}
