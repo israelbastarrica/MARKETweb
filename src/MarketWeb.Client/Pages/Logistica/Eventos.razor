@@ -326,7 +326,8 @@
 
         if (!hayQuery && State.TryGet<Snap>(StateKey, out var s, out _))
         {
-            _local = s.Local; _desde = s.Desde; _hasta = s.Hasta; _verTodos = s.VerTodos; _items = s.Items; _cargando = false;
+            // _verTodos NO se restaura a propósito: arranca destildado en cada entrada (antes quedaba tildado solo).
+            _local = s.Local; _desde = s.Desde; _hasta = s.Hasta; _items = s.Items; _cargando = false;
             return;
         }
         if (hayQuery)
