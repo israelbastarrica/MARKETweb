@@ -346,13 +346,23 @@ public sealed class ReporteControlReposicionService : IReporteControlReposicionS
             sb.Append("<table style='border-collapse:collapse;width:100%;font-size:13px'>");
             sb.Append("<tr style='background:#f2f2f2'>" + Th("Local") + Th("Código") + Th("Descripción") +
                 Th("Packs", true) + Th("Cant/pack", true) + Th("Pedido", true) + Th("Packs env.", true) + Th("Enviado", true) + Th("Dif.", true) + "</tr>");
-            foreach (var r in diff.Repo)
+            foreach (var grupo in diff.Repo.GroupBy(r => r.Local))
             {
-                var color = r.Dif > 0 ? "#b00" : "#0a7";
-                var packsEnv = r.CantPack > 0 ? r.PacksEnv.ToString("0.#") : "—";
-                sb.Append("<tr>" + Td(H(r.Local)) + Td(H(r.Art)) + Td(H(r.Des)) +
-                    TdN(r.PacksPed) + TdN(r.CantPack) + TdN(r.Pedido) + TdT(packsEnv) + TdN(r.Enviado) +
-                    $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right;color:{color};font-weight:bold'>{r.Dif:N0}</td></tr>");
+                foreach (var r in grupo)
+                {
+                    var color = r.Dif > 0 ? "#b00" : "#0a7";
+                    var packsEnv = r.CantPack > 0 ? r.PacksEnv.ToString("0.#") : "—";
+                    sb.Append("<tr>" + Td(H(r.Local)) + Td(H(r.Art)) + Td(H(r.Des)) +
+                        TdN(r.PacksPed) + TdN(r.CantPack) + TdN(r.Pedido) + TdT(packsEnv) + TdN(r.Enviado) +
+                        $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right;color:{color};font-weight:bold'>{r.Dif:N0}</td></tr>");
+                }
+                // Subtotal del local: cuánto se pidió y cuánto se envió (de las diferencias).
+                int sPacks = grupo.Sum(x => x.PacksPed), sPed = grupo.Sum(x => x.Pedido), sEnv = grupo.Sum(x => x.Enviado), sDif = sPed - sEnv;
+                var cDif = sDif > 0 ? "#b00" : "#0a7";
+                sb.Append("<tr style='font-weight:bold;background:#fafafa'>" +
+                    $"<td colspan='3' style='border:1px solid #ddd;padding:6px 8px'>Subtotal {H(grupo.Key)}</td>" +
+                    TdN(sPacks) + Td("") + TdN(sPed) + Td("") + TdN(sEnv) +
+                    $"<td style='border:1px solid #ddd;padding:6px 8px;text-align:right;color:{cDif}'>{sDif:N0}</td></tr>");
             }
             sb.Append("</table>");
         }
