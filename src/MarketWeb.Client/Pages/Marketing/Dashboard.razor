@@ -73,16 +73,13 @@
 
         @if (_d.AlcanceSerie.Count > 1)
         {
+            var ch = BuildChart(720, 210);
             <div class="market-card mb-3">
-                <div class="fw-semibold mb-2">Alcance de Instagram por día</div>
-                <svg viewBox="0 0 640 140" preserveAspectRatio="none" style="width:100%;height:140px">
-                    <polygon points="@($"0,130 {LineaPuntos(640, 130)} 640,130")" fill="#0F6E56" fill-opacity="0.12" stroke="none" />
-                    <polyline points="@LineaPuntos(640, 130)" fill="none" stroke="#0F6E56" stroke-width="2" />
-                </svg>
-                <div class="d-flex justify-content-between small text-muted">
-                    <span>@_d.AlcanceSerie.First().Fecha.ToString("dd/MM")</span>
-                    <span>@_d.AlcanceSerie.Last().Fecha.ToString("dd/MM")</span>
+                <div class="d-flex justify-content-between align-items-baseline mb-2">
+                    <span class="fw-semibold">Alcance de Instagram por día</span>
+                    <span class="small text-muted">máx @Abrev((int)ch.Max) · prom @Abrev((int)ch.Prom)</span>
                 </div>
+                @((MarkupString)ch.Svg)
             </div>
         }
 
@@ -213,20 +210,66 @@
         return v.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"));
     }
 
-    // Puntos de la polilínea del gráfico de alcance (escala al viewBox w×h).
-    private string LineaPuntos(int w, int h)
+    private sealed class ChartVm
+    {
+        public long Max, Min; public double Prom;
+        public string Svg = "";
+    }
+
+    // Arma el gráfico de alcance con ejes (escala Y con valores, fechas en X, punto final rotulado).
+    // Coordenadas SIEMPRE enteras: con es-AR los decimales llevan coma y rompen el "x,y" del SVG.
+    private ChartVm BuildChart(int w, int h)
     {
         var s = _d!.AlcanceSerie;
+        int L = 50, R = w - 14, T = 14, B = h - 26;
         long min = s.Min(p => p.Valor), max = s.Max(p => p.Valor);
-        double rango = Math.Max(1, max - min);
-        var sb = new System.Text.StringBuilder();
+        if (max <= min) max = min + 1;
+        double Px(int i) => s.Count == 1 ? L : L + (double)i / (s.Count - 1) * (R - L);
+        double Py(long v) => B - (double)(v - min) / (max - min) * (B - T);
+
+        var vm = new ChartVm { Max = max, Min = min, Prom = s.Average(p => (double)p.Valor) };
+
+        var line = new System.Text.StringBuilder();
+        var area = new System.Text.StringBuilder();
+        area.Append(L).Append(',').Append(B).Append(' ');
         for (int i = 0; i < s.Count; i++)
         {
-            double x = s.Count == 1 ? 0 : (double)i / (s.Count - 1) * w;
-            double y = h - (s[i].Valor - min) / rango * (h - 6) - 3;
-            // Coordenadas como ENTEROS: si uso decimales, la cultura es-AR mete coma y rompe el "x,y" del SVG.
-            sb.Append((int)Math.Round(x)).Append(',').Append((int)Math.Round(y)).Append(' ');
+            int x = (int)Math.Round(Px(i)), y = (int)Math.Round(Py(s[i].Valor));
+            line.Append(x).Append(',').Append(y).Append(' ');
+            area.Append(x).Append(',').Append(y).Append(' ');
         }
-        return sb.ToString().Trim();
+        area.Append(R).Append(',').Append(B);
+
+        const string grid = "var(--bs-border-color,#e9ecef)";
+        const string muted = "var(--bs-secondary-color,#8a8a8a)";
+        const string verde = "#0F6E56";
+        var svg = new System.Text.StringBuilder();
+        svg.Append($"<svg viewBox='0 0 {w} {h}' style='width:100%;height:{h}px'>");
+        // Grilla + valores en Y (4, de min a max).
+        for (int k = 0; k < 4; k++)
+        {
+            long v = (long)Math.Round(min + (max - min) * k / 3.0);
+            int y = (int)Math.Round(Py(v));
+            svg.Append($"<line x1='{L}' y1='{y}' x2='{R}' y2='{y}' stroke='{grid}' stroke-width='1'/>");
+            svg.Append($"<text x='{L - 6}' y='{y + 3}' text-anchor='end' font-size='10' fill='{muted}'>{Abrev((int)v)}</text>");
+        }
+        // Área + línea.
+        svg.Append($"<polygon points='{area.ToString().Trim()}' fill='{verde}' fill-opacity='0.08'/>");
+        svg.Append($"<polyline points='{line.ToString().Trim()}' fill='none' stroke='{verde}' stroke-width='2' stroke-linejoin='round'/>");
+        // Punto final rotulado.
+        int lx = (int)Math.Round(Px(s.Count - 1)), ly = (int)Math.Round(Py(s[^1].Valor));
+        svg.Append($"<circle cx='{lx}' cy='{ly}' r='3.5' fill='{verde}'/>");
+        svg.Append($"<text x='{lx - 4}' y='{ly - 7}' text-anchor='end' font-size='11' font-weight='600' fill='{verde}'>{Abrev((int)s[^1].Valor)}</text>");
+        // Fechas en X (hasta 6).
+        int ticks = Math.Min(6, s.Count);
+        for (int t = 0; t < ticks; t++)
+        {
+            int i = ticks == 1 ? 0 : (int)Math.Round((double)t / (ticks - 1) * (s.Count - 1));
+            int x = (int)Math.Round(Px(i));
+            svg.Append($"<text x='{x}' y='{B + 15}' text-anchor='middle' font-size='10' fill='{muted}'>{s[i].Fecha:dd/MM}</text>");
+        }
+        svg.Append("</svg>");
+        vm.Svg = svg.ToString();
+        return vm;
     }
 }
