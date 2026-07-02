@@ -75,9 +75,13 @@
         {
             var ch = BuildChart(1000, 230);
             <div class="market-card mb-3">
-                <div class="d-flex justify-content-between align-items-baseline mb-2">
-                    <span class="fw-semibold">Alcance de Instagram por día</span>
-                    <span class="small text-muted">máx @Abrev((int)ch.Max) · prom @Abrev((int)ch.Prom)</span>
+                <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-2">
+                    <span class="fw-semibold">Alcance de Instagram · última semana vs anterior</span>
+                    <span class="small">
+                        <span class="text-muted me-3"><span style="display:inline-block;width:18px;border-top:2px solid #0F6E56;vertical-align:middle;margin-right:4px"></span>Últimos 7 días @Abrev((int)ch.SumCur)</span>
+                        <span class="text-muted me-3"><span style="display:inline-block;width:18px;border-top:2px dashed #0F6E56;opacity:.65;vertical-align:middle;margin-right:4px"></span>7 anteriores @Abrev((int)ch.SumPrev)</span>
+                        @Flecha((int)ch.SumCur, (int)ch.SumPrev)
+                    </span>
                 </div>
                 @((MarkupString)ch.Svg)
             </div>
@@ -212,40 +216,45 @@
 
     private sealed class ChartVm
     {
-        public long Max, Min; public double Prom;
+        public long SumCur, SumPrev;
         public string Svg = "";
     }
 
-    // Arma el gráfico de alcance con ejes (escala Y con valores, fechas en X, punto final rotulado).
+    // Alcance IG: últimos 7 días (línea llena) vs los 7 anteriores (punteada), estilo Facebook.
     // Coordenadas SIEMPRE enteras: con es-AR los decimales llevan coma y rompen el "x,y" del SVG.
     private ChartVm BuildChart(int w, int h)
     {
         var s = _d!.AlcanceSerie;
+        int n = s.Count;
+        int take = Math.Min(7, n);
+        var cur = s.Skip(n - take).ToList();                       // últimos 7
+        int prevStart = Math.Max(0, n - 2 * take);
+        var prev = s.Skip(prevStart).Take((n - take) - prevStart).ToList();  // los 7 anteriores
+
+        var vm = new ChartVm { SumCur = cur.Sum(p => p.Valor), SumPrev = prev.Sum(p => p.Valor) };
+
         int L = 50, R = w - 14, T = 14, B = h - 26;
-        long min = s.Min(p => p.Valor), max = s.Max(p => p.Valor);
+        long max = Math.Max(cur.Count > 0 ? cur.Max(p => p.Valor) : 0, prev.Count > 0 ? prev.Max(p => p.Valor) : 0);
+        long min = Math.Min(cur.Count > 0 ? cur.Min(p => p.Valor) : 0, prev.Count > 0 ? prev.Min(p => p.Valor) : 0);
         if (max <= min) max = min + 1;
-        double Px(int i) => s.Count == 1 ? L : L + (double)i / (s.Count - 1) * (R - L);
+        double Px(int i) => take <= 1 ? L : L + (double)i / (take - 1) * (R - L);
         double Py(long v) => B - (double)(v - min) / (max - min) * (B - T);
 
-        var vm = new ChartVm { Max = max, Min = min, Prom = s.Average(p => (double)p.Valor) };
-
-        var line = new System.Text.StringBuilder();
-        var area = new System.Text.StringBuilder();
-        area.Append(L).Append(',').Append(B).Append(' ');
-        for (int i = 0; i < s.Count; i++)
+        string Puntos(List<MktSeriePuntoDto> serie)
         {
-            int x = (int)Math.Round(Px(i)), y = (int)Math.Round(Py(s[i].Valor));
-            line.Append(x).Append(',').Append(y).Append(' ');
-            area.Append(x).Append(',').Append(y).Append(' ');
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < serie.Count; i++)
+                sb.Append((int)Math.Round(Px(i))).Append(',').Append((int)Math.Round(Py(serie[i].Valor))).Append(' ');
+            return sb.ToString().Trim();
         }
-        area.Append(R).Append(',').Append(B);
 
         const string grid = "var(--bs-border-color,#e9ecef)";
         const string muted = "var(--bs-secondary-color,#8a8a8a)";
         const string verde = "#0F6E56";
         var svg = new System.Text.StringBuilder();
         svg.Append($"<svg viewBox='0 0 {w} {h}' style='width:100%;height:auto;display:block'>");
-        // Grilla + valores en Y (4, de min a max).
+
+        // Grilla + valores Y.
         for (int k = 0; k < 4; k++)
         {
             long v = (long)Math.Round(min + (max - min) * k / 3.0);
@@ -253,21 +262,26 @@
             svg.Append($"<line x1='{L}' y1='{y}' x2='{R}' y2='{y}' stroke='{grid}' stroke-width='1'/>");
             svg.Append($"<text x='{L - 6}' y='{y + 3}' text-anchor='end' font-size='10' fill='{muted}'>{Abrev((int)v)}</text>");
         }
-        // Área + línea.
-        svg.Append($"<polygon points='{area.ToString().Trim()}' fill='{verde}' fill-opacity='0.08'/>");
-        svg.Append($"<polyline points='{line.ToString().Trim()}' fill='none' stroke='{verde}' stroke-width='2' stroke-linejoin='round'/>");
-        // Punto final rotulado.
-        int lx = (int)Math.Round(Px(s.Count - 1)), ly = (int)Math.Round(Py(s[^1].Valor));
-        svg.Append($"<circle cx='{lx}' cy='{ly}' r='3.5' fill='{verde}'/>");
-        svg.Append($"<text x='{lx - 4}' y='{ly - 7}' text-anchor='end' font-size='11' font-weight='600' fill='{verde}'>{Abrev((int)s[^1].Valor)}</text>");
-        // Fechas en X (hasta 6).
-        int ticks = Math.Min(6, s.Count);
-        for (int t = 0; t < ticks; t++)
+
+        // Semana anterior (punteada, tenue).
+        if (prev.Count > 1)
+            svg.Append($"<polyline points='{Puntos(prev)}' fill='none' stroke='{verde}' stroke-opacity='0.55' stroke-width='2' stroke-dasharray='6,5' stroke-linejoin='round'/>");
+
+        // Semana actual (llena + área).
+        if (cur.Count > 1)
         {
-            int i = ticks == 1 ? 0 : (int)Math.Round((double)t / (ticks - 1) * (s.Count - 1));
-            int x = (int)Math.Round(Px(i));
-            svg.Append($"<text x='{x}' y='{B + 15}' text-anchor='middle' font-size='10' fill='{muted}'>{s[i].Fecha:dd/MM}</text>");
+            var area = $"{L},{B} {Puntos(cur)} {(int)Math.Round(Px(cur.Count - 1))},{B}";
+            svg.Append($"<polygon points='{area}' fill='{verde}' fill-opacity='0.08'/>");
+            svg.Append($"<polyline points='{Puntos(cur)}' fill='none' stroke='{verde}' stroke-width='2.5' stroke-linejoin='round'/>");
+            int lx = (int)Math.Round(Px(cur.Count - 1)), ly = (int)Math.Round(Py(cur[^1].Valor));
+            svg.Append($"<circle cx='{lx}' cy='{ly}' r='3.5' fill='{verde}'/>");
+            svg.Append($"<text x='{lx - 4}' y='{ly - 7}' text-anchor='end' font-size='11' font-weight='600' fill='{verde}'>{Abrev((int)cur[^1].Valor)}</text>");
         }
+
+        // Fechas de la semana actual en X.
+        for (int i = 0; i < cur.Count; i++)
+            svg.Append($"<text x='{(int)Math.Round(Px(i))}' y='{B + 15}' text-anchor='middle' font-size='10' fill='{muted}'>{cur[i].Fecha:dd/MM}</text>");
+
         svg.Append("</svg>");
         vm.Svg = svg.ToString();
         return vm;
