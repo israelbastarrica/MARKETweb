@@ -102,9 +102,9 @@ public sealed class ReposicionPdf : IReposicionPdf
         int totalPacks = repoFilas.Sum(f => f.Packs);
         int totalPrendas = repoFilas.Sum(f => f.Packs * f.CantPack);
 
-        // Ventas del día anterior (respecto de la fecha simulada si la hay).
-        var diaAnterior = (fechaCorte ?? DateTime.Today).AddDays(-1);
-        int ventasAyer = await VentasDiaAsync(local, diaAnterior, ct);
+        // Ventas del día de la corrida (corre a las 21h → ya es la venta del día, no la de ayer).
+        var diaVenta = (fechaCorte ?? DateTime.Today).Date;
+        int ventasDia = await VentasDiaAsync(local, diaVenta, ct);
 
         // Cabecera de la página.
         gfx.DrawString("Reposición — " + local, fontTitulo, XBrushes.Black, margen, y + 14);
@@ -112,7 +112,7 @@ public sealed class ReposicionPdf : IReposicionPdf
         gfx.DrawString("Generado: " + DateTime.Now.ToString("dd/MM/yyyy HH:mm"), fontMeta, XBrushes.Black, margen, y + 10);
         y += 14;
         var metaTxt = $"{repoFilas.Count:N0} artículos · {totalPacks:N0} packs · {totalPrendas:N0} prendas";
-        if (ventasAyer >= 0) metaTxt += $" · {ventasAyer:N0} ventas ({diaAnterior:dd/MM})";
+        if (ventasDia >= 0) metaTxt += $" · {ventasDia:N0} ventas ({diaVenta:dd/MM})";
         gfx.DrawString(metaTxt, fontMeta, XBrushes.Black, margen, y + 10);
         y += 22;
 
