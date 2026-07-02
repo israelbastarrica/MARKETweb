@@ -86,4 +86,11 @@ public sealed class InsumosController : ControllerBase
     }
 
     public sealed record ImprimirArmadoRequest(int? UbicacionId);
+
+    [HttpPost("generar-remitos")]
+    public async Task<ActionResult<GenerarRemitosResultado>> GenerarRemitos([FromBody] ImprimirArmadoRequest req, CancellationToken ct)
+    {
+        var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+        return Ok(await _service.GenerarRemitosAsync(req?.UbicacionId, usuario, ct));
+    }
 }

@@ -7,6 +7,9 @@ public interface IInsumosService
     /// <summary>Ubicaciones activas para el combo de filtro.</summary>
     Task<IReadOnlyList<UbicacionDto>> ListarUbicacionesAsync(CancellationToken ct = default);
 
+    /// <summary>Genera los remitos de insumos (uno por local, Motivo 13, CENTRAL→local) de los pedidos EN ARMADO no enviados; marca ENVIADO.</summary>
+    Task<GenerarRemitosResultado> GenerarRemitosAsync(int? ubicacionId, string usuario, CancellationToken ct = default);
+
     /// <summary>
     /// Pedidos de insumos (cabecera + totales). Filtros:
     ///  - ubicacionId: null = TODOS, -1 = LOCALES (Luro+Peralta), &gt;0 = una ubicación.

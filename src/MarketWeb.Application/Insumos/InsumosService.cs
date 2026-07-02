@@ -12,8 +12,13 @@ namespace MarketWeb.Application.Insumos;
 public sealed class InsumosService : IInsumosService
 {
     private readonly ISqlConnectionFactory _db;
+    private readonly MarketWeb.Application.Dragonfish.IDragonfishService _dragon;
 
-    public InsumosService(ISqlConnectionFactory db) => _db = db;
+    public InsumosService(ISqlConnectionFactory db, MarketWeb.Application.Dragonfish.IDragonfishService dragon)
+    {
+        _db = db;
+        _dragon = dragon;
+    }
 
     public async Task<IReadOnlyList<UbicacionDto>> ListarUbicacionesAsync(CancellationToken ct = default)
     {
@@ -447,6 +452,94 @@ public sealed class InsumosService : IInsumosService
             tx.Rollback();
             throw;
         }
+    }
+
+    private sealed record RemitoRow(int PedidoId, int IdLocal, string Local, string ArtCod, int Cant);
+
+    // Genera los remitos de insumos (uno por local) en Dragonfish (Motivo 13, CENTRAL→local) para los
+    // pedidos EN ARMADO no enviados. Solo crea el remito; el despacho/aceptación lo hace la app del local.
+    // Al crear ok, marca el pedido como ENVIADO (FechaEnviado).
+    public async Task<GenerarRemitosResultado> GenerarRemitosAsync(int? ubicacionId, string usuario, CancellationToken ct = default)
+    {
+        var res = new GenerarRemitosResultado();
+        if (!_dragon.Configurado)
+        {
+            res.Locales.Add(new RemitoLocalResultado { Local = "—", Ok = false, Error = "La API Dragonfish no está configurada en el servidor." });
+            return res;
+        }
+
+        var modoUbic = ubicacionId is null ? "TODOS" : (ubicacionId == -1 ? "LOCALES" : "ID");
+        var idLoc = ubicacionId is > 0 ? ubicacionId.Value : 0;
+
+        using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+
+        // Renglones enviados de pedidos EN ARMADO (impresos) y todavía no enviados, del filtro de ubicación.
+        const string sql = """
+            SELECT P.ID AS PedidoId, P.IDLocal AS IdLocal, ISNULL(U.Descripcion,'') AS Local,
+                   RTRIM(D.ARTCOD) AS ArtCod, CAST(ISNULL(D.CantidadEnviada, D.Cantidad) AS INT) AS Cant
+            FROM PedidosInsumos P
+            LEFT JOIN Ubicaciones U ON P.IDLocal = U.ID
+            INNER JOIN PedidosInsumosDetalle D ON D.IDPedido = P.ID AND D.Eliminado = 0
+            WHERE P.Eliminado = 0 AND P.FechaImpresion IS NOT NULL AND P.FechaEnviado IS NULL
+              AND ISNULL(D.Existencia,1) = 1 AND ISNULL(D.CantidadEnviada, D.Cantidad) > 0
+              AND (@modoUbic='TODOS'
+                   OR (@modoUbic='LOCALES' AND P.IDLocal IN (2,3))
+                   OR (@modoUbic='ID' AND P.IDLocal=@idLoc));
+            """;
+        var rows = (await cn.QueryAsync<RemitoRow>(new CommandDefinition(
+            sql, new { modoUbic, idLoc }, commandTimeout: 60, cancellationToken: ct))).ToList();
+
+        if (rows.Count == 0) return res;
+
+        foreach (var grupo in rows.GroupBy(r => new { r.IdLocal, r.Local }))
+        {
+            var pedidoIds = grupo.Select(r => r.PedidoId).Distinct().ToArray();
+            // Consolida por artículo (varios pedidos del mismo local suman). Insumos = sin variante (color/talle vacíos).
+            var items = grupo.GroupBy(r => r.ArtCod)
+                .Select(g => new MarketWeb.Shared.Dragonfish.DragonRemitoItemDto
+                {
+                    Articulo = g.Key,
+                    Color = "",
+                    Talle = "",
+                    Cantidad = g.Sum(x => x.Cant)
+                }).ToList();
+
+            var r = new RemitoLocalResultado
+            {
+                Local = grupo.Key.Local,
+                Pedidos = pedidoIds.Length,
+                Articulos = items.Count,
+                Cantidad = items.Sum(i => i.Cantidad)
+            };
+
+            var dragonReq = new MarketWeb.Shared.Dragonfish.DragonRemitoRequest
+            {
+                Local = (grupo.Key.Local ?? "").Trim().ToUpperInvariant(),
+                Motivo = "13",   // Insumos
+                Items = items
+            };
+            var dr = await _dragon.CrearRemitoAsync(dragonReq, ct);
+
+            if (dr.Ok)
+            {
+                r.Ok = true;
+                r.Comprobante = !string.IsNullOrWhiteSpace(dr.Codigo) ? dr.Codigo!
+                    : (dr.Numero is { } num ? num.ToString() : "");
+                var audit = $"Remito insumos generado | {usuario} | {DateTime.Now}";
+                await cn.ExecuteAsync(new CommandDefinition(
+                    "UPDATE PedidosInsumos SET FechaEnviado = GETDATE(), Auditoria = @audit WHERE ID IN @ids AND FechaEnviado IS NULL AND Eliminado = 0;",
+                    new { ids = pedidoIds, audit }, cancellationToken: ct));
+            }
+            else
+            {
+                r.Ok = false;
+                r.Error = !string.IsNullOrWhiteSpace(dr.Error) ? dr.Error!
+                    : $"HTTP {dr.HttpStatus}: {(dr.Respuesta ?? "").Trim()}";
+            }
+            res.Locales.Add(r);
+        }
+        return res;
     }
 
     public async Task<bool> EliminarPedidoAsync(int idPedido, string usuario, CancellationToken ct = default)

@@ -74,4 +74,12 @@ public sealed class InsumosApi
         resp.EnsureSuccessStatusCode();
         return (await resp.Content.ReadFromJsonAsync<ArmadoInsumosDto>()) ?? new();
     }
+
+    /// <summary>Genera los remitos de insumos (uno por local) en Dragonfish y marca los pedidos como ENVIADOS.</summary>
+    public async Task<GenerarRemitosResultado> GenerarRemitosAsync(int? ubicacionId)
+    {
+        var resp = await _http.PostAsJsonAsync("api/insumos/generar-remitos", new { ubicacionId });
+        resp.EnsureSuccessStatusCode();
+        return (await resp.Content.ReadFromJsonAsync<GenerarRemitosResultado>()) ?? new();
+    }
 }
