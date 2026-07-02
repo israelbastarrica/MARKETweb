@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<IReseteadosService, ReseteadosService>();
         services.AddScoped<IControlRemitosService, ControlRemitosService>();
         services.AddScoped<IReporteControlReposicionService, ReporteControlReposicionService>();
+        services.AddScoped<IGruposUnificadosService, GruposUnificadosService>();
         services.AddScoped<IReporteArticulosService, ReporteArticulosService>();
         services.AddSingleton<ReposicionJobs>();
         services.AddScoped<ITareasService, TareasService>();

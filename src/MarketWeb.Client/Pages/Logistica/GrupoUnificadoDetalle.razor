@@ -1,0 +1,146 @@
+@page "/logistica/grupos-unificados/nuevo"
+@page "/logistica/grupos-unificados/{Id:int}"
+@using MarketWeb.Shared.Reposicion
+@inject RepoGruposApi Api
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>@(_esNuevo ? "Nuevo grupo" : _nombre)</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="@(_esNuevo ? "Nuevo grupo" : "Grupo unificado")" Icono="fa-solid fa-object-group" Compartible="false" />
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <button class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> } else { <i class="fa-solid fa-floppy-disk me-1"></i> }
+                Guardar
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="Volver"><i class="fa-solid fa-arrow-left me-1"></i> Volver</button>
+        </div>
+
+        <div class="market-card mb-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-6">
+                    <label class="form-label small text-muted mb-1">Nombre del grupo</label>
+                    <input class="form-control" @bind="_nombre" placeholder="Ej: Medias pantufla estampas (cajón)" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label small text-muted mb-1">Agregar artículo (código)</label>
+                    <div class="input-group">
+                        <input class="form-control" @bind="_codigo" @bind:event="oninput" @onkeydown="CodKey" placeholder="Ej: LM024.270" />
+                        <button class="btn btn-outline-primary" @onclick="AgregarArticulo" disabled="@(_agregando || string.IsNullOrWhiteSpace(_codigo))">
+                            @if (_agregando) { <i class="fa-solid fa-spinner fa-spin"></i> } else { <i class="fa-solid fa-plus"></i> }
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="market-card table-responsive mb-3">
+            @if (_items.Count == 0)
+            {
+                <p class="text-muted mb-0 p-2">Sin artículos. Agregá por código.</p>
+            }
+            else
+            {
+                <table class="market-table align-middle">
+                    <thead>
+                        <tr><th style="width:50px" class="text-center">#</th><th>Código</th><th>Descripción</th><th class="text-end">Cant/pack</th><th class="text-center" style="width:50px"></th></tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _items.Count; i++)
+                        {
+                            var idx = i; var it = _items[idx];
+                            <tr>
+                                <td class="text-center text-muted">@(idx + 1)</td>
+                                <td class="fw-semibold">
+                                    @it.ArtCod
+                                    @if (!it.ExisteEnDragon) { <span class="badge bg-danger ms-1" title="No existe en Dragon">?</span> }
+                                </td>
+                                <td>@it.Descripcion</td>
+                                <td class="text-end">@(it.CantPack?.ToString("N0") ?? "—")</td>
+                                <td class="text-center"><button class="btn btn-sm btn-outline-danger" title="Quitar" @onclick="() => Quitar(idx)"><i class="fa-solid fa-trash"></i></button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private bool _esNuevo, _cargando = true, _guardando, _agregando;
+    private string _nombre = "";
+    private string _codigo = "";
+    private List<GrupoArticuloDto> _items = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _esNuevo = Id is null or 0;
+        _cargando = true;
+        try
+        {
+            if (!_esNuevo)
+            {
+                var d = await Api.DetalleAsync(Id!.Value);
+                if (d is not null) { _nombre = d.Nombre; _items = d.Articulos.ToList(); }
+            }
+        }
+        catch { }
+        finally { _cargando = false; }
+    }
+
+    private async Task CodKey(KeyboardEventArgs e) { if (e.Key == "Enter") await AgregarArticulo(); }
+
+    private async Task AgregarArticulo()
+    {
+        var cod = _codigo.Trim();
+        if (cod.Length == 0) return;
+        if (_items.Any(x => string.Equals(x.ArtCod, cod, StringComparison.OrdinalIgnoreCase))) { Ui.Toast("Ese artículo ya está en el grupo."); _codigo = ""; return; }
+        _agregando = true;
+        try
+        {
+            var it = await Api.ArticuloAsync(cod);
+            if (it is null) { Ui.Error("No se pudo consultar el artículo."); return; }
+            if (!it.ExisteEnDragon) Ui.Toast($"«{cod}» no existe en Dragon, se agrega igual.");
+            _items.Add(it);
+            _codigo = "";
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _agregando = false; }
+    }
+
+    private void Quitar(int i) => _items.RemoveAt(i);
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(_nombre)) { Ui.Error("Poné un nombre al grupo."); return; }
+        if (_items.Count < 2) { Ui.Error("Un grupo tiene que tener al menos 2 artículos."); return; }
+        _guardando = true;
+        try
+        {
+            var id = await Api.GuardarAsync(new GrupoUnificadoGuardarRequest
+            {
+                Id = Id ?? 0,
+                Nombre = _nombre.Trim(),
+                ArtCods = _items.Select(x => x.ArtCod).ToList()
+            });
+            if (id <= 0) { Ui.Error("No se pudo guardar."); return; }
+            Ui.Exito("Grupo guardado.");
+            Nav.NavigateTo("/logistica/grupos-unificados");
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _guardando = false; }
+    }
+
+    private void Volver() => Nav.NavigateTo("/logistica/grupos-unificados");
+}

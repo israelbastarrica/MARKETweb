@@ -36,6 +36,7 @@ builder.Services.AddScoped<TelasApi>();
 builder.Services.AddScoped<ViajesApi>();
 builder.Services.AddScoped<OrdenesApi>();
 builder.Services.AddScoped<CatalogosApi>();
+builder.Services.AddScoped<RepoGruposApi>();
 builder.Services.AddScoped<MarketingApi>();
 builder.Services.AddScoped<ServidorApi>();
 builder.Services.AddScoped<DespachosApi>();

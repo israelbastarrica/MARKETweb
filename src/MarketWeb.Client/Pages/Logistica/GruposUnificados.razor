@@ -1,0 +1,85 @@
+@page "/logistica/grupos-unificados"
+@using MarketWeb.Shared.Reposicion
+@inject RepoGruposApi Api
+@inject NavigationManager Nav
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Grupos unificados</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Logística" Titulo="Grupos unificados" Icono="fa-solid fa-object-group" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Agrupá artículos del mismo cajón para que la reposición cuente su venta como uno solo (evita que el cajón se vacíe sin completar un pack).
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button class="btn btn-primary" @onclick="Nuevo"><i class="fa-solid fa-plus me-1"></i> Nuevo grupo</button>
+        <button class="btn btn-outline-secondary" @onclick="Cargar"><i class="fa-solid fa-rotate me-1"></i> Actualizar</button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else if (_lista.Count == 0)
+    {
+        <div class="market-empty">
+            <i class="fa-solid fa-object-group"></i>
+            <p>No hay grupos todavía.</p>
+            <p class="small text-muted mb-0">Creá uno con «Nuevo grupo».</p>
+        </div>
+    }
+    else
+    {
+        <div class="market-card table-responsive">
+            <table class="market-table align-middle">
+                <thead>
+                    <tr><th>Grupo</th><th class="text-end">Artículos</th><th class="text-center" style="width:90px">Acciones</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var g in _lista)
+                    {
+                        <tr class="gru-row" @onclick="() => Abrir(g.Id)">
+                            <td class="fw-semibold">@g.Nombre</td>
+                            <td class="text-end fw-bold">@g.CantArticulos</td>
+                            <td class="text-center text-nowrap" @onclick:stopPropagation="true">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Abrir" @onclick="() => Abrir(g.Id)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(g)"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .gru-row { cursor: pointer; }
+    .gru-row:hover td { background: var(--mk-row-hover); }
+</style>
+
+@code {
+    private List<GrupoUnificadoDto> _lista = new();
+    private bool _cargando = true;
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        try { _lista = await Api.ListarAsync(); }
+        catch { _lista = new(); }
+        finally { _cargando = false; }
+    }
+
+    private void Nuevo() => Nav.NavigateTo("/logistica/grupos-unificados/nuevo");
+    private void Abrir(int id) => Nav.NavigateTo($"/logistica/grupos-unificados/{id}");
+
+    private async Task Eliminar(GrupoUnificadoDto g)
+    {
+        if (!await Ui.ConfirmAsync($"¿Eliminar el grupo «{g.Nombre}»? Se da de baja (no borra físico).", "Eliminar grupo", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarAsync(g.Id);
+        await Cargar();
+    }
+}
