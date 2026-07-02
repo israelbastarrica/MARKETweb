@@ -189,7 +189,12 @@
     {
         var ruta = "/" + Nav.ToBaseRelativePath(Nav.Uri);
         bool Coincide(Item i) => !string.IsNullOrEmpty(i.Href) && ruta.StartsWith(i.Href, StringComparison.OrdinalIgnoreCase);
-        var modulo = Modulos.FirstOrDefault(m => Hojas(m).Any(Coincide));
+        // Pantallas compartidas (una misma ruta en varios módulos, ej. Mapa en Logística y Producción):
+        // si el módulo ya abierto también contiene la ruta, NO saltar a otro; se queda donde está el usuario.
+        var actual = Modulos.FirstOrDefault(m => m.Titulo == _abierto);
+        var modulo = (actual is not null && Hojas(actual).Any(Coincide))
+            ? actual
+            : Modulos.FirstOrDefault(m => Hojas(m).Any(Coincide));
         if (modulo is null) return;
         _abierto = modulo.Titulo;
         // Abrir también el subgrupo que contenga la ruta actual (por una hoja o por la ruta del propio header).
@@ -303,7 +308,7 @@
             new Item("Impresión Etiquetas", "fa-solid fa-tags", "/wip/produccion/etiquetas"),
             new Item("Config Imágenes", "fa-solid fa-image-portrait", "/diseno/config-imagenes", Implementado: true),
             new Item("Mapeo", "fa-solid fa-map", "/logistica/mapeo", Implementado: true),
-            new Item("Mapa", "fa-solid fa-location-dot", "/wip/diseno/mapa"),
+            new Item("Mapa", "fa-solid fa-cube", "/logistica/mapa", Implementado: true),
         }),
         new("Sistemas", "fa-solid fa-laptop-code", new[]
         {
