@@ -1,0 +1,229 @@
+@page "/marketing/calendario"
+@using System.Globalization
+@using MarketWeb.Shared.Marketing
+@inject MarketingApi Api
+@inject IJSRuntime JS
+@inject MarketWeb.Client.Services.UiService Ui
+
+<PageTitle>Marketing — Calendario</PageTitle>
+
+<div class="market-page">
+    <PageHeader Modulo="Marketing" Titulo="Calendario" Icono="fa-solid fa-calendar-days" Compartible="false" />
+    <p class="text-muted market-hint" style="margin-top:-.6rem">
+        Publicaciones de Instagram y Facebook + acciones planificadas (fechas especiales, días de producción, campañas…).
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoverMes(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+        <span class="fs-5 fw-semibold text-capitalize" style="min-width:180px;text-align:center">@_mes.ToString("MMMM yyyy", Es)</span>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoverMes(1)"><i class="fa-solid fa-chevron-right"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="Hoy">Hoy</button>
+        <button class="btn btn-primary btn-sm ms-auto" @onclick="() => NuevaAccion(DateTime.Today)"><i class="fa-solid fa-plus me-1"></i> Acción</button>
+    </div>
+
+    @if (_cargando)
+    {
+        <p class="text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...</p>
+    }
+    else
+    {
+        <div class="cal-grid cal-head">
+            @foreach (var d in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" })
+            {
+                <div class="cal-dow">@d</div>
+            }
+        </div>
+        <div class="cal-grid">
+            @foreach (var dia in _dias)
+            {
+                var esOtroMes = dia.Month != _mes.Month;
+                var esHoy = dia == DateTime.Today;
+                <div class="cal-cell @(esOtroMes ? "cal-otro" : "") @(esHoy ? "cal-hoy" : "")" @onclick="() => NuevaAccion(dia)">
+                    <div class="cal-num">@dia.Day</div>
+                    @foreach (var a in Acciones(dia))
+                    {
+                        <div class="cal-chip @TipoClase(a.Tipo)" title="@(a.Titulo + (string.IsNullOrEmpty(a.Notas) ? "" : " — " + a.Notas))"
+                             @onclick:stopPropagation="true" @onclick="() => EditarAccion(a)">
+                            <i class="@TipoIcono(a.Tipo) me-1"></i>@a.Titulo
+                        </div>
+                    }
+                    @foreach (var p in Publicaciones(dia))
+                    {
+                        <a class="cal-post" href="@p.Permalink" target="_blank" rel="noopener" @onclick:stopPropagation="true"
+                           title="@p.Texto">
+                            <i class="@(p.Red == "IG" ? "fa-brands fa-instagram text-danger" : "fa-brands fa-facebook text-primary")"></i>
+                            <span class="cal-post-txt">@Corta(p.Texto)</span>
+                            @if (p.MeGusta is > 0) { <span class="text-muted ms-1"><i class="fa-solid fa-heart"></i> @p.MeGusta</span> }
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="d-flex flex-wrap gap-3 mt-2 small text-muted">
+            <span><span class="cal-dot text-bg-warning"></span> Fecha especial</span>
+            <span><span class="cal-dot text-bg-primary"></span> Producción</span>
+            <span><span class="cal-dot text-bg-success"></span> Publicación</span>
+            <span><span class="cal-dot" style="background:#6f42c1"></span> Campaña</span>
+            <span><span class="cal-dot text-bg-secondary"></span> Otro</span>
+        </div>
+    }
+</div>
+
+@if (_modal)
+{
+    <div class="modal fade show d-block" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title"><i class="fa-solid fa-calendar-plus me-2"></i>@(_edit.Id > 0 ? "Editar acción" : "Nueva acción")</h5>
+            <button type="button" class="btn-close" @onclick="() => _modal = false"></button>
+        </div>
+        <div class="modal-body">
+            <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Título</label>
+                <input class="form-control" @bind="_edit.Titulo" placeholder="Ej: Día del Padre" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label small text-muted mb-1">Tipo</label>
+                <select class="form-select" @bind="_edit.Tipo">
+                    <option value="FECHA ESPECIAL">Fecha especial</option>
+                    <option value="PRODUCCION">Producción</option>
+                    <option value="PUBLICACION">Publicación</option>
+                    <option value="CAMPAÑA">Campaña</option>
+                    <option value="OTRO">Otro</option>
+                </select>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <label class="form-label small text-muted mb-1">Desde</label>
+                    <input type="date" class="form-control" @bind="_edit.Fecha" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label small text-muted mb-1">Hasta (opcional)</label>
+                    <input type="date" class="form-control" @bind="_edit.FechaFin" />
+                </div>
+            </div>
+            <div class="mb-1">
+                <label class="form-label small text-muted mb-1">Notas</label>
+                <textarea class="form-control" rows="2" @bind="_edit.Notas"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            @if (_edit.Id > 0)
+            {
+                <button class="btn btn-outline-danger me-auto" @onclick="EliminarAccion"><i class="fa-solid fa-trash me-1"></i> Eliminar</button>
+            }
+            <button class="btn btn-outline-secondary" @onclick="() => _modal = false">Cancelar</button>
+            <button class="btn btn-primary" @onclick="GuardarAccion" disabled="@_guardando">
+                @if (_guardando) { <i class="fa-solid fa-spinner fa-spin me-1"></i> }
+                Guardar
+            </button>
+        </div>
+    </div></div></div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+    .cal-head { margin-bottom:4px; }
+    .cal-dow { text-align:center; font-size:.8rem; font-weight:600; color:var(--bs-secondary-color,#888); padding:2px 0; }
+    .cal-cell { min-height:96px; border:1px solid var(--bs-border-color,#dee2e6); border-radius:8px; padding:3px 4px; cursor:pointer; overflow:hidden; }
+    .cal-cell:hover { background:var(--mk-row-hover, rgba(128,128,128,.08)); }
+    .cal-otro { opacity:.45; }
+    .cal-hoy { border-color:var(--bs-primary,#0d6efd); border-width:2px; }
+    .cal-num { font-size:.8rem; font-weight:600; margin-bottom:2px; }
+    .cal-chip { display:block; font-size:.72rem; line-height:1.2; padding:1px 5px; border-radius:5px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+    .cal-post { display:flex; align-items:center; gap:3px; font-size:.72rem; line-height:1.2; margin-bottom:2px; text-decoration:none; color:inherit; white-space:nowrap; overflow:hidden; }
+    .cal-post:hover { text-decoration:underline; }
+    .cal-post-txt { overflow:hidden; text-overflow:ellipsis; }
+    .cal-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:3px; vertical-align:middle; }
+    .text-bg-purple { background-color:#6f42c1 !important; color:#fff !important; }
+</style>
+
+@code {
+    private static readonly CultureInfo Es = CultureInfo.GetCultureInfo("es-AR");
+
+    private DateTime _mes = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<DateTime> _dias = new();
+    private CalMesDto _data = new();
+    private bool _cargando = true, _guardando, _modal;
+    private CalAccionSaveRequest _edit = new();
+
+    protected override async Task OnInitializedAsync() => await Cargar();
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        // Grilla: desde el lunes de la semana del día 1, 6 semanas (42 días).
+        int offset = ((int)_mes.DayOfWeek + 6) % 7; // Lunes = 0
+        var inicio = _mes.AddDays(-offset);
+        _dias = Enumerable.Range(0, 42).Select(i => inicio.AddDays(i)).ToList();
+        try { _data = await Api.CalendarioMesAsync(_mes.Year, _mes.Month); }
+        catch { _data = new(); }
+        finally { _cargando = false; }
+    }
+
+    private IEnumerable<CalPublicacionDto> Publicaciones(DateTime dia)
+        => _data.Publicaciones.Where(p => p.Fecha.Date == dia.Date);
+
+    private IEnumerable<CalAccionDto> Acciones(DateTime dia)
+        => _data.Acciones.Where(a => dia.Date >= a.Fecha.Date && dia.Date <= (a.FechaFin?.Date ?? a.Fecha.Date));
+
+    private async Task MoverMes(int n) { _mes = _mes.AddMonths(n); await Cargar(); }
+    private async Task Hoy() { _mes = new(DateTime.Today.Year, DateTime.Today.Month, 1); await Cargar(); }
+
+    private static string Corta(string t) => string.IsNullOrEmpty(t) ? "(sin texto)" : (t.Length > 30 ? t[..30] + "…" : t);
+
+    private static string TipoClase(string tipo) => tipo switch
+    {
+        "FECHA ESPECIAL" => "text-bg-warning",
+        "PRODUCCION" => "text-bg-primary",
+        "PUBLICACION" => "text-bg-success",
+        "CAMPAÑA" => "text-bg-purple",
+        _ => "text-bg-secondary"
+    };
+    private static string TipoIcono(string tipo) => tipo switch
+    {
+        "FECHA ESPECIAL" => "fa-solid fa-star",
+        "PRODUCCION" => "fa-solid fa-industry",
+        "PUBLICACION" => "fa-solid fa-share-nodes",
+        "CAMPAÑA" => "fa-solid fa-bullhorn",
+        _ => "fa-solid fa-thumbtack"
+    };
+
+    private void NuevaAccion(DateTime dia)
+    {
+        _edit = new CalAccionSaveRequest { Fecha = dia.Date, Tipo = "FECHA ESPECIAL" };
+        _modal = true;
+    }
+
+    private void EditarAccion(CalAccionDto a)
+    {
+        _edit = new CalAccionSaveRequest { Id = a.Id, Fecha = a.Fecha, FechaFin = a.FechaFin, Titulo = a.Titulo, Tipo = a.Tipo, Notas = a.Notas };
+        _modal = true;
+    }
+
+    private async Task GuardarAccion()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.Titulo)) { Ui.Error("Poné un título."); return; }
+        if (_edit.FechaFin is { } f && f.Date < _edit.Fecha.Date) { Ui.Error("La fecha 'hasta' no puede ser anterior a 'desde'."); return; }
+        _guardando = true;
+        try
+        {
+            var id = await Api.GuardarAccionAsync(_edit);
+            if (id <= 0) { Ui.Error("No se pudo guardar."); return; }
+            _modal = false;
+            await Cargar();
+        }
+        catch (Exception ex) { Ui.Error("Error: " + ex.Message); }
+        finally { _guardando = false; }
+    }
+
+    private async Task EliminarAccion()
+    {
+        if (_edit.Id <= 0) return;
+        if (!await Ui.ConfirmAsync($"¿Eliminar «{_edit.Titulo}»?", "Eliminar acción", "Eliminar", "Cancelar", peligro: true)) return;
+        await Api.EliminarAccionAsync(_edit.Id);
+        _modal = false;
+        await Cargar();
+    }
+}

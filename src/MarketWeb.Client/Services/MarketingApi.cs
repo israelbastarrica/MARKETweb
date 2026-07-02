@@ -20,4 +20,16 @@ public sealed class MarketingApi
         var qs = $"?top={top}" + (string.IsNullOrWhiteSpace(red) || red == "TODOS" ? "" : $"&red={Uri.EscapeDataString(red)}");
         return await _http.GetFromJsonAsync<List<MktPublicacionDto>>("api/marketing/publicaciones" + qs) ?? new();
     }
+
+    public async Task<CalMesDto> CalendarioMesAsync(int anio, int mes)
+        => await _http.GetFromJsonAsync<CalMesDto>($"api/marketing/calendario?anio={anio}&mes={mes}") ?? new();
+
+    public async Task<int> GuardarAccionAsync(CalAccionSaveRequest req)
+    {
+        var resp = await _http.PostAsJsonAsync("api/marketing/calendario/accion", req);
+        return resp.IsSuccessStatusCode ? await resp.Content.ReadFromJsonAsync<int>() : 0;
+    }
+
+    public async Task<bool> EliminarAccionAsync(int id)
+        => (await _http.DeleteAsync($"api/marketing/calendario/accion/{id}")).IsSuccessStatusCode;
 }

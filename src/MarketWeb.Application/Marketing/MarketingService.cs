@@ -10,6 +10,9 @@ public interface IMarketingService
     Task<IReadOnlyList<MktPublicacionDto>> PublicacionesAsync(string? red, int top, CancellationToken ct = default);
     Task<MktDashboardDto> DashboardAsync(CancellationToken ct = default);
     Task<string?> ThumbUrlAsync(string red, string postId, CancellationToken ct = default);
+    Task<CalMesDto> CalendarioMesAsync(int anio, int mes, CancellationToken ct = default);
+    Task<int> GuardarAccionAsync(CalAccionSaveRequest req, string aud, CancellationToken ct = default);
+    Task<bool> EliminarAccionAsync(int id, string aud, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -164,5 +167,90 @@ OUTER APPLY (SELECT TOP 1 mm.* FROM dbo.MKT_RedesMetricas mm WHERE mm.Publicacio
 WHERE ISNULL(p.Eliminado,0) = 0 AND (@r IS NULL OR p.Red = @r)
 ORDER BY p.FechaPublicacion DESC;";
         return (await cn.QueryAsync<MktPublicacionDto>(new CommandDefinition(sql, new { r }, cancellationToken: ct))).ToList();
+    }
+
+    // ===================== Calendario de Marketing =====================
+
+    private const string CalDdl = @"
+IF OBJECT_ID('dbo.MKT_CalendarioAcciones','U') IS NULL
+CREATE TABLE dbo.MKT_CalendarioAcciones(
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Fecha DATE NOT NULL,
+    FechaFin DATE NULL,
+    Titulo NVARCHAR(200) NULL,
+    Tipo NVARCHAR(40) NULL,
+    Notas NVARCHAR(1000) NULL,
+    Eliminado BIT NOT NULL CONSTRAINT DF_MktCalAcc_Elim DEFAULT(0),
+    Auditoria NVARCHAR(300) NULL);";
+
+    public async Task<CalMesDto> CalendarioMesAsync(int anio, int mes, CancellationToken ct = default)
+    {
+        if (mes < 1 || mes > 12) mes = 1;
+        var ini = new DateTime(anio, mes, 1);
+        var fin = ini.AddMonths(1);
+        using var cn = _db.Create();
+        await cn.ExecuteAsync(new CommandDefinition(CalDdl, cancellationToken: ct));
+        var dto = new CalMesDto();
+
+        // Publicaciones del mes (con la última métrica: me gusta / alcance).
+        var hayPubs = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT CASE WHEN OBJECT_ID('dbo.MKT_RedesPublicaciones') IS NULL THEN 0 ELSE 1 END", cancellationToken: ct)) == 1;
+        if (hayPubs)
+        {
+            const string sqlP = @"
+SELECT p.Red, p.PostId, p.FechaPublicacion AS Fecha, ISNULL(p.Texto,'') AS Texto, ISNULL(p.Permalink,'') AS Permalink,
+       m.MeGusta, m.Alcance
+FROM dbo.MKT_RedesPublicaciones p
+OUTER APPLY (SELECT TOP 1 mm.MeGusta, mm.Alcance FROM dbo.MKT_RedesMetricas mm WHERE mm.PublicacionId = p.Id ORDER BY mm.Fecha DESC) m
+WHERE ISNULL(p.Eliminado,0) = 0 AND p.FechaPublicacion >= @ini AND p.FechaPublicacion < @fin
+ORDER BY p.FechaPublicacion;";
+            dto.Publicaciones = (await cn.QueryAsync<CalPublicacionDto>(new CommandDefinition(sqlP, new { ini, fin }, cancellationToken: ct))).ToList();
+        }
+
+        // Acciones planificadas que tocan el mes (incluye rangos que lo cruzan).
+        const string sqlA = @"
+SELECT Id, Fecha, FechaFin, ISNULL(Titulo,'') AS Titulo, ISNULL(Tipo,'OTRO') AS Tipo, ISNULL(Notas,'') AS Notas
+FROM dbo.MKT_CalendarioAcciones
+WHERE Eliminado = 0 AND Fecha < @fin AND ISNULL(FechaFin, Fecha) >= @ini
+ORDER BY Fecha, Id;";
+        dto.Acciones = (await cn.QueryAsync<CalAccionDto>(new CommandDefinition(sqlA, new { ini, fin }, cancellationToken: ct))).ToList();
+        return dto;
+    }
+
+    public async Task<int> GuardarAccionAsync(CalAccionSaveRequest req, string aud, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+        await cn.ExecuteAsync(new CommandDefinition(CalDdl, cancellationToken: ct));
+        var p = new
+        {
+            req.Id,
+            req.Fecha,
+            FechaFin = req.FechaFin,
+            Titulo = (req.Titulo ?? "").Trim(),
+            Tipo = string.IsNullOrWhiteSpace(req.Tipo) ? "OTRO" : req.Tipo.Trim().ToUpperInvariant(),
+            Notas = (req.Notas ?? "").Trim(),
+            aud
+        };
+        if (req.Id > 0)
+        {
+            await cn.ExecuteAsync(new CommandDefinition(
+                @"UPDATE dbo.MKT_CalendarioAcciones SET Fecha=@Fecha, FechaFin=@FechaFin, Titulo=@Titulo, Tipo=@Tipo, Notas=@Notas, Auditoria=@aud
+                  WHERE Id=@Id", p, cancellationToken: ct));
+            return req.Id;
+        }
+        return await cn.ExecuteScalarAsync<int>(new CommandDefinition(
+            @"INSERT INTO dbo.MKT_CalendarioAcciones (Fecha, FechaFin, Titulo, Tipo, Notas, Eliminado, Auditoria)
+              VALUES (@Fecha, @FechaFin, @Titulo, @Tipo, @Notas, 0, @aud);
+              SELECT CAST(SCOPE_IDENTITY() AS INT);", p, cancellationToken: ct));
+    }
+
+    public async Task<bool> EliminarAccionAsync(int id, string aud, CancellationToken ct = default)
+    {
+        using var cn = _db.Create();
+        await cn.ExecuteAsync(new CommandDefinition(CalDdl, cancellationToken: ct));
+        var n = await cn.ExecuteAsync(new CommandDefinition(
+            "UPDATE dbo.MKT_CalendarioAcciones SET Eliminado=1, Auditoria=@aud WHERE Id=@id AND Eliminado=0",
+            new { id, aud }, cancellationToken: ct));
+        return n > 0;
     }
 }

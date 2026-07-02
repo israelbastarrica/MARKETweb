@@ -62,3 +62,46 @@ public sealed class MktPublicacionDto
     public bool Pagada => (ImpresionesPago ?? 0) > 0 || (Gasto ?? 0) > 0;
     public DateTime? FechaMetrica { get; set; }
 }
+
+// ===================== Calendario de Marketing =====================
+
+/// <summary>Una publicación ubicada en el calendario (versión liviana para pintar el día).</summary>
+public sealed class CalPublicacionDto
+{
+    public string Red { get; set; } = "";      // IG / FB
+    public string PostId { get; set; } = "";
+    public DateTime Fecha { get; set; }
+    public string Texto { get; set; } = "";
+    public string Permalink { get; set; } = "";
+    public int? MeGusta { get; set; }
+    public int? Alcance { get; set; }
+}
+
+/// <summary>Una acción planificada (fecha especial, día de producción, publicación planificada, etc.).</summary>
+public sealed class CalAccionDto
+{
+    public int Id { get; set; }
+    public DateTime Fecha { get; set; }
+    public DateTime? FechaFin { get; set; }     // para acciones de varios días (ej. semana de producción)
+    public string Titulo { get; set; } = "";
+    public string Tipo { get; set; } = "OTRO";  // FECHA ESPECIAL / PRODUCCION / PUBLICACION / CAMPAÑA / OTRO
+    public string Notas { get; set; } = "";
+}
+
+/// <summary>Contenido del calendario para un mes: publicaciones reales + acciones planificadas.</summary>
+public sealed class CalMesDto
+{
+    public List<CalPublicacionDto> Publicaciones { get; set; } = new();
+    public List<CalAccionDto> Acciones { get; set; } = new();
+}
+
+/// <summary>Alta/edición de una acción del calendario.</summary>
+public sealed class CalAccionSaveRequest
+{
+    public int Id { get; set; }
+    public DateTime Fecha { get; set; }
+    public DateTime? FechaFin { get; set; }
+    public string Titulo { get; set; } = "";
+    public string Tipo { get; set; } = "OTRO";
+    public string Notas { get; set; } = "";
+}
