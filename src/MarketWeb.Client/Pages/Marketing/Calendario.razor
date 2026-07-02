@@ -27,37 +27,42 @@
     }
     else
     {
-        <div class="cal-grid cal-head">
-            @foreach (var d in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" })
-            {
-                <div class="cal-dow">@d</div>
-            }
-        </div>
-        <div class="cal-grid">
-            @foreach (var dia in _dias)
-            {
-                var esOtroMes = dia.Month != _mes.Month;
-                var esHoy = dia == DateTime.Today;
-                <div class="cal-cell @(esOtroMes ? "cal-otro" : "") @(esHoy ? "cal-hoy" : "")" @onclick="() => NuevaAccion(dia)">
-                    <div class="cal-num">@dia.Day</div>
-                    @foreach (var a in Acciones(dia))
-                    {
-                        <div class="cal-chip @TipoClase(a.Tipo)" title="@(a.Titulo + (string.IsNullOrEmpty(a.Notas) ? "" : " — " + a.Notas))"
-                             @onclick:stopPropagation="true" @onclick="() => EditarAccion(a)">
-                            <i class="@TipoIcono(a.Tipo) me-1"></i>@a.Titulo
+        <div class="cal">
+            <div class="cal-dows">
+                @foreach (var d in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" })
+                {
+                    <div class="cal-dow">@d</div>
+                }
+            </div>
+            <div class="cal-body">
+                @foreach (var dia in _dias)
+                {
+                    var esOtroMes = dia.Month != _mes.Month;
+                    var esHoy = dia == DateTime.Today;
+                    var esFinde = dia.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                    <div class="cal-cell @(esOtroMes ? "cal-otro" : "") @(esFinde ? "cal-finde" : "")" @onclick="() => NuevaAccion(dia)">
+                        <div class="cal-num-row">
+                            <span class="cal-num @(esHoy ? "cal-hoy" : "")">@dia.Day</span>
                         </div>
-                    }
-                    @foreach (var p in Publicaciones(dia))
-                    {
-                        <a class="cal-post" href="@p.Permalink" target="_blank" rel="noopener" @onclick:stopPropagation="true"
-                           title="@p.Texto">
-                            <i class="@(p.Red == "IG" ? "fa-brands fa-instagram text-danger" : "fa-brands fa-facebook text-primary")"></i>
-                            <span class="cal-post-txt">@Corta(p.Texto)</span>
-                            @if (p.MeGusta is > 0) { <span class="text-muted ms-1"><i class="fa-solid fa-heart"></i> @p.MeGusta</span> }
-                        </a>
-                    }
-                </div>
-            }
+                        <div class="cal-items">
+                            @foreach (var a in Acciones(dia))
+                            {
+                                <div class="cal-chip @TipoClase(a.Tipo)" title="@(a.Titulo + (string.IsNullOrEmpty(a.Notas) ? "" : " — " + a.Notas))"
+                                     @onclick:stopPropagation="true" @onclick="() => EditarAccion(a)">
+                                    <i class="@TipoIcono(a.Tipo)"></i><span>@a.Titulo</span>
+                                </div>
+                            }
+                            @foreach (var p in Publicaciones(dia))
+                            {
+                                <a class="cal-post" href="@p.Permalink" target="_blank" rel="noopener" @onclick:stopPropagation="true" title="@p.Texto">
+                                    <i class="@(p.Red == "IG" ? "fa-brands fa-instagram" : "fa-brands fa-facebook")" style="@(p.Red=="IG" ? "color:#E1306C" : "color:#1877F2")"></i>
+                                    <span class="cal-post-txt">@Corta(p.Texto)</span>
+                                </a>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
         </div>
 
         <div class="d-flex flex-wrap gap-3 mt-2 small text-muted">
@@ -123,18 +128,31 @@
 }
 
 <style>
-    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
-    .cal-head { margin-bottom:4px; }
-    .cal-dow { text-align:center; font-size:.8rem; font-weight:600; color:var(--bs-secondary-color,#888); padding:2px 0; }
-    .cal-cell { min-height:96px; border:1px solid var(--bs-border-color,#dee2e6); border-radius:8px; padding:3px 4px; cursor:pointer; overflow:hidden; }
-    .cal-cell:hover { background:var(--mk-row-hover, rgba(128,128,128,.08)); }
-    .cal-otro { opacity:.45; }
-    .cal-hoy { border-color:var(--bs-primary,#0d6efd); border-width:2px; }
-    .cal-num { font-size:.8rem; font-weight:600; margin-bottom:2px; }
-    .cal-chip { display:block; font-size:.72rem; line-height:1.2; padding:1px 5px; border-radius:5px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
-    .cal-post { display:flex; align-items:center; gap:3px; font-size:.72rem; line-height:1.2; margin-bottom:2px; text-decoration:none; color:inherit; white-space:nowrap; overflow:hidden; }
+    .cal { border:1px solid var(--bs-border-color,#dee2e6); border-radius:12px; overflow:hidden; background:var(--bs-body-bg,#fff); }
+    .cal-dows, .cal-body { display:grid; grid-template-columns:repeat(7,1fr); }
+    .cal-body { grid-auto-rows:minmax(116px,1fr); }
+    .cal-dow { text-align:center; font-size:.75rem; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+               color:var(--bs-secondary-color,#6c757d); padding:8px 0;
+               border-right:1px solid var(--bs-border-color,#dee2e6); border-bottom:1px solid var(--bs-border-color,#dee2e6);
+               background:color-mix(in srgb, var(--bs-secondary-color,#6c757d) 8%, transparent); }
+    .cal-dow:last-child { border-right:none; }
+    .cal-cell { position:relative; display:flex; flex-direction:column; gap:3px; padding:4px 5px 5px; cursor:pointer; min-height:0; overflow:hidden;
+                border-right:1px solid var(--bs-border-color,#dee2e6); border-bottom:1px solid var(--bs-border-color,#dee2e6); }
+    .cal-cell:nth-child(7n) { border-right:none; }
+    .cal-body > .cal-cell:nth-last-child(-n+7) { border-bottom:none; }
+    .cal-cell:hover { background:color-mix(in srgb, var(--bs-primary,#0d6efd) 7%, transparent); }
+    .cal-finde { background:color-mix(in srgb, var(--bs-secondary-color,#6c757d) 5%, transparent); }
+    .cal-otro { background:color-mix(in srgb, var(--bs-secondary-color,#6c757d) 9%, transparent); }
+    .cal-num-row { display:flex; justify-content:flex-end; }
+    .cal-num { font-size:.8rem; font-weight:600; color:var(--bs-body-color,#212529); width:24px; height:22px; display:inline-flex; align-items:center; justify-content:center; }
+    .cal-otro .cal-num { color:var(--bs-secondary-color,#adb5bd); }
+    .cal-num.cal-hoy { background:var(--bs-primary,#0d6efd); color:#fff; border-radius:999px; }
+    .cal-items { display:flex; flex-direction:column; gap:2px; overflow:hidden; }
+    .cal-chip { display:flex; align-items:center; gap:4px; font-size:.72rem; line-height:1.3; padding:1px 6px; border-radius:6px; cursor:pointer; }
+    .cal-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cal-post { display:flex; align-items:center; gap:4px; font-size:.72rem; line-height:1.3; text-decoration:none; color:var(--bs-body-color,#212529); }
     .cal-post:hover { text-decoration:underline; }
-    .cal-post-txt { overflow:hidden; text-overflow:ellipsis; }
+    .cal-post-txt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cal-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:3px; vertical-align:middle; }
     .text-bg-purple { background-color:#6f42c1 !important; color:#fff !important; }
 </style>
