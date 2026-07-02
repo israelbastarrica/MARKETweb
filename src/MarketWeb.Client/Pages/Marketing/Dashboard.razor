@@ -73,7 +73,7 @@
 
         @if (_d.AlcanceSerie.Count > 1)
         {
-            var ch = BuildChart(720, 210);
+            var ch = BuildChart(1000, 230);
             <div class="market-card mb-3">
                 <div class="d-flex justify-content-between align-items-baseline mb-2">
                     <span class="fw-semibold">Alcance de Instagram por día</span>
@@ -244,7 +244,7 @@
         const string muted = "var(--bs-secondary-color,#8a8a8a)";
         const string verde = "#0F6E56";
         var svg = new System.Text.StringBuilder();
-        svg.Append($"<svg viewBox='0 0 {w} {h}' style='width:100%;height:{h}px'>");
+        svg.Append($"<svg viewBox='0 0 {w} {h}' style='width:100%;height:auto;display:block'>");
         // Grilla + valores en Y (4, de min a max).
         for (int k = 0; k < 4; k++)
         {
