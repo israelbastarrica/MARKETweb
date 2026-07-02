@@ -26,7 +26,7 @@
                     {
                         @if (item.Sub is null)
                         {
-                            <NavLink class="market-link" href="@item.Href">
+                            <NavLink class="market-link" href="@item.Href" Match="@(item.Exacto ? NavLinkMatch.All : NavLinkMatch.Prefix)">
                                 <i class="@item.Icono ico"></i>
                                 <span>@item.Etiqueta</span>
                                 @if (!item.Implementado)
@@ -222,7 +222,7 @@
     private static string Perfil(System.Security.Claims.ClaimsPrincipal user)
         => user.FindFirst("perfil")?.Value ?? "Sin perfil";
 
-    private sealed record Item(string Etiqueta, string Icono, string Href, bool Implementado = false, Item[]? Sub = null);
+    private sealed record Item(string Etiqueta, string Icono, string Href, bool Implementado = false, Item[]? Sub = null, bool Exacto = false);
     private sealed record Modulo(string Titulo, string Icono, Item[] Items);
 
     // Espejo del menú de frmPrincipal (íconos heredados del desktop). RRHH queda afuera.
@@ -290,7 +290,7 @@
         {
             new Item("Dashboard", "fa-solid fa-chart-line", "/marketing/dashboard", Implementado: true),
             new Item("Calendario", "fa-solid fa-calendar-days", "/marketing/calendario", Implementado: true),
-            new Item("Publicaciones", "fa-solid fa-share-nodes", "/marketing", Implementado: true),
+            new Item("Publicaciones", "fa-solid fa-share-nodes", "/marketing", Implementado: true, Exacto: true),
         }),
         new("Producción", "fa-solid fa-boxes-stacked", new[]
         {
