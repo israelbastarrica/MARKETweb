@@ -24,6 +24,21 @@ dotnet user-secrets set "ConnectionStrings:MarketDb" "Server=TU_SERVIDOR;Databas
 
 En producción se usa una variable de entorno o Azure Key Vault, nunca el `appsettings.json`.
 
+## Configurar el login (Google SSO)
+
+El login es con Google (cuentas **@marketarg.com**). Las credenciales del cliente OAuth **no** se versionan; se cargan con user-secrets:
+
+```powershell
+dotnet user-secrets set "Authentication:Google:ClientId" "EL_CLIENT_ID.apps.googleusercontent.com" --project src/MarketWeb.Api
+dotnet user-secrets set "Authentication:Google:ClientSecret" "EL_CLIENT_SECRET" --project src/MarketWeb.Api
+```
+
+Las credenciales salen del cliente OAuth 2.0 del proyecto en **Google Cloud Console** (APIs y servicios → Credenciales). Para correr en local, ese cliente OAuth tiene que tener:
+- **URI de redireccionamiento autorizado**: `http://localhost:5080/signin-google` (la callback es siempre `/signin-google`; ajustar el puerto si arrancás en otro).
+- **Origen JavaScript autorizado**: `http://localhost:5080`.
+
+Recomendado para dev: crear un cliente OAuth "Web" aparte (con el redirect de localhost) en vez de usar el de producción. Sin estas claves, la app arranca pero el botón "Entrar con Google" no funciona. Tras el primer login, la cuenta queda **pendiente de aprobación** (Sistemas → Usuarios; un ADMIN la aprueba).
+
 ## Correr
 
 ```powershell
