@@ -6,6 +6,8 @@ public sealed class GenerarRemitosResultado
     public List<RemitoLocalResultado> Locales { get; set; } = new();
     public int Total => Locales.Count;
     public int Ok => Locales.Count(l => l.Ok);
+    /// <summary>Pedidos EN ARMADO no enviados que NO se remitieron por no estar guardados/procesados por depósito.</summary>
+    public int SinProcesar { get; set; }
 }
 
 /// <summary>Resultado de un remito por local.</summary>

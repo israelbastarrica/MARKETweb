@@ -347,6 +347,11 @@ public sealed class InsumosService : IInsumosService
 
         using var cn = _db.Create();
         await cn.OpenAsync(ct);
+        // Marca de "procesado por depósito" (idempotente). Sirve para exigir que Logística
+        // haya guardado el pedido al menos una vez antes de generar el remito.
+        await cn.ExecuteAsync(new CommandDefinition(
+            "IF COL_LENGTH('dbo.PedidosInsumos','FechaProceso') IS NULL ALTER TABLE dbo.PedidosInsumos ADD FechaProceso DATETIME NULL;",
+            cancellationToken: ct));
         using var tx = cn.BeginTransaction();
         try
         {
@@ -376,9 +381,9 @@ public sealed class InsumosService : IInsumosService
                     new { idDet = r.Id, idPed = req.Id, ex, cantEnv, nrc = r.NoRequiereConsumo ? 1 : 0, audit }, tx, cancellationToken: ct));
             }
 
-            // Cabecera: solo auditoría (sigue EN ARMADO; no cambia local/fecha).
+            // Cabecera: auditoría + marca de PROCESADO por depósito (guardó con sus cambios).
             await cn.ExecuteAsync(new CommandDefinition(
-                "UPDATE PedidosInsumos SET Auditoria=@audit WHERE ID=@id;", new { id = req.Id, audit }, tx, cancellationToken: ct));
+                "UPDATE PedidosInsumos SET Auditoria=@audit, FechaProceso=GETDATE() WHERE ID=@id;", new { id = req.Id, audit }, tx, cancellationToken: ct));
 
             var nro = await cn.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT NroPedido FROM PedidosInsumos WHERE ID=@id;", new { id = req.Id }, tx, cancellationToken: ct));
@@ -473,15 +478,26 @@ public sealed class InsumosService : IInsumosService
 
         using var cn = _db.Create();
         await cn.OpenAsync(ct);
+        await cn.ExecuteAsync(new CommandDefinition(
+            "IF COL_LENGTH('dbo.PedidosInsumos','FechaProceso') IS NULL ALTER TABLE dbo.PedidosInsumos ADD FechaProceso DATETIME NULL;",
+            cancellationToken: ct));
 
-        // Renglones enviados de pedidos EN ARMADO (impresos) y todavía no enviados, del filtro de ubicación.
+        // Solo se remiten pedidos que el DEPÓSITO ya guardó (FechaProceso): así el envío refleja lo que
+        // realmente se manda, no una copia de lo pedido. Los EN ARMADO sin guardar quedan afuera y se avisan.
+        res.SinProcesar = await cn.ExecuteScalarAsync<int>(new CommandDefinition("""
+            SELECT COUNT(*) FROM PedidosInsumos P
+            WHERE P.Eliminado = 0 AND P.FechaImpresion IS NOT NULL AND P.FechaEnviado IS NULL AND P.FechaProceso IS NULL
+              AND (@modoUbic='TODOS' OR (@modoUbic='LOCALES' AND P.IDLocal IN (2,3)) OR (@modoUbic='ID' AND P.IDLocal=@idLoc));
+            """, new { modoUbic, idLoc }, cancellationToken: ct));
+
+        // Renglones enviados de pedidos EN ARMADO, YA PROCESADOS por depósito y todavía no enviados.
         const string sql = """
             SELECT P.ID AS PedidoId, P.IDLocal AS IdLocal, ISNULL(U.Descripcion,'') AS Local,
                    RTRIM(D.ARTCOD) AS ArtCod, CAST(ISNULL(D.CantidadEnviada, D.Cantidad) AS INT) AS Cant
             FROM PedidosInsumos P
             LEFT JOIN Ubicaciones U ON P.IDLocal = U.ID
             INNER JOIN PedidosInsumosDetalle D ON D.IDPedido = P.ID AND D.Eliminado = 0
-            WHERE P.Eliminado = 0 AND P.FechaImpresion IS NOT NULL AND P.FechaEnviado IS NULL
+            WHERE P.Eliminado = 0 AND P.FechaImpresion IS NOT NULL AND P.FechaEnviado IS NULL AND P.FechaProceso IS NOT NULL
               AND ISNULL(D.Existencia,1) = 1 AND ISNULL(D.CantidadEnviada, D.Cantidad) > 0
               AND (@modoUbic='TODOS'
                    OR (@modoUbic='LOCALES' AND P.IDLocal IN (2,3))

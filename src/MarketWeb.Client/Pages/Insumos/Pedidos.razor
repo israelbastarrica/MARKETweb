@@ -305,12 +305,21 @@
         {
             int? ubic = _ubicacionSel == 0 ? null : _ubicacionSel;
             var res = await Api.GenerarRemitosAsync(ubic);
-            if (res.Total == 0) { Ui.Toast("No hay pedidos EN ARMADO para remitir en este filtro."); return; }
+
+            if (res.Total == 0)
+            {
+                if (res.SinProcesar > 0)
+                    Ui.Error($"Hay {res.SinProcesar} pedido(s) EN ARMADO sin guardar por depósito. Abrilos, acomodá según stock y guardá antes de remitir.");
+                else
+                    Ui.Toast("No hay pedidos EN ARMADO para remitir en este filtro.");
+                return;
+            }
 
             var okos = res.Locales.Where(l => l.Ok).Select(l => $"{l.Local} ({l.Comprobante})").ToList();
             var fallos = res.Locales.Where(l => !l.Ok).Select(l => $"{l.Local}: {l.Error}").ToList();
             if (okos.Count > 0) Ui.Exito($"Remitos generados: {string.Join(" · ", okos)}");
             if (fallos.Count > 0) Ui.Error($"Fallaron: {string.Join(" · ", fallos)}");
+            if (res.SinProcesar > 0) Ui.Toast($"Quedaron {res.SinProcesar} pedido(s) EN ARMADO sin guardar por depósito (no se remitieron).");
             await Cargar();
         }
         catch (Exception ex) { Ui.Error(ex.Message); Console.Error.WriteLine(ex); }
