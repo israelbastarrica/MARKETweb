@@ -82,4 +82,12 @@ public sealed class InsumosApi
         resp.EnsureSuccessStatusCode();
         return (await resp.Content.ReadFromJsonAsync<GenerarRemitosResultado>()) ?? new();
     }
+
+    /// <summary>Genera el remito de UN pedido (a su local).</summary>
+    public async Task<RemitoLocalResultado> GenerarRemitoPedidoAsync(int idPedido)
+    {
+        var resp = await _http.PostAsync($"api/insumos/pedido/{idPedido}/generar-remito", null);
+        resp.EnsureSuccessStatusCode();
+        return (await resp.Content.ReadFromJsonAsync<RemitoLocalResultado>()) ?? new();
+    }
 }

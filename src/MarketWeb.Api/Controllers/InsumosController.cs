@@ -93,4 +93,11 @@ public sealed class InsumosController : ControllerBase
         var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
         return Ok(await _service.GenerarRemitosAsync(req?.UbicacionId, usuario, ct));
     }
+
+    [HttpPost("pedido/{id:int}/generar-remito")]
+    public async Task<ActionResult<RemitoLocalResultado>> GenerarRemitoPedido(int id, CancellationToken ct)
+    {
+        var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? User.Identity?.Name ?? "WEB";
+        return Ok(await _service.GenerarRemitoPedidoAsync(id, usuario, ct));
+    }
 }

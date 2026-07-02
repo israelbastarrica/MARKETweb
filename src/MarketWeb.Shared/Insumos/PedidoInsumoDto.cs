@@ -15,4 +15,10 @@ public sealed class PedidoInsumoDto
 
     /// <summary>Cerrado para el local: DEPÓSITO ya lo imprimió (EN ARMADO) o ya está ENVIADO.</summary>
     public bool Cerrado { get; set; }
+
+    /// <summary>EN ARMADO (impreso) y todavía no enviado.</summary>
+    public bool EnArmado { get; set; }
+
+    /// <summary>El depósito ya lo guardó/procesó (acomodó según stock): habilita generar el remito.</summary>
+    public bool Procesado { get; set; }
 }

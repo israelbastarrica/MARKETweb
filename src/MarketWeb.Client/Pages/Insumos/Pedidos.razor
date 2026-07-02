@@ -108,6 +108,14 @@
                                             @onclick="() => Abrir(p)">
                                         <i class="fa-solid @(SoloLectura(p) ? "fa-eye" : "fa-pen")"></i>
                                     </button>
+                                    @if (_esDeposito && p.EnArmado)
+                                    {
+                                        <button class="btn btn-sm btn-success" disabled="@(!p.Procesado || _generando)"
+                                                title="@(p.Procesado ? "Generar el remito de este pedido en Dragonfish" : "Guardá el pedido (acomodá según stock) antes de generar el remito")"
+                                                @onclick="() => GenerarRemitoPedido(p)">
+                                            <i class="fa-solid fa-file-invoice"></i>
+                                        </button>
+                                    }
                                     @if (_puedeABM && !p.Cerrado)
                                     {
                                         <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(p)">
@@ -320,6 +328,22 @@
             if (okos.Count > 0) Ui.Exito($"Remitos generados: {string.Join(" · ", okos)}");
             if (fallos.Count > 0) Ui.Error($"Fallaron: {string.Join(" · ", fallos)}");
             if (res.SinProcesar > 0) Ui.Toast($"Quedaron {res.SinProcesar} pedido(s) EN ARMADO sin guardar por depósito (no se remitieron).");
+            await Cargar();
+        }
+        catch (Exception ex) { Ui.Error(ex.Message); Console.Error.WriteLine(ex); }
+        finally { _generando = false; }
+    }
+
+    // Genera el remito de un pedido puntual (a su local).
+    private async Task GenerarRemitoPedido(PedidoInsumoDto p)
+    {
+        if (!await Ui.ConfirmAsync($"¿Generar el remito del pedido N° {p.NroPedido} ({p.Ubicacion})? Queda ENVIADO.", "Generar remito")) return;
+        _generando = true;
+        try
+        {
+            var r = await Api.GenerarRemitoPedidoAsync(p.Id);
+            if (r.Ok) Ui.Exito($"Remito generado ({r.Comprobante}).");
+            else Ui.Error(string.IsNullOrWhiteSpace(r.Error) ? "No se pudo generar el remito." : r.Error);
             await Cargar();
         }
         catch (Exception ex) { Ui.Error(ex.Message); Console.Error.WriteLine(ex); }

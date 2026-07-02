@@ -51,7 +51,9 @@ public sealed class InsumosService : IInsumosService
                 ISNULL((SELECT SUM(CantidadEnviada) FROM PedidosInsumosDetalle D WHERE D.IDPedido = P.ID AND D.Eliminado = 0 AND D.Existencia = 1), 0) AS CantidadTotalEnviada,
                 P.ID AS Id,
                 CAST(CASE WHEN P.FechaEnviado IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS Enviado,
-                CAST(CASE WHEN P.FechaImpresion IS NOT NULL OR P.FechaEnviado IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS Cerrado
+                CAST(CASE WHEN P.FechaImpresion IS NOT NULL OR P.FechaEnviado IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS Cerrado,
+                CAST(CASE WHEN P.FechaImpresion IS NOT NULL AND P.FechaEnviado IS NULL THEN 1 ELSE 0 END AS BIT) AS EnArmado,
+                CAST(CASE WHEN P.FechaProceso IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS Procesado
             FROM PedidosInsumos P
             LEFT JOIN Ubicaciones U ON P.IDLocal = U.ID
             WHERE P.Eliminado = 0
@@ -65,6 +67,10 @@ public sealed class InsumosService : IInsumosService
             """;
 
         using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await cn.ExecuteAsync(new CommandDefinition(
+            "IF COL_LENGTH('dbo.PedidosInsumos','FechaProceso') IS NULL ALTER TABLE dbo.PedidosInsumos ADD FechaProceso DATETIME NULL;",
+            cancellationToken: ct));
         var rows = await cn.QueryAsync<PedidoInsumoDto>(new CommandDefinition(
             sql, new { modoUbic = modoUbic, idLoc, estado = est }, cancellationToken: ct));
         return rows.ToList();
@@ -556,6 +562,66 @@ public sealed class InsumosService : IInsumosService
             res.Locales.Add(r);
         }
         return res;
+    }
+
+    // Genera el remito de UN pedido (a su local). Requiere EN ARMADO + procesado por depósito + no enviado.
+    public async Task<RemitoLocalResultado> GenerarRemitoPedidoAsync(int idPedido, string usuario, CancellationToken ct = default)
+    {
+        var r = new RemitoLocalResultado();
+        if (!_dragon.Configurado) { r.Error = "La API Dragonfish no está configurada en el servidor."; return r; }
+
+        using var cn = _db.Create();
+        await cn.OpenAsync(ct);
+        await cn.ExecuteAsync(new CommandDefinition(
+            "IF COL_LENGTH('dbo.PedidosInsumos','FechaProceso') IS NULL ALTER TABLE dbo.PedidosInsumos ADD FechaProceso DATETIME NULL;",
+            cancellationToken: ct));
+
+        const string sql = """
+            SELECT P.ID AS PedidoId, P.IDLocal AS IdLocal, ISNULL(U.Descripcion,'') AS Local,
+                   RTRIM(D.ARTCOD) AS ArtCod, CAST(ISNULL(D.CantidadEnviada, D.Cantidad) AS INT) AS Cant
+            FROM PedidosInsumos P
+            LEFT JOIN Ubicaciones U ON P.IDLocal = U.ID
+            INNER JOIN PedidosInsumosDetalle D ON D.IDPedido = P.ID AND D.Eliminado = 0
+            WHERE P.ID = @idPedido AND P.Eliminado = 0
+              AND P.FechaImpresion IS NOT NULL AND P.FechaEnviado IS NULL AND P.FechaProceso IS NOT NULL
+              AND ISNULL(D.Existencia,1) = 1 AND ISNULL(D.CantidadEnviada, D.Cantidad) > 0;
+            """;
+        var rows = (await cn.QueryAsync<RemitoRow>(new CommandDefinition(sql, new { idPedido }, cancellationToken: ct))).ToList();
+        if (rows.Count == 0)
+        {
+            r.Error = "El pedido no está listo para remitir: tiene que estar EN ARMADO y guardado por depósito, y tener renglones para enviar.";
+            return r;
+        }
+
+        r.Local = rows[0].Local;
+        r.Pedidos = 1;
+        var items = rows.GroupBy(x => x.ArtCod)
+            .Select(g => new MarketWeb.Shared.Dragonfish.DragonRemitoItemDto { Articulo = g.Key, Color = "", Talle = "", Cantidad = g.Sum(x => x.Cant) })
+            .ToList();
+        r.Articulos = items.Count;
+        r.Cantidad = items.Sum(i => i.Cantidad);
+
+        var dr = await _dragon.CrearRemitoAsync(new MarketWeb.Shared.Dragonfish.DragonRemitoRequest
+        {
+            Local = (r.Local ?? "").Trim().ToUpperInvariant(),
+            Motivo = "13",
+            Items = items
+        }, ct);
+
+        if (dr.Ok)
+        {
+            r.Ok = true;
+            r.Comprobante = !string.IsNullOrWhiteSpace(dr.Codigo) ? dr.Codigo! : (dr.Numero is { } num ? num.ToString() : "");
+            var audit = $"Remito insumos generado | {usuario} | {DateTime.Now}";
+            await cn.ExecuteAsync(new CommandDefinition(
+                "UPDATE PedidosInsumos SET FechaEnviado = GETDATE(), Auditoria = @audit WHERE ID = @idPedido AND FechaEnviado IS NULL AND Eliminado = 0;",
+                new { idPedido, audit }, cancellationToken: ct));
+        }
+        else
+        {
+            r.Error = !string.IsNullOrWhiteSpace(dr.Error) ? dr.Error! : $"HTTP {dr.HttpStatus}: {(dr.Respuesta ?? "").Trim()}";
+        }
+        return r;
     }
 
     public async Task<bool> EliminarPedidoAsync(int idPedido, string usuario, CancellationToken ct = default)
